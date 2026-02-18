@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "quick-postgres",
+      "Group": "Quick",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "news_dev",
+      "Username": "quick",
+      "SSLMode": "prefer",
+      "Password": "quickpass",
+      "SavePassword": true
+    }
+  }
+}

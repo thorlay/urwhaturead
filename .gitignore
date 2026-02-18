@@ -1,0 +1,11 @@
+.env
+.gocache/
+.gomodcache/
+.run/
+data/postgres/
+data/pgadmin/
+
+# Go
+bin/
+*.test
+coverage.out

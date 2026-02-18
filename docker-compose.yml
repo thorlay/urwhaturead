@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: quick-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quick}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quickpass}
+      POSTGRES_DB: ${POSTGRES_DB:-news_dev}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quick} -d ${POSTGRES_DB:-news_dev}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: quick-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-quickadmin}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 20
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
