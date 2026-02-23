@@ -1,92 +1,76 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"html"
-	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"quick/internal/aisummary"
+	"quick/internal/articlesummary"
+	"quick/internal/feedextract"
 	"quick/internal/models"
+	"quick/internal/textclean"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
-	"github.com/mmcdole/gofeed"
 	"golang.org/x/net/publicsuffix"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 const (
-	maxSummaryCommentCount  = 30
-	threadCacheTTL          = 5 * time.Minute
-	threadMaxBodyBytes      = 2 * 1024 * 1024
-	threadMaxComments       = 120
-	threadMaxContentChars   = 12000
-	threadMaxCommentChars   = 1200
-	threadReadMoreHintText  = "阅读完整话题"
-	externalCacheTTL        = 15 * time.Minute
-	externalMaxBodyBytes    = 3 * 1024 * 1024
-	externalMaxContentChars = 16000
-)
-
-var (
-	uscardTopicLinkPattern = regexp.MustCompile(`^https?://www\.uscardforum\.com/t/topic/(\d+)(?:/\d+)?/?$`)
-	uscardPostLinkPattern  = regexp.MustCompile(`/t/topic/\d+/(\d+)$`)
-	v2exReplyLinkPattern   = regexp.MustCompile(`#reply(\d+)$`)
-	htmlTagPattern         = regexp.MustCompile(`<[^>]*>`)
-	spacePattern           = regexp.MustCompile(`\s+`)
+	maxSummaryCommentCount = 30
 )
 
 type ArticleHandler struct {
 	db         *gorm.DB
-	httpClient *http.Client
-	parser     *gofeed.Parser
-	summarizer *aisummary.Client
-
-	cacheMu sync.RWMutex
-	cache   map[string]cachedThread
-
-	externalCacheMu sync.RWMutex
-	externalCache   map[string]cachedExternalArticle
+	summarySvc *articlesummary.Service
+	contentSvc *ArticleContentService
 }
 
-type cachedThread struct {
-	value     articleThread
-	expiresAt time.Time
-}
-
-type cachedExternalArticle struct {
-	value     articleExternalContent
-	expiresAt time.Time
+type ArticleHandlerOptions struct {
+	ExternalFetchEnabled      bool
+	ExternalFetchEnabledSet   bool
+	ExternalFetchAllowedHosts []string
+	ExternalFetchCacheTTL     time.Duration
+	ExternalFetchFailureTTL   time.Duration
+	ExternalFetchMaxBodyBytes int64
+	ExternalFetchDailyReqMax  int
+	ExternalFetchDailyByteMax int64
 }
 
 func NewArticleHandler(db *gorm.DB, summarizer *aisummary.Client) *ArticleHandler {
-	return &ArticleHandler{
+	return NewArticleHandlerWithOptions(db, summarizer, ArticleHandlerOptions{
+		ExternalFetchEnabled:    true,
+		ExternalFetchEnabledSet: true,
+	})
+}
+
+func NewArticleHandlerWithOptions(db *gorm.DB, summarizer *aisummary.Client, options ArticleHandlerOptions) *ArticleHandler {
+	handler := &ArticleHandler{
 		db:         db,
-		summarizer: summarizer,
-		httpClient: &http.Client{
-			Timeout: 12 * time.Second,
-		},
-		parser:        gofeed.NewParser(),
-		cache:         make(map[string]cachedThread),
-		externalCache: make(map[string]cachedExternalArticle),
+		contentSvc: NewArticleContentService(options),
 	}
+	handler.summarySvc = articlesummary.NewService(db, summarizer, handler.loadSummaryInput)
+	return handler
 }
 
 func (h *ArticleHandler) RegisterRoutes(group *gin.RouterGroup) {
+	h.RegisterReadRoutes(group)
+	h.RegisterWriteRoutes(group)
+}
+
+func (h *ArticleHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("/:id", h.Get)
+	group.GET("/:id/cluster-diagnosis", h.GetClusterDiagnosis)
 	group.GET("/:id/summary", h.GetSummary)
+	group.GET("/:id/summary/status", h.GetSummaryStatus)
+}
+
+func (h *ArticleHandler) RegisterWriteRoutes(group *gin.RouterGroup) {
 	group.POST("/:id/summary", h.Summarize)
 	group.POST("/:id/track-thread", h.TrackThread)
 }
@@ -100,13 +84,14 @@ type articleThreadComment struct {
 }
 
 type articleThread struct {
-	TopicURL    string                 `json:"topic_url"`
-	FeedURL     string                 `json:"feed_url"`
-	TopicTitle  string                 `json:"topic_title"`
-	FullContent string                 `json:"full_content"`
-	Comments    []articleThreadComment `json:"comments"`
-	TotalPosts  int                    `json:"total_posts"`
-	Truncated   bool                   `json:"truncated"`
+	TopicURL     string                 `json:"topic_url"`
+	FeedURL      string                 `json:"feed_url"`
+	TopicTitle   string                 `json:"topic_title"`
+	ExternalLink *string                `json:"external_link,omitempty"`
+	FullContent  string                 `json:"full_content"`
+	Comments     []articleThreadComment `json:"comments"`
+	TotalPosts   int                    `json:"total_posts"`
+	Truncated    bool                   `json:"truncated"`
 }
 
 type articleExternalContent struct {
@@ -117,22 +102,25 @@ type articleExternalContent struct {
 }
 
 type articleDetail struct {
-	ID             uint64                  `json:"id"`
-	SourceID       uint64                  `json:"source_id"`
-	SourceName     string                  `json:"source_name"`
-	SourceCategory string                  `json:"source_category"`
-	SourceRSSURL   string                  `json:"-" gorm:"column:source_rss_url"`
-	RawGUID        *string                 `json:"raw_guid,omitempty"`
-	Title          string                  `json:"title"`
-	Link           string                  `json:"link"`
-	Summary        *string                 `json:"summary,omitempty"`
-	Content        *string                 `json:"content,omitempty"`
-	Author         *string                 `json:"author,omitempty"`
-	PublishedAt    *time.Time              `json:"published_at,omitempty"`
-	ImageURL       *string                 `json:"image_url,omitempty"`
-	Thread         *articleThread          `json:"thread,omitempty" gorm:"-"`
-	External       *articleExternalContent `json:"external,omitempty" gorm:"-"`
-	CreatedAt      time.Time               `json:"created_at"`
+	ID           uint64                  `json:"id"`
+	SourceID     uint64                  `json:"source_id"`
+	SourceName   string                  `json:"source_name"`
+	SourceTag    string                  `json:"source_tag"`
+	SourceRSSURL string                  `json:"-" gorm:"column:source_rss_url"`
+	RawGUID      *string                 `json:"raw_guid,omitempty"`
+	Title        string                  `json:"title"`
+	Link         string                  `json:"link"`
+	Summary      *string                 `json:"summary,omitempty"`
+	Content      *string                 `json:"content,omitempty"`
+	ContentHTML  *string                 `json:"content_html,omitempty" gorm:"-"`
+	Author       *string                 `json:"author,omitempty"`
+	PublishedAt  *time.Time              `json:"published_at,omitempty"`
+	ImageURL     *string                 `json:"image_url,omitempty"`
+	ReplyCount   *int                    `json:"reply_count,omitempty"`
+	Thread       *articleThread          `json:"thread,omitempty" gorm:"-"`
+	External     *articleExternalContent `json:"external,omitempty" gorm:"-"`
+	CreatedAt    time.Time               `json:"created_at"`
+	Raw          datatypes.JSON          `json:"-" gorm:"column:raw"`
 }
 
 type articleSummaryPayload struct {
@@ -146,19 +134,12 @@ type articleSummaryPayload struct {
 	CacheHit    bool      `json:"cache_hit"`
 }
 
-type threadPost struct {
-	PostNumber  int
-	Author      string
-	PublishedAt *time.Time
-	Link        string
-	Content     string
-}
-
-type forumThreadTarget struct {
-	FeedURLs             []string
-	TopicURL             string
-	DefaultTitle         string
-	PostNumberFromItemFn func(itemLink string) int
+type articleSummaryTaskPayload struct {
+	ArticleID uint64    `json:"article_id"`
+	Model     string    `json:"model"`
+	Status    string    `json:"status"`
+	Error     string    `json:"error,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (h *ArticleHandler) Get(c *gin.Context) {
@@ -172,6 +153,9 @@ func (h *ArticleHandler) Get(c *gin.Context) {
 	if err != nil {
 		h.handleLoadArticleError(c, err)
 		return
+	}
+	if bumpErr := h.bumpSourceClick(c.Request.Context(), article.SourceID); bumpErr != nil {
+		log.Printf("bump source click failed source_id=%d err=%v", article.SourceID, bumpErr)
 	}
 
 	c.JSON(http.StatusOK, article)
@@ -216,6 +200,28 @@ func (h *ArticleHandler) TrackThread(c *gin.Context) {
 		Order("id DESC").
 		Take(&existing).Error
 	if existingErr == nil {
+		updates := map[string]any{}
+		if strings.TrimSpace(existing.Kind) != "thread" {
+			updates["kind"] = "thread"
+		}
+		if existing.HiddenInSidebar {
+			updates["hidden_in_sidebar"] = false
+		}
+		if existing.TopicURL == nil || strings.TrimSpace(*existing.TopicURL) == "" {
+			updates["topic_url"] = target.TopicURL
+		}
+		if len(existing.Tags) == 0 {
+			updates["tags"] = mergeSourceTags(existing.Tags)
+		}
+		if len(updates) > 0 {
+			if err := h.db.WithContext(c.Request.Context()).
+				Model(&models.Source{}).
+				Where("id = ?", existing.ID).
+				Updates(updates).Error; err == nil {
+				_ = h.db.WithContext(c.Request.Context()).First(&existing, existing.ID).Error
+			}
+		}
+		normalizeSourceForResponse(&existing)
 		c.JSON(http.StatusOK, gin.H{
 			"ok":         true,
 			"created":    false,
@@ -235,7 +241,10 @@ func (h *ArticleHandler) TrackThread(c *gin.Context) {
 		Name:            buildThreadTrackingSourceName(article.Title, target.DefaultTitle),
 		RSSURL:          feedURL,
 		SiteKey:         normalizeSiteKeyFromURL(feedURL),
-		Category:        "forum-thread",
+		Kind:            "thread",
+		TopicURL:        &target.TopicURL,
+		HiddenInSidebar: false,
+		Tags:            mergeSourceTags([]string{"forum-thread"}),
 		Enabled:         true,
 		PollIntervalSec: 120,
 	}
@@ -244,6 +253,7 @@ func (h *ArticleHandler) TrackThread(c *gin.Context) {
 		return
 	}
 
+	normalizeSourceForResponse(&source)
 	c.JSON(http.StatusCreated, gin.H{
 		"ok":         true,
 		"created":    true,
@@ -261,18 +271,26 @@ func (h *ArticleHandler) Summarize(c *gin.Context) {
 		badRequest(c, err.Error())
 		return
 	}
-	if h.summarizer == nil {
+	if h.summarySvc == nil || !h.summarySvc.IsConfigured() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "ai summary is not configured",
 		})
 		return
 	}
 	refresh := parseBoolQuery(c.Query("refresh"))
-	log.Printf("summary request started article_id=%d refresh=%t", id, refresh)
+	asyncRequested := parseBoolQuery(c.Query("async"))
+	requestedModel := strings.TrimSpace(c.Query("model"))
+	log.Printf(
+		"summary request started article_id=%d refresh=%t async=%t model=%s",
+		id,
+		refresh,
+		asyncRequested,
+		firstNonEmpty(requestedModel, "<default>"),
+	)
 
 	if !refresh {
 		cacheLookupStartedAt := time.Now()
-		payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id)
+		payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id, requestedModel)
 		if err != nil {
 			internalServerError(c, "query summary cache failed", err)
 			return
@@ -289,76 +307,41 @@ func (h *ArticleHandler) Summarize(c *gin.Context) {
 		log.Printf("summary cache miss article_id=%d cache_lookup_ms=%d", id, cacheLookupMs)
 	}
 
-	loadStartedAt := time.Now()
-	article, err := h.loadArticleDetail(c.Request.Context(), id)
+	if asyncRequested {
+		taskPayload := h.enqueueSummaryTask(id, requestedModel, refresh)
+		c.JSON(http.StatusAccepted, gin.H{
+			"data": taskPayload,
+		})
+		return
+	}
+
+	payload, stage, err := h.generateAndSaveSummary(c.Request.Context(), id, requestedModel)
 	if err != nil {
-		h.handleLoadArticleError(c, err)
+		switch stage {
+		case "load":
+			h.handleLoadArticleError(c, err)
+		case "empty":
+			badRequest(c, "article content is empty")
+		case "ai":
+			badGateway(c, err.Error())
+		case "save":
+			internalServerError(c, "save summary cache failed", err)
+		default:
+			internalServerError(c, "generate summary failed", err)
+		}
 		return
 	}
-	loadMs := time.Since(loadStartedAt).Milliseconds()
-
-	text := buildSummarySourceText(article)
-	if strings.TrimSpace(text) == "" {
-		badRequest(c, "article content is empty")
-		return
-	}
-
-	aiStartedAt := time.Now()
-	result, err := h.summarizer.Summarize(c.Request.Context(), article.Title, text)
-	if err != nil {
-		log.Printf("summary ai failed article_id=%d input_chars=%d load_ms=%d ai_ms=%d total_ms=%d err=%v",
-			id,
-			len(text),
-			loadMs,
-			time.Since(aiStartedAt).Milliseconds(),
-			time.Since(requestStartedAt).Milliseconds(),
-			err,
-		)
-		badGateway(c, err.Error())
-		return
-	}
-	aiMs := time.Since(aiStartedAt).Milliseconds()
-
-	summaryRecord := models.ArticleSummary{
-		ArticleID:   id,
-		Summary:     result.Summary,
-		Model:       result.Model,
-		Provider:    result.ProviderName,
-		InputChars:  result.InputChars,
-		Truncated:   result.Truncated,
-		GeneratedAt: result.GeneratedAt,
-	}
-	saveStartedAt := time.Now()
-	if err := h.db.WithContext(c.Request.Context()).
-		Where("article_id = ?", id).
-		Assign(summaryRecord).
-		FirstOrCreate(&summaryRecord).Error; err != nil {
-		internalServerError(c, "save summary cache failed", err)
-		return
-	}
-	saveMs := time.Since(saveStartedAt).Milliseconds()
 	totalMs := time.Since(requestStartedAt).Milliseconds()
-	log.Printf("summary generated article_id=%d input_chars=%d truncated=%t load_ms=%d ai_ms=%d save_ms=%d total_ms=%d",
+	log.Printf(
+		"summary generated article_id=%d input_chars=%d truncated=%t total_ms=%d",
 		id,
-		result.InputChars,
-		result.Truncated,
-		loadMs,
-		aiMs,
-		saveMs,
+		payload.InputChars,
+		payload.Truncated,
 		totalMs,
 	)
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": articleSummaryPayload{
-			ArticleID:   article.ID,
-			Summary:     result.Summary,
-			Model:       result.Model,
-			InputChars:  result.InputChars,
-			Truncated:   result.Truncated,
-			Provider:    result.ProviderName,
-			GeneratedAt: result.GeneratedAt,
-			CacheHit:    false,
-		},
+		"data": payload,
 	})
 }
 
@@ -368,8 +351,9 @@ func (h *ArticleHandler) GetSummary(c *gin.Context) {
 		badRequest(c, err.Error())
 		return
 	}
+	requestedModel := strings.TrimSpace(c.Query("model"))
 
-	payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id)
+	payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id, requestedModel)
 	if err != nil {
 		internalServerError(c, "query summary cache failed", err)
 		return
@@ -384,6 +368,41 @@ func (h *ArticleHandler) GetSummary(c *gin.Context) {
 	})
 }
 
+func (h *ArticleHandler) GetSummaryStatus(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
+	requestedModel := strings.TrimSpace(c.Query("model"))
+
+	if payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id, requestedModel); err == nil && found {
+		c.JSON(http.StatusOK, gin.H{
+			"data": articleSummaryTaskPayload{
+				ArticleID: payload.ArticleID,
+				Model:     payload.Model,
+				Status:    articlesummary.StatusSucceeded,
+				UpdatedAt: payload.GeneratedAt,
+			},
+		})
+		return
+	} else if err != nil {
+		internalServerError(c, "query summary cache failed", err)
+		return
+	}
+
+	state := h.getSummaryTaskState(id, requestedModel)
+	c.JSON(http.StatusOK, gin.H{
+		"data": articleSummaryTaskPayload{
+			ArticleID: id,
+			Model:     requestedModel,
+			Status:    state.Status,
+			Error:     state.Error,
+			UpdatedAt: state.UpdatedAt,
+		},
+	})
+}
+
 func (h *ArticleHandler) loadArticleDetail(ctx context.Context, id uint64) (articleDetail, error) {
 	var article articleDetail
 	err := h.db.
@@ -393,16 +412,18 @@ func (h *ArticleHandler) loadArticleDetail(ctx context.Context, id uint64) (arti
 			a.id,
 			a.source_id,
 			s.name AS source_name,
-			s.category AS source_category,
+			COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
 			s.rss_url AS source_rss_url,
 			a.raw_guid,
 			a.title,
 			a.link,
 			a.summary,
 			a.content,
+			a.raw,
 			a.author,
 			a.published_at,
 			a.image_url,
+			a.reply_count,
 			a.created_at
 		`).
 		Joins("JOIN sources AS s ON s.id = a.source_id").
@@ -412,16 +433,43 @@ func (h *ArticleHandler) loadArticleDetail(ctx context.Context, id uint64) (arti
 		return articleDetail{}, err
 	}
 
-	if thread, ok := h.fetchThreadForTopic(ctx, article.Link); ok {
-		article.Thread = thread
+	if contentHTML := feedextract.ContentHTMLFromRaw(article.Raw); contentHTML != "" {
+		article.ContentHTML = &contentHTML
 	}
-	if shouldFetchExternalArticle(article.SourceName, article.SourceRSSURL, article.Link) {
-		if external, ok := h.fetchExternalArticle(ctx, article.Link); ok {
-			article.External = external
+	if article.ImageURL == nil {
+		if fallback := feedextract.ImageFromRaw(article.Raw, article.Link); fallback != "" {
+			article.ImageURL = &fallback
 		}
 	}
 
+	if thread, ok := h.contentSvc.fetchThreadForTopic(ctx, article.Link); ok {
+		article.Thread = thread
+	}
+	if article.Thread != nil && article.Thread.ExternalLink != nil {
+		if external, ok := h.contentSvc.fetchExternalArticle(ctx, *article.Thread.ExternalLink); ok {
+			article.External = external
+		}
+	}
+	if article.External == nil && shouldFetchExternalArticle(article.SourceName, article.SourceRSSURL, article.Link) {
+		if external, ok := h.contentSvc.fetchExternalArticle(ctx, article.Link); ok {
+			article.External = external
+		}
+	}
+	sanitizeArticleForOutput(&article)
+
 	return article, nil
+}
+
+func (h *ArticleHandler) loadSummaryInput(ctx context.Context, id uint64) (articlesummary.ArticleInput, error) {
+	article, err := h.loadArticleDetail(ctx, id)
+	if err != nil {
+		return articlesummary.ArticleInput{}, err
+	}
+	return articlesummary.ArticleInput{
+		ID:         article.ID,
+		Title:      article.Title,
+		SourceText: buildSummarySourceText(article),
+	}, nil
 }
 
 func (h *ArticleHandler) handleLoadArticleError(c *gin.Context, err error) {
@@ -432,16 +480,29 @@ func (h *ArticleHandler) handleLoadArticleError(c *gin.Context, err error) {
 	internalServerError(c, "query article failed", err)
 }
 
+func (h *ArticleHandler) bumpSourceClick(ctx context.Context, sourceID uint64) error {
+	if sourceID == 0 {
+		return nil
+	}
+	return h.db.WithContext(ctx).
+		Model(&models.Source{}).
+		Where("id = ?", sourceID).
+		Updates(map[string]any{
+			"click_count":     gorm.Expr("click_count + 1"),
+			"last_clicked_at": time.Now().UTC(),
+		}).Error
+}
+
 func buildSummarySourceText(article articleDetail) string {
 	parts := make([]string, 0, 6)
 	if article.Summary != nil && strings.TrimSpace(*article.Summary) != "" {
-		parts = append(parts, strings.TrimSpace(*article.Summary))
+		parts = append(parts, textclean.NormalizeFromHTML(*article.Summary))
 	}
 	if article.Content != nil && strings.TrimSpace(*article.Content) != "" {
-		parts = append(parts, strings.TrimSpace(*article.Content))
+		parts = append(parts, textclean.NormalizeFromHTML(*article.Content))
 	}
 	if article.External != nil && strings.TrimSpace(article.External.Content) != "" {
-		parts = append(parts, strings.TrimSpace(article.External.Content))
+		parts = append(parts, textclean.NormalizeFromHTML(article.External.Content))
 	}
 
 	if article.Thread != nil {
@@ -465,281 +526,56 @@ func buildSummarySourceText(article articleDetail) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (h *ArticleHandler) fetchThreadForTopic(ctx context.Context, topicLink string) (*articleThread, bool) {
-	target, ok := forumThreadTargetFromLink(topicLink)
-	if !ok {
-		return nil, false
+func sanitizeArticleForOutput(article *articleDetail) {
+	if article == nil {
+		return
 	}
-
-	for _, feedURL := range target.FeedURLs {
-		if cached, ok := h.getCachedThread(feedURL, time.Now().UTC()); ok {
-			return &cached, true
-		}
-
-		thread, err := h.fetchThreadFromFeedURL(ctx, target, feedURL)
-		if err != nil {
-			log.Printf("thread fetch failed topic=%s feed=%s err=%v", topicLink, feedURL, err)
-			continue
-		}
-
-		h.setCachedThread(feedURL, *thread, time.Now().UTC().Add(threadCacheTTL))
-		return thread, true
-	}
-
-	return nil, false
-}
-
-func forumThreadTargetFromLink(rawLink string) (forumThreadTarget, bool) {
-	feedURL, topicURL, ok := uscardTopicRSSURL(rawLink)
-	if ok {
-		return forumThreadTarget{
-			FeedURLs:             []string{feedURL},
-			TopicURL:             topicURL,
-			DefaultTitle:         "USCardForum 话题",
-			PostNumberFromItemFn: uscardPostNumberFromLink,
-		}, true
-	}
-
-	feedURLs, topicURL, ok := v2exTopicRSSURLs(rawLink)
-	if ok {
-		return forumThreadTarget{
-			FeedURLs:             feedURLs,
-			TopicURL:             topicURL,
-			DefaultTitle:         "V2EX 话题",
-			PostNumberFromItemFn: v2exPostNumberFromLink,
-		}, true
-	}
-
-	return forumThreadTarget{}, false
-}
-
-func uscardTopicRSSURL(rawLink string) (feedURL string, topicURL string, ok bool) {
-	link := strings.TrimSpace(rawLink)
-	match := uscardTopicLinkPattern.FindStringSubmatch(link)
-	if len(match) < 2 {
-		return "", "", false
-	}
-	topicID := match[1]
-	topicURL = "https://www.uscardforum.com/t/topic/" + topicID
-	return topicURL + ".rss", topicURL, true
-}
-
-func v2exTopicRSSURLs(rawLink string) (feedURLs []string, topicURL string, ok bool) {
-	parsed, err := url.Parse(strings.TrimSpace(rawLink))
-	if err != nil {
-		return nil, "", false
-	}
-	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-	if host != "www.v2ex.com" && host != "v2ex.com" {
-		return nil, "", false
-	}
-
-	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "t" {
-		return nil, "", false
-	}
-	topicID := strings.TrimSpace(parts[1])
-	if topicID == "" {
-		return nil, "", false
-	}
-	if _, err := strconv.Atoi(topicID); err != nil {
-		return nil, "", false
-	}
-
-	topicURL = "https://www.v2ex.com/t/" + topicID
-	feedURLs = []string{
-		"https://rsshub.rssforever.com/v2ex/post/" + topicID,
-	}
-	return feedURLs, topicURL, true
-}
-
-func (h *ArticleHandler) fetchThreadFromFeedURL(ctx context.Context, target forumThreadTarget, feedURL string) (*articleThread, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "quick-thread-fetcher/0.1")
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errors.New("unexpected status code: " + strconv.Itoa(resp.StatusCode))
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, threadMaxBodyBytes))
-	if err != nil {
-		return nil, err
-	}
-
-	feed, err := h.parser.Parse(strings.NewReader(string(body)))
-	if err != nil {
-		return nil, err
-	}
-	if feed == nil || len(feed.Items) == 0 {
-		return nil, errors.New("feed has no items")
-	}
-
-	posts := make([]threadPost, 0, len(feed.Items))
-	for _, item := range feed.Items {
-		mapped, ok := mapThreadPost(item, target.PostNumberFromItemFn)
-		if !ok {
-			continue
-		}
-		posts = append(posts, mapped)
-	}
-	if len(posts) == 0 {
-		return nil, errors.New("no valid thread posts parsed")
-	}
-
-	sort.Slice(posts, func(i, j int) bool {
-		a := posts[i]
-		b := posts[j]
-		if a.PostNumber > 0 && b.PostNumber > 0 && a.PostNumber != b.PostNumber {
-			return a.PostNumber < b.PostNumber
-		}
-		if a.PublishedAt != nil && b.PublishedAt != nil && !a.PublishedAt.Equal(*b.PublishedAt) {
-			return a.PublishedAt.Before(*b.PublishedAt)
-		}
-		return a.Link < b.Link
-	})
-
-	firstIndex := 0
-	for idx, post := range posts {
-		if post.PostNumber == 1 {
-			firstIndex = idx
-			break
+	article.Title = textclean.NormalizeInline(article.Title)
+	if article.Summary != nil {
+		value := textclean.NormalizeFromHTML(*article.Summary)
+		if value == "" {
+			article.Summary = nil
+		} else {
+			article.Summary = &value
 		}
 	}
-
-	full := posts[firstIndex].Content
-	if len(full) > threadMaxContentChars {
-		full = full[:threadMaxContentChars]
-	}
-
-	comments := make([]articleThreadComment, 0, len(posts)-1)
-	for idx, post := range posts {
-		if idx == firstIndex {
-			continue
+	if article.Content != nil {
+		value := textclean.NormalizeFromHTMLBlock(*article.Content)
+		if value == "" {
+			article.Content = nil
+		} else {
+			article.Content = &value
 		}
-		content := post.Content
-		if len(content) > threadMaxCommentChars {
-			content = content[:threadMaxCommentChars]
+	}
+	if article.ContentHTML != nil {
+		value := strings.TrimSpace(*article.ContentHTML)
+		if value == "" {
+			article.ContentHTML = nil
+		} else {
+			article.ContentHTML = &value
 		}
-		comments = append(comments, articleThreadComment{
-			PostNumber:  post.PostNumber,
-			Author:      post.Author,
-			PublishedAt: post.PublishedAt,
-			Link:        post.Link,
-			Content:     content,
-		})
 	}
-
-	truncated := false
-	if len(comments) > threadMaxComments {
-		comments = comments[:threadMaxComments]
-		truncated = true
+	if article.Author != nil {
+		value := textclean.NormalizeInline(*article.Author)
+		if value == "" {
+			article.Author = nil
+		} else {
+			article.Author = &value
+		}
 	}
-
-	thread := articleThread{
-		TopicURL:    target.TopicURL,
-		FeedURL:     feedURL,
-		TopicTitle:  strings.TrimSpace(feed.Title),
-		FullContent: full,
-		Comments:    comments,
-		TotalPosts:  len(posts),
-		Truncated:   truncated,
+	if article.External != nil {
+		article.External.Title = textclean.NormalizeInline(article.External.Title)
+		article.External.Content = textclean.NormalizeFromHTMLBlock(article.External.Content)
 	}
-	if thread.TopicTitle == "" {
-		thread.TopicTitle = target.DefaultTitle
+	if article.Thread != nil {
+		article.Thread.TopicTitle = textclean.NormalizeInline(article.Thread.TopicTitle)
+		article.Thread.FullContent = textclean.NormalizeFromHTMLBlock(article.Thread.FullContent)
+		for i := range article.Thread.Comments {
+			comment := &article.Thread.Comments[i]
+			comment.Author = textclean.NormalizeInline(comment.Author)
+			comment.Content = textclean.NormalizeFromHTMLBlock(comment.Content)
+		}
 	}
-
-	return &thread, nil
-}
-
-func mapThreadPost(item *gofeed.Item, postNumberFromLinkFn func(string) int) (threadPost, bool) {
-	if item == nil {
-		return threadPost{}, false
-	}
-
-	link := strings.TrimSpace(item.Link)
-	if link == "" {
-		return threadPost{}, false
-	}
-
-	content := normalizeThreadText(firstNonEmpty(item.Content, item.Description))
-	if content == "" {
-		content = strings.TrimSpace(item.Title)
-	}
-	if content == "" {
-		return threadPost{}, false
-	}
-
-	author := ""
-	if item.Author != nil {
-		author = strings.TrimSpace(item.Author.Name)
-	}
-
-	var publishedAt *time.Time
-	if item.PublishedParsed != nil {
-		value := item.PublishedParsed.UTC()
-		publishedAt = &value
-	} else if item.UpdatedParsed != nil {
-		value := item.UpdatedParsed.UTC()
-		publishedAt = &value
-	}
-
-	postNumber := 0
-	if postNumberFromLinkFn != nil {
-		postNumber = postNumberFromLinkFn(link)
-	}
-
-	return threadPost{
-		PostNumber:  postNumber,
-		Author:      author,
-		PublishedAt: publishedAt,
-		Link:        link,
-		Content:     content,
-	}, true
-}
-
-func uscardPostNumberFromLink(link string) int {
-	match := uscardPostLinkPattern.FindStringSubmatch(strings.TrimSpace(link))
-	if len(match) < 2 {
-		return 0
-	}
-	value, err := strconv.Atoi(match[1])
-	if err != nil || value <= 0 {
-		return 0
-	}
-	return value
-}
-
-func v2exPostNumberFromLink(link string) int {
-	match := v2exReplyLinkPattern.FindStringSubmatch(strings.TrimSpace(link))
-	if len(match) < 2 {
-		return 0
-	}
-	value, err := strconv.Atoi(match[1])
-	if err != nil || value <= 0 {
-		return 0
-	}
-	return value
-}
-
-func normalizeThreadText(raw string) string {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return ""
-	}
-	value = html.UnescapeString(value)
-	value = htmlTagPattern.ReplaceAllString(value, " ")
-	value = strings.ReplaceAll(value, threadReadMoreHintText, " ")
-	value = spacePattern.ReplaceAllString(value, " ")
-	return strings.TrimSpace(value)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -752,67 +588,77 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func (h *ArticleHandler) getCachedThread(feedURL string, now time.Time) (articleThread, bool) {
-	h.cacheMu.RLock()
-	entry, ok := h.cache[feedURL]
-	h.cacheMu.RUnlock()
-	if !ok {
-		return articleThread{}, false
-	}
-	if now.After(entry.expiresAt) {
-		h.cacheMu.Lock()
-		current, exists := h.cache[feedURL]
-		if exists && now.After(current.expiresAt) {
-			delete(h.cache, feedURL)
+func (h *ArticleHandler) enqueueSummaryTask(articleID uint64, requestedModel string, refresh bool) articleSummaryTaskPayload {
+	if h.summarySvc == nil {
+		return articleSummaryTaskPayload{
+			ArticleID: articleID,
+			Model:     strings.TrimSpace(requestedModel),
+			Status:    articlesummary.StatusFailed,
+			Error:     "summary service is not configured",
+			UpdatedAt: time.Now().UTC(),
 		}
-		h.cacheMu.Unlock()
-		return articleThread{}, false
 	}
-
-	return cloneThread(entry.value), true
+	return toArticleSummaryTaskPayload(h.summarySvc.EnqueueTask(articleID, requestedModel, refresh))
 }
 
-func (h *ArticleHandler) setCachedThread(feedURL string, value articleThread, expiresAt time.Time) {
-	h.cacheMu.Lock()
-	h.cache[feedURL] = cachedThread{
-		value:     cloneThread(value),
-		expiresAt: expiresAt,
+func (h *ArticleHandler) generateAndSaveSummary(
+	ctx context.Context,
+	articleID uint64,
+	requestedModel string,
+) (articleSummaryPayload, string, error) {
+	if h.summarySvc == nil {
+		return articleSummaryPayload{}, "ai", errors.New("summary service is not configured")
 	}
-	h.cacheMu.Unlock()
-}
-
-func cloneThread(input articleThread) articleThread {
-	output := input
-	if input.Comments == nil {
-		return output
-	}
-	output.Comments = make([]articleThreadComment, len(input.Comments))
-	copy(output.Comments, input.Comments)
-	return output
-}
-
-func (h *ArticleHandler) getCachedSummaryPayload(ctx context.Context, articleID uint64) (articleSummaryPayload, bool, error) {
-	var cached models.ArticleSummary
-	err := h.db.WithContext(ctx).
-		Where("article_id = ?", articleID).
-		Take(&cached).Error
+	payload, stage, err := h.summarySvc.GenerateAndSave(ctx, articleID, requestedModel)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return articleSummaryPayload{}, false, nil
-		}
-		return articleSummaryPayload{}, false, err
+		return articleSummaryPayload{}, stage, err
 	}
+	return toArticleSummaryPayload(payload), "", nil
+}
 
+func (h *ArticleHandler) getSummaryTaskState(articleID uint64, requestedModel string) articlesummary.TaskState {
+	if h.summarySvc == nil {
+		return articlesummary.TaskState{
+			Status:    articlesummary.StatusFailed,
+			Error:     "summary service is not configured",
+			UpdatedAt: time.Now().UTC(),
+		}
+	}
+	return h.summarySvc.GetTaskState(articleID, requestedModel)
+}
+
+func (h *ArticleHandler) getCachedSummaryPayload(ctx context.Context, articleID uint64, requestedModel string) (articleSummaryPayload, bool, error) {
+	if h.summarySvc == nil {
+		return articleSummaryPayload{}, false, errors.New("summary service is not configured")
+	}
+	payload, found, err := h.summarySvc.GetCachedPayload(ctx, articleID, requestedModel)
+	if err != nil || !found {
+		return articleSummaryPayload{}, found, err
+	}
+	return toArticleSummaryPayload(payload), true, nil
+}
+
+func toArticleSummaryPayload(payload articlesummary.SummaryPayload) articleSummaryPayload {
 	return articleSummaryPayload{
-		ArticleID:   articleID,
-		Summary:     cached.Summary,
-		Model:       cached.Model,
-		InputChars:  cached.InputChars,
-		Truncated:   cached.Truncated,
-		Provider:    cached.Provider,
-		GeneratedAt: cached.GeneratedAt,
-		CacheHit:    true,
-	}, true, nil
+		ArticleID:   payload.ArticleID,
+		Summary:     payload.Summary,
+		Model:       payload.Model,
+		InputChars:  payload.InputChars,
+		Truncated:   payload.Truncated,
+		Provider:    payload.Provider,
+		GeneratedAt: payload.GeneratedAt,
+		CacheHit:    payload.CacheHit,
+	}
+}
+
+func toArticleSummaryTaskPayload(payload articlesummary.TaskPayload) articleSummaryTaskPayload {
+	return articleSummaryTaskPayload{
+		ArticleID: payload.ArticleID,
+		Model:     payload.Model,
+		Status:    payload.Status,
+		Error:     payload.Error,
+		UpdatedAt: payload.UpdatedAt,
+	}
 }
 
 func parseBoolQuery(raw string) bool {
@@ -848,7 +694,7 @@ func normalizeSiteKeyFromURL(rawURL string) string {
 	if host == "" {
 		return "unknown-site"
 	}
-	if host == "rsshub.rssforever.com" {
+	if isRSSHubHost(host) {
 		segment := strings.TrimSpace(strings.ToLower(firstNonEmpty(strings.Split(strings.Trim(parsed.Path, "/"), "/")...)))
 		if segment != "" {
 			return segment
@@ -888,168 +734,4 @@ func shouldFetchExternalArticle(sourceName string, sourceRSSURL string, link str
 		return true
 	}
 	return false
-}
-
-func isSafeExternalURL(rawURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	host := strings.TrimSpace(parsed.Hostname())
-	if host == "" {
-		return false
-	}
-	lowerHost := strings.ToLower(host)
-	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".local") {
-		return false
-	}
-	ip := net.ParseIP(lowerHost)
-	if ip == nil {
-		return true
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() {
-		return false
-	}
-	return true
-}
-
-func (h *ArticleHandler) fetchExternalArticle(ctx context.Context, articleURL string) (*articleExternalContent, bool) {
-	if cached, ok := h.getCachedExternal(articleURL, time.Now().UTC()); ok {
-		return &cached, true
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, articleURL, nil)
-	if err != nil {
-		return nil, false
-	}
-	req.Header.Set("User-Agent", "quick-external-fetcher/0.1")
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, false
-	}
-	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
-	if !strings.Contains(contentType, "text/html") {
-		return nil, false
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, externalMaxBodyBytes))
-	if err != nil {
-		return nil, false
-	}
-	external, ok := parseExternalHTML(articleURL, body)
-	if !ok {
-		return nil, false
-	}
-	h.setCachedExternal(articleURL, *external, time.Now().UTC().Add(externalCacheTTL))
-	return external, true
-}
-
-func parseExternalHTML(articleURL string, body []byte) (*articleExternalContent, bool) {
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-	if err != nil {
-		return nil, false
-	}
-
-	doc.Find("script,style,noscript,header,footer,nav,aside,form,svg").Each(func(_ int, s *goquery.Selection) {
-		s.Remove()
-	})
-
-	title := normalizeThreadText(doc.Find("title").First().Text())
-	content := extractMainArticleText(doc)
-	if content == "" {
-		return nil, false
-	}
-
-	truncated := false
-	if len(content) > externalMaxContentChars {
-		content = content[:externalMaxContentChars]
-		truncated = true
-	}
-	if title == "" {
-		title = articleURL
-	}
-
-	return &articleExternalContent{
-		URL:       strings.TrimSpace(articleURL),
-		Title:     title,
-		Content:   content,
-		Truncated: truncated,
-	}, true
-}
-
-func extractMainArticleText(doc *goquery.Document) string {
-	candidates := []string{
-		"article",
-		"main",
-		"[role='main']",
-		".post-content",
-		".entry-content",
-		".article-content",
-		".content",
-	}
-	bestText := ""
-	for _, selector := range candidates {
-		doc.Find(selector).Each(func(_ int, s *goquery.Selection) {
-			text := extractParagraphText(s)
-			if len(text) > len(bestText) {
-				bestText = text
-			}
-		})
-	}
-	if bestText != "" {
-		return bestText
-	}
-	return extractParagraphText(doc.Find("body"))
-}
-
-func extractParagraphText(selection *goquery.Selection) string {
-	paragraphs := make([]string, 0, 64)
-	selection.Find("p").Each(func(_ int, p *goquery.Selection) {
-		text := normalizeThreadText(p.Text())
-		if len(text) < 20 {
-			return
-		}
-		paragraphs = append(paragraphs, text)
-	})
-	if len(paragraphs) > 0 {
-		return strings.Join(paragraphs, "\n\n")
-	}
-	return normalizeThreadText(selection.Text())
-}
-
-func (h *ArticleHandler) getCachedExternal(articleURL string, now time.Time) (articleExternalContent, bool) {
-	h.externalCacheMu.RLock()
-	entry, ok := h.externalCache[articleURL]
-	h.externalCacheMu.RUnlock()
-	if !ok {
-		return articleExternalContent{}, false
-	}
-	if now.After(entry.expiresAt) {
-		h.externalCacheMu.Lock()
-		current, exists := h.externalCache[articleURL]
-		if exists && now.After(current.expiresAt) {
-			delete(h.externalCache, articleURL)
-		}
-		h.externalCacheMu.Unlock()
-		return articleExternalContent{}, false
-	}
-	return entry.value, true
-}
-
-func (h *ArticleHandler) setCachedExternal(articleURL string, value articleExternalContent, expiresAt time.Time) {
-	h.externalCacheMu.Lock()
-	h.externalCache[articleURL] = cachedExternalArticle{
-		value:     value,
-		expiresAt: expiresAt,
-	}
-	h.externalCacheMu.Unlock()
 }

@@ -43,3 +43,68 @@ func TestStringArrayValue(t *testing.T) {
 		})
 	}
 }
+
+func TestStringArrayScan(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   any
+		expect  StringArray
+		wantErr bool
+	}{
+		{
+			name:   "nil",
+			input:  nil,
+			expect: nil,
+		},
+		{
+			name:   "empty",
+			input:  "{}",
+			expect: StringArray{},
+		},
+		{
+			name:   "quoted values",
+			input:  "{\"理财\",\"信用卡\"}",
+			expect: StringArray{"理财", "信用卡"},
+		},
+		{
+			name:   "escaped values",
+			input:  "{\"a\\\"b\",\"c\\\\d\"}",
+			expect: StringArray{`a"b`, `c\d`},
+		},
+		{
+			name:   "bytes input",
+			input:  []byte("{\"x\",\"y\"}"),
+			expect: StringArray{"x", "y"},
+		},
+		{
+			name:    "invalid",
+			input:   "not-array",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var out StringArray
+			err := (&out).Scan(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("Scan() expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Scan() returned error: %v", err)
+			}
+			if len(out) != len(tc.expect) {
+				t.Fatalf("Scan() len = %d, expect %d", len(out), len(tc.expect))
+			}
+			for i := range out {
+				if out[i] != tc.expect[i] {
+					t.Fatalf("Scan()[%d] = %q, expect %q", i, out[i], tc.expect[i])
+				}
+			}
+		})
+	}
+}

@@ -33,7 +33,7 @@ func (h *AdminStatusHandler) RegisterRoutes(group *gin.RouterGroup) {
 type sourceStatusRow struct {
 	SourceID            uint64         `gorm:"column:source_id"`
 	Name                string         `gorm:"column:name"`
-	Category            string         `gorm:"column:category"`
+	PrimaryTag          string         `gorm:"column:primary_tag"`
 	Enabled             bool           `gorm:"column:enabled"`
 	RSSURL              string         `gorm:"column:rss_url"`
 	PollIntervalSec     int            `gorm:"column:poll_interval_sec"`
@@ -56,7 +56,7 @@ type sourceStatusRow struct {
 type sourceStatusItem struct {
 	SourceID                 uint64     `json:"source_id"`
 	Name                     string     `json:"name"`
-	Category                 string     `json:"category"`
+	PrimaryTag               string     `json:"primary_tag"`
 	Enabled                  bool       `json:"enabled"`
 	RSSURL                   string     `json:"rss_url"`
 	PollIntervalSec          int        `json:"poll_interval_sec"`
@@ -99,7 +99,7 @@ func (h *AdminStatusHandler) ListSourceStatus(c *gin.Context) {
 SELECT
   s.id AS source_id,
   s.name,
-  s.category,
+  COALESCE(NULLIF(s.tags[1], ''), 'general') AS primary_tag,
   s.enabled,
   s.rss_url,
   s.poll_interval_sec,
@@ -155,7 +155,7 @@ ORDER BY s.enabled DESC, COALESCE(latest.fetched_at, s.created_at) DESC, s.id DE
 		item := sourceStatusItem{
 			SourceID:                 row.SourceID,
 			Name:                     row.Name,
-			Category:                 row.Category,
+			PrimaryTag:               row.PrimaryTag,
 			Enabled:                  row.Enabled,
 			RSSURL:                   row.RSSURL,
 			PollIntervalSec:          row.PollIntervalSec,

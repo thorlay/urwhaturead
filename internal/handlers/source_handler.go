@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"quick/internal/models"
 	"quick/internal/worker"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/net/publicsuffix"
@@ -38,9 +41,20 @@ func NewSourceHandler(db *gorm.DB, refresher worker.Refresher) *SourceHandler {
 }
 
 func (h *SourceHandler) RegisterRoutes(group *gin.RouterGroup) {
+	h.RegisterReadRoutes(group)
+	h.RegisterWriteRoutes(group)
+}
+
+func (h *SourceHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("", h.List)
 	group.GET("/:id", h.Get)
+}
+
+func (h *SourceHandler) RegisterWriteRoutes(group *gin.RouterGroup) {
 	group.POST("", h.Create)
+	group.POST("/discover", h.Discover)
+	group.POST("/reclassify", h.Reclassify)
+	group.POST("/bulk/tags", h.BulkUpdateTags)
 	group.PATCH("/:id", h.Update)
 	group.DELETE("/:id", h.Delete)
 	group.POST("/:id/test", h.TestFeed)
@@ -48,23 +62,114 @@ func (h *SourceHandler) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 type createSourceRequest struct {
-	OwnerUserID     *uint64 `json:"owner_user_id"`
-	Name            string  `json:"name"`
-	RSSURL          string  `json:"rss_url" binding:"required,url"`
-	Category        string  `json:"category"`
-	Enabled         *bool   `json:"enabled"`
-	PollIntervalSec *int    `json:"poll_interval_sec"`
+	OwnerUserID     *uint64  `json:"owner_user_id"`
+	Name            string   `json:"name"`
+	RSSURL          string   `json:"rss_url" binding:"required,url"`
+	Tags            []string `json:"tags"`
+	Enabled         *bool    `json:"enabled"`
+	PollIntervalSec *int     `json:"poll_interval_sec"`
 }
 
 type updateSourceRequest struct {
-	Name            *string `json:"name"`
-	RSSURL          *string `json:"rss_url" binding:"omitempty,url"`
-	Category        *string `json:"category"`
-	Enabled         *bool   `json:"enabled"`
-	PollIntervalSec *int    `json:"poll_interval_sec"`
+	Name            *string   `json:"name"`
+	RSSURL          *string   `json:"rss_url" binding:"omitempty,url"`
+	Tags            *[]string `json:"tags"`
+	Enabled         *bool     `json:"enabled"`
+	PollIntervalSec *int      `json:"poll_interval_sec"`
+}
+
+type discoverSourcesRequest struct {
+	URL string `json:"url" binding:"required"`
+}
+
+type reclassifySourcesRequest struct {
+	SourceIDs   []uint64 `json:"source_ids"`
+	OnlyGeneral *bool    `json:"only_general"`
+	Probe       *bool    `json:"probe"`
+	DryRun      bool     `json:"dry_run"`
+	Limit       *int     `json:"limit"`
+}
+
+type bulkUpdateSourceTagsRequest struct {
+	SourceIDs []uint64 `json:"source_ids" binding:"required"`
+	Action    string   `json:"action" binding:"required"`
+	Tags      []string `json:"tags"`
+}
+
+type discoverCandidate struct {
+	RSSURL       string  `json:"rss_url"`
+	Name         string  `json:"name"`
+	FeedType     string  `json:"feed_type"`
+	ItemCount    int     `json:"item_count"`
+	HTTPStatus   int     `json:"http_status"`
+	Confidence   string  `json:"confidence"`
+	Reason       string  `json:"reason"`
+	Existing     bool    `json:"existing"`
+	SourceID     *uint64 `json:"source_id,omitempty"`
+	SourceName   *string `json:"source_name,omitempty"`
+	SuggestedTag string  `json:"suggested_tag"`
+}
+
+type discoverSeed struct {
+	URL    string
+	Reason string
+	Score  int
+}
+
+type reclassifySourceResult struct {
+	SourceID uint64             `json:"source_id"`
+	Name     string             `json:"name"`
+	RSSURL   string             `json:"rss_url"`
+	OldTags  models.StringArray `json:"old_tags"`
+	NewTags  models.StringArray `json:"new_tags"`
+	Changed  bool               `json:"changed"`
+	Reason   string             `json:"reason"`
+	Error    string             `json:"error,omitempty"`
+}
+
+const defaultSourceTag = "general"
+const threadAutoHideAfter = 14 * 24 * time.Hour
+
+var sourceTagKeywordRules = []struct {
+	Tag      string
+	Keywords []string
+}{
+	{
+		Tag:      "jobs",
+		Keywords: []string{"hiring", "jobs", "job ", "career", "who is hiring"},
+	},
+	{
+		Tag:      "finance",
+		Keywords: []string{"finance", "market", "stocks", "invest", "economy", "fed", "interest rate", "credit card", "rewards", "points"},
+	},
+	{
+		Tag:      "tech",
+		Keywords: []string{"tech", "software", "developer", "programming", "open source", "hacker news", "ai", "startup", "github", "v2ex"},
+	},
+	{
+		Tag:      "world",
+		Keywords: []string{"world", "international", "geopolitic", "global", "election", "war"},
+	},
+	{
+		Tag:      "science",
+		Keywords: []string{"science", "research", "space", "physics", "biology", "medicine"},
+	},
+	{
+		Tag:      "sports",
+		Keywords: []string{"sports", "nfl", "nba", "soccer", "mlb", "tennis"},
+	},
+	{
+		Tag:      "forum",
+		Keywords: []string{"forum", "thread", "discussion", "community", "reddit", "comment"},
+	},
 }
 
 func (h *SourceHandler) List(c *gin.Context) {
+	if err := h.autoHideStaleThreadSources(c.Request.Context(), threadAutoHideAfter); err != nil {
+		internalServerError(c, "auto-hide stale thread sources failed", err)
+		return
+	}
+
 	query := h.db.Model(&models.Source{})
 
 	if ownerRaw := c.Query("owner_user_id"); ownerRaw != "" {
@@ -76,8 +181,19 @@ func (h *SourceHandler) List(c *gin.Context) {
 		query = query.Where("owner_user_id = ?", ownerID)
 	}
 
-	if category := strings.TrimSpace(c.Query("category")); category != "" {
-		query = query.Where("category = ?", category)
+	if tag := normalizeSourceTag(c.Query("tag")); tag != "" {
+		query = query.Where("tags @> ?::text[]", models.StringArray{tag})
+	}
+	if kind := strings.TrimSpace(c.Query("kind")); kind != "" {
+		query = query.Where("kind = ?", strings.ToLower(kind))
+	}
+	if hiddenRaw := strings.TrimSpace(c.Query("hidden_in_sidebar")); hiddenRaw != "" {
+		hidden, err := strconv.ParseBool(hiddenRaw)
+		if err != nil {
+			badRequest(c, "hidden_in_sidebar must be true/false")
+			return
+		}
+		query = query.Where("hidden_in_sidebar = ?", hidden)
 	}
 
 	if enabledRaw := c.Query("enabled"); enabledRaw != "" {
@@ -110,12 +226,18 @@ func (h *SourceHandler) List(c *gin.Context) {
 	}
 
 	var sources []models.Source
-	if err := query.Order("id DESC").Limit(limit).Offset(offset).Find(&sources).Error; err != nil {
+	if err := query.
+		Order("click_count DESC").
+		Order("last_clicked_at DESC NULLS LAST").
+		Order("id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&sources).Error; err != nil {
 		internalServerError(c, "query sources failed", err)
 		return
 	}
 	for i := range sources {
-		sources[i].SiteKey = normalizeSiteKey(sources[i].RSSURL)
+		normalizeSourceForResponse(&sources[i])
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -126,6 +248,23 @@ func (h *SourceHandler) List(c *gin.Context) {
 			"count":  len(sources),
 		},
 	})
+}
+
+func (h *SourceHandler) autoHideStaleThreadSources(ctx context.Context, staleAfter time.Duration) error {
+	if staleAfter <= 0 {
+		return nil
+	}
+	cutoff := time.Now().UTC().Add(-staleAfter)
+	return h.db.WithContext(ctx).
+		Model(&models.Source{}).
+		Where("kind = ? AND hidden_in_sidebar = ?", "thread", false).
+		Where(`GREATEST(
+			COALESCE(last_fetched_at, to_timestamp(0)),
+			COALESCE(last_clicked_at, to_timestamp(0)),
+			COALESCE(updated_at, to_timestamp(0)),
+			COALESCE(created_at, to_timestamp(0))
+		) < ?`, cutoff).
+		Update("hidden_in_sidebar", true).Error
 }
 
 func (h *SourceHandler) Get(c *gin.Context) {
@@ -144,7 +283,7 @@ func (h *SourceHandler) Get(c *gin.Context) {
 		internalServerError(c, "query source failed", err)
 		return
 	}
-	source.SiteKey = normalizeSiteKey(source.RSSURL)
+	normalizeSourceForResponse(&source)
 
 	c.JSON(http.StatusOK, source)
 }
@@ -158,19 +297,31 @@ func (h *SourceHandler) Create(c *gin.Context) {
 
 	name := strings.TrimSpace(req.Name)
 	rssURL := strings.TrimSpace(req.RSSURL)
-	category := strings.TrimSpace(req.Category)
-	if category == "" {
-		category = "general"
+	tags := normalizeSourceTags(req.Tags)
+	shouldInferTag := shouldInferFromProvidedTags(tags)
+
+	var probe *probeResult
+	if name == "" || shouldInferTag {
+		result, err := h.probeFeed(rssURL)
+		if err == nil {
+			probe = result
+		}
 	}
 
 	if name == "" {
-		result, err := h.probeFeed(rssURL)
-		if err == nil {
-			name = strings.TrimSpace(result.Title)
+		if probe != nil {
+			name = strings.TrimSpace(probe.Title)
 		}
 		if name == "" {
 			name = fallbackSourceNameFromURL(rssURL)
 		}
+	}
+	if shouldInferTag {
+		requestedTag := ""
+		if len(tags) == 1 {
+			requestedTag = tags[0]
+		}
+		tags = models.StringArray{resolveSourceTag(requestedTag, rssURL, probe)}
 	}
 
 	enabled := true
@@ -192,7 +343,9 @@ func (h *SourceHandler) Create(c *gin.Context) {
 		Name:            name,
 		RSSURL:          rssURL,
 		SiteKey:         normalizeSiteKey(rssURL),
-		Category:        category,
+		Kind:            "feed",
+		HiddenInSidebar: false,
+		Tags:            mergeSourceTags(tags),
 		Enabled:         enabled,
 		PollIntervalSec: pollIntervalSec,
 	}
@@ -213,7 +366,288 @@ func (h *SourceHandler) Create(c *gin.Context) {
 		return
 	}
 
+	normalizeSourceForResponse(&source)
 	c.JSON(http.StatusCreated, source)
+}
+
+func (h *SourceHandler) Discover(c *gin.Context) {
+	var req discoverSourcesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		badRequest(c, fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	seedURL, err := normalizeDiscoverInputURL(req.URL)
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
+
+	seeds := h.discoverFeedSeeds(c.Request.Context(), seedURL)
+	if len(seeds) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"data": []discoverCandidate{},
+			"meta": gin.H{
+				"seed_url":     seedURL.String(),
+				"count":        0,
+				"probed_count": 0,
+			},
+		})
+		return
+	}
+
+	const maxProbe = 12
+	limit := maxProbe
+	if len(seeds) < limit {
+		limit = len(seeds)
+	}
+
+	discovered := make([]discoverCandidate, 0, limit)
+	seen := make(map[string]struct{}, limit)
+	for _, seed := range seeds[:limit] {
+		probe, err := h.probeFeedWithContext(c.Request.Context(), seed.URL)
+		if err != nil {
+			continue
+		}
+
+		normalized := canonicalizeURL(seed.URL)
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+
+		discovered = append(discovered, discoverCandidate{
+			RSSURL:       seed.URL,
+			Name:         firstNonEmptyTrimmed(probe.Title, fallbackSourceNameFromURL(seed.URL)),
+			FeedType:     probe.FeedType,
+			ItemCount:    probe.ItemCount,
+			HTTPStatus:   probe.HTTPStatus,
+			Confidence:   confidenceFromScore(seed.Score),
+			Reason:       seed.Reason,
+			SuggestedTag: resolveSourceTag("", seed.URL, probe),
+		})
+	}
+
+	if len(discovered) > 0 {
+		byURL := make(map[string]int, len(discovered))
+		urls := make([]string, 0, len(discovered))
+		for idx, item := range discovered {
+			normalized := canonicalizeURL(item.RSSURL)
+			byURL[normalized] = idx
+			urls = append(urls, item.RSSURL)
+		}
+
+		var existing []models.Source
+		if err := h.db.WithContext(c.Request.Context()).Where("rss_url IN ?", urls).Find(&existing).Error; err == nil {
+			for _, source := range existing {
+				normalized := canonicalizeURL(source.RSSURL)
+				idx, ok := byURL[normalized]
+				if !ok {
+					continue
+				}
+				discovered[idx].Existing = true
+				discovered[idx].SourceID = &source.ID
+				name := source.Name
+				discovered[idx].SourceName = &name
+			}
+		}
+	}
+
+	sort.Slice(discovered, func(i, j int) bool {
+		if discovered[i].Existing != discovered[j].Existing {
+			return !discovered[i].Existing
+		}
+		if discovered[i].Confidence != discovered[j].Confidence {
+			return confidenceRank(discovered[i].Confidence) > confidenceRank(discovered[j].Confidence)
+		}
+		return discovered[i].RSSURL < discovered[j].RSSURL
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": discovered,
+		"meta": gin.H{
+			"seed_url":     seedURL.String(),
+			"count":        len(discovered),
+			"probed_count": limit,
+		},
+	})
+}
+
+func (h *SourceHandler) Reclassify(c *gin.Context) {
+	var req reclassifySourcesRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		badRequest(c, fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	onlyGeneral := true
+	if req.OnlyGeneral != nil {
+		onlyGeneral = *req.OnlyGeneral
+	}
+	probeEnabled := true
+	if req.Probe != nil {
+		probeEnabled = *req.Probe
+	}
+
+	limit := 200
+	if req.Limit != nil {
+		if *req.Limit <= 0 || *req.Limit > 2000 {
+			badRequest(c, "limit must be an integer between 1 and 2000")
+			return
+		}
+		limit = *req.Limit
+	}
+
+	sourceIDs := uniqueUint64(req.SourceIDs)
+	query := h.db.WithContext(c.Request.Context()).Model(&models.Source{}).Where("kind = ?", "feed")
+	if len(sourceIDs) > 0 {
+		query = query.Where("id IN ?", sourceIDs)
+	}
+	if onlyGeneral {
+		query = query.Where("tags IS NULL OR cardinality(tags) = 0 OR tags[1] = ?", defaultSourceTag)
+	}
+	if len(sourceIDs) == 0 {
+		query = query.Limit(limit)
+	}
+
+	var sources []models.Source
+	if err := query.Order("id ASC").Find(&sources).Error; err != nil {
+		internalServerError(c, "query sources failed", err)
+		return
+	}
+
+	results := make([]reclassifySourceResult, 0, len(sources))
+	changedCount := 0
+	errorCount := 0
+	for _, source := range sources {
+		oldTags := mergeSourceTags(source.Tags)
+		probeReason := "rule"
+		var probe *probeResult
+		if probeEnabled {
+			result, err := h.probeFeedWithContext(c.Request.Context(), source.RSSURL)
+			if err != nil {
+				probeReason = "rule (probe failed)"
+			} else {
+				probe = result
+			}
+		}
+
+		requestedTag := ""
+		if len(oldTags) > 0 {
+			requestedTag = oldTags[0]
+		}
+		newTag, reason := resolveSourceTagWithReason(requestedTag, source.RSSURL, probe)
+		if probeReason != "rule" && reason == "rule" {
+			reason = probeReason
+		}
+		newTags := models.StringArray{newTag}
+
+		entry := reclassifySourceResult{
+			SourceID: source.ID,
+			Name:     source.Name,
+			RSSURL:   source.RSSURL,
+			OldTags:  oldTags,
+			NewTags:  newTags,
+			Reason:   reason,
+			Changed:  !equalStringArrays(oldTags, newTags),
+		}
+
+		if entry.Changed && !req.DryRun {
+			if err := h.db.WithContext(c.Request.Context()).
+				Model(&models.Source{}).
+				Where("id = ?", source.ID).
+				Updates(map[string]any{
+					"tags":     newTags,
+					"site_key": normalizeSiteKey(source.RSSURL),
+				}).Error; err != nil {
+				entry.Error = err.Error()
+				errorCount++
+			} else {
+				changedCount++
+			}
+		} else if entry.Changed {
+			changedCount++
+		}
+
+		results = append(results, entry)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": results,
+		"meta": gin.H{
+			"count":        len(results),
+			"changed":      changedCount,
+			"errors":       errorCount,
+			"only_general": onlyGeneral,
+			"probe":        probeEnabled,
+			"dry_run":      req.DryRun,
+			"limit":        limit,
+		},
+	})
+}
+
+func (h *SourceHandler) BulkUpdateTags(c *gin.Context) {
+	var req bulkUpdateSourceTagsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		badRequest(c, fmt.Sprintf("invalid request body: %v", err))
+		return
+	}
+
+	sourceIDs := uniqueUint64(req.SourceIDs)
+	if len(sourceIDs) == 0 {
+		badRequest(c, "source_ids must contain at least one id")
+		return
+	}
+
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	switch action {
+	case "add", "remove", "replace":
+	default:
+		badRequest(c, "action must be one of: add, remove, replace")
+		return
+	}
+
+	tags := normalizeSourceTags(req.Tags)
+	if len(tags) == 0 {
+		badRequest(c, "tags must contain at least one non-empty value")
+		return
+	}
+
+	var sources []models.Source
+	if err := h.db.WithContext(c.Request.Context()).
+		Where("id IN ?", sourceIDs).
+		Find(&sources).Error; err != nil {
+		internalServerError(c, "query sources failed", err)
+		return
+	}
+	if len(sources) == 0 {
+		notFound(c, "no sources found")
+		return
+	}
+
+	updated := 0
+	for _, source := range sources {
+		oldTags := mergeSourceTags(source.Tags)
+		newTags := applySourceTagBulkAction(oldTags, tags, action)
+		if equalStringArrays(oldTags, newTags) {
+			continue
+		}
+		if err := h.db.WithContext(c.Request.Context()).
+			Model(&models.Source{}).
+			Where("id = ?", source.ID).
+			Update("tags", newTags).Error; err != nil {
+			internalServerError(c, "bulk update tags failed", err)
+			return
+		}
+		updated++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"action":  action,
+		"updated": updated,
+		"total":   len(sources),
+	})
 }
 
 func (h *SourceHandler) Update(c *gin.Context) {
@@ -253,13 +687,8 @@ func (h *SourceHandler) Update(c *gin.Context) {
 		updates["rss_url"] = rssURL
 		updates["site_key"] = normalizeSiteKey(rssURL)
 	}
-	if req.Category != nil {
-		category := strings.TrimSpace(*req.Category)
-		if category == "" {
-			badRequest(c, "category cannot be empty")
-			return
-		}
-		updates["category"] = category
+	if req.Tags != nil {
+		updates["tags"] = mergeSourceTags(*req.Tags)
 	}
 	if req.Enabled != nil {
 		updates["enabled"] = *req.Enabled
@@ -287,6 +716,7 @@ func (h *SourceHandler) Update(c *gin.Context) {
 		return
 	}
 
+	normalizeSourceForResponse(&source)
 	c.JSON(http.StatusOK, source)
 }
 
@@ -384,10 +814,27 @@ type probeResult struct {
 	FeedType   string
 	Title      string
 	ItemCount  int
+	SampleText []string
+}
+
+type probeRSSItem struct {
+	Title       string   `xml:"title"`
+	Categories  []string `xml:"category"`
+	Description string   `xml:"description"`
+}
+
+type probeAtomEntry struct {
+	Title   string `xml:"title"`
+	Summary string `xml:"summary"`
+	Content string `xml:"content"`
 }
 
 func (h *SourceHandler) probeFeed(feedURL string) (*probeResult, error) {
-	req, err := http.NewRequest(http.MethodGet, feedURL, nil)
+	return h.probeFeedWithContext(context.Background(), feedURL)
+}
+
+func (h *SourceHandler) probeFeedWithContext(ctx context.Context, feedURL string) (*probeResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -408,10 +855,10 @@ func (h *SourceHandler) probeFeed(feedURL string) (*probeResult, error) {
 		XMLName xml.Name `xml:""`
 		Title   string   `xml:"title"`
 		Channel struct {
-			Title string `xml:"title"`
-			Items []any  `xml:"item"`
+			Title string         `xml:"title"`
+			Items []probeRSSItem `xml:"item"`
 		} `xml:"channel"`
-		Entries []any `xml:"entry"`
+		Entries []probeAtomEntry `xml:"entry"`
 	}
 
 	if err := decoder.Decode(&feed); err != nil {
@@ -428,47 +875,703 @@ func (h *SourceHandler) probeFeed(feedURL string) (*probeResult, error) {
 		result.FeedType = "rss"
 		result.Title = feed.Channel.Title
 		result.ItemCount = len(feed.Channel.Items)
+		result.SampleText = sampleTextFromRSSItems(feed.Channel.Items)
 	case "feed":
 		result.FeedType = "atom"
 		result.Title = feed.Title
 		result.ItemCount = len(feed.Entries)
+		result.SampleText = sampleTextFromAtomEntries(feed.Entries)
 	default:
 		if len(feed.Channel.Items) > 0 {
 			result.FeedType = "rss"
 			result.Title = feed.Channel.Title
 			result.ItemCount = len(feed.Channel.Items)
+			result.SampleText = sampleTextFromRSSItems(feed.Channel.Items)
 		}
 	}
 
 	return result, nil
 }
 
-func parseUintParam(c *gin.Context, key string) (uint64, error) {
-	raw := c.Param(key)
-	value, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an unsigned integer", key)
+func (h *SourceHandler) discoverFeedSeeds(ctx context.Context, seedURL *url.URL) []discoverSeed {
+	seedByURL := map[string]discoverSeed{}
+	addSeed := func(rawURL string, reason string, score int) {
+		normalized, ok := normalizeCandidateURL(seedURL, rawURL)
+		if !ok {
+			return
+		}
+
+		previous, exists := seedByURL[normalized]
+		if !exists || score > previous.Score {
+			seedByURL[normalized] = discoverSeed{
+				URL:    normalized,
+				Reason: reason,
+				Score:  score,
+			}
+		}
 	}
-	return value, nil
-}
 
-func badRequest(c *gin.Context, message string) {
-	c.JSON(http.StatusBadRequest, gin.H{"error": message})
-}
+	seedURLString := seedURL.String()
+	if isLikelyFeedURL(seedURLString) {
+		addSeed(seedURLString, "输入地址本身是 RSS/Atom", 100)
+	}
 
-func notFound(c *gin.Context, message string) {
-	c.JSON(http.StatusNotFound, gin.H{"error": message})
-}
+	root := &url.URL{
+		Scheme: seedURL.Scheme,
+		Host:   seedURL.Host,
+		Path:   "/",
+	}
+	addCommonFeedPaths(addSeed, root)
+	addHostSpecificFeedPaths(addSeed, root)
 
-func badGateway(c *gin.Context, message string) {
-	c.JSON(http.StatusBadGateway, gin.H{"error": message})
-}
+	htmlBody, finalURL, _, err := h.fetchBody(ctx, seedURLString, "text/html,application/xhtml+xml", 2<<20)
+	if err == nil {
+		for _, discovered := range extractFeedLinksFromHTML(finalURL, htmlBody) {
+			addSeed(discovered, "页面 <link rel=alternate>", 95)
+		}
+		for _, discovered := range extractFeedLikeURLsFromText(string(htmlBody)) {
+			addSeed(discovered, "页面中的 feed 链接", 70)
+		}
+	}
 
-func internalServerError(c *gin.Context, message string, err error) {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error":   message,
-		"details": err.Error(),
+	sitemapQueue := make([]string, 0, 6)
+	addSitemap := func(rawURL string) {
+		candidate, ok := normalizeCandidateURL(root, rawURL)
+		if !ok {
+			return
+		}
+		sitemapQueue = append(sitemapQueue, candidate)
+	}
+
+	robotsURL := root.ResolveReference(&url.URL{Path: "/robots.txt"}).String()
+	if robotsBody, _, _, err := h.fetchBody(ctx, robotsURL, "text/plain,*/*", 512<<10); err == nil {
+		for _, candidate := range extractFeedLikeURLsFromText(string(robotsBody)) {
+			addSeed(candidate, "robots.txt 声明", 65)
+		}
+		for _, sitemapURL := range extractSitemapURLsFromRobots(string(robotsBody)) {
+			addSitemap(sitemapURL)
+		}
+	}
+	addSitemap(root.ResolveReference(&url.URL{Path: "/sitemap.xml"}).String())
+
+	visitedSitemap := map[string]struct{}{}
+	for len(sitemapQueue) > 0 && len(visitedSitemap) < 4 {
+		current := sitemapQueue[0]
+		sitemapQueue = sitemapQueue[1:]
+		if _, ok := visitedSitemap[current]; ok {
+			continue
+		}
+		visitedSitemap[current] = struct{}{}
+
+		body, _, _, err := h.fetchBody(ctx, current, "application/xml,text/xml,*/*", 2<<20)
+		if err != nil {
+			continue
+		}
+		locURLs, nestedSitemaps := extractSitemapLocURLs(body)
+		for _, candidate := range locURLs {
+			if !isLikelyFeedURL(candidate) {
+				continue
+			}
+			addSeed(candidate, "sitemap 收录", 72)
+		}
+		for _, nested := range nestedSitemaps {
+			addSitemap(nested)
+		}
+	}
+
+	seeds := make([]discoverSeed, 0, len(seedByURL))
+	for _, seed := range seedByURL {
+		seeds = append(seeds, seed)
+	}
+	sort.Slice(seeds, func(i, j int) bool {
+		if seeds[i].Score != seeds[j].Score {
+			return seeds[i].Score > seeds[j].Score
+		}
+		return seeds[i].URL < seeds[j].URL
 	})
+	if len(seeds) > 24 {
+		seeds = seeds[:24]
+	}
+	return seeds
+}
+
+func (h *SourceHandler) fetchBody(
+	ctx context.Context,
+	rawURL string,
+	accept string,
+	maxBytes int64,
+) ([]byte, string, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, "", "", err
+	}
+	req.Header.Set("User-Agent", "quick-news-aggregator/0.1")
+	if strings.TrimSpace(accept) != "" {
+		req.Header.Set("Accept", accept)
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, "", "", fmt.Errorf("status=%d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+	if err != nil {
+		return nil, "", "", err
+	}
+	finalURL := rawURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+	return body, finalURL, strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type"))), nil
+}
+
+func normalizeDiscoverInputURL(raw string) (*url.URL, error) {
+	input := strings.TrimSpace(raw)
+	if input == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+	if !strings.Contains(input, "://") {
+		input = "https://" + input
+	}
+
+	parsed, err := url.Parse(input)
+	if err != nil {
+		return nil, fmt.Errorf("invalid url")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("url scheme must be http or https")
+	}
+	if strings.TrimSpace(parsed.Hostname()) == "" {
+		return nil, fmt.Errorf("url host is required")
+	}
+	if strings.TrimSpace(parsed.Path) == "" {
+		parsed.Path = "/"
+	}
+	parsed.Fragment = ""
+	return parsed, nil
+}
+
+func normalizeCandidateURL(base *url.URL, raw string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", false
+	}
+
+	ref, err := url.Parse(trimmed)
+	if err != nil {
+		return "", false
+	}
+	if base != nil {
+		ref = base.ResolveReference(ref)
+	}
+	if ref.Scheme != "http" && ref.Scheme != "https" {
+		return "", false
+	}
+	if strings.TrimSpace(ref.Hostname()) == "" {
+		return "", false
+	}
+	ref.Fragment = ""
+	return canonicalizeURL(ref.String()), true
+}
+
+func canonicalizeURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return strings.TrimSpace(raw)
+	}
+	parsed.Fragment = ""
+	parsed.Host = strings.ToLower(strings.TrimSpace(parsed.Host))
+	parsed.Scheme = strings.ToLower(strings.TrimSpace(parsed.Scheme))
+
+	if parsed.Path != "/" {
+		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	}
+	return parsed.String()
+}
+
+func addCommonFeedPaths(add func(string, string, int), root *url.URL) {
+	paths := []string{
+		"/feed",
+		"/feed.xml",
+		"/rss",
+		"/rss.xml",
+		"/atom.xml",
+		"/index.xml",
+		"/?feed=rss",
+	}
+	for _, pathValue := range paths {
+		ref, err := url.Parse(pathValue)
+		if err != nil {
+			continue
+		}
+		add(root.ResolveReference(ref).String(), "常见 feed 路径", 58)
+	}
+}
+
+func addHostSpecificFeedPaths(add func(string, string, int), root *url.URL) {
+	host := strings.ToLower(strings.TrimSpace(root.Hostname()))
+	switch host {
+	case "www.uscardforum.com", "uscardforum.com":
+		add(root.ResolveReference(&url.URL{Path: "/top.rss"}).String(), "Discourse top", 88)
+		add(root.ResolveReference(&url.URL{Path: "/latest.rss"}).String(), "Discourse latest", 82)
+	case "news.ycombinator.com":
+		add("https://hnrss.org/frontpage", "Hacker News RSS 镜像", 84)
+		add("https://hnrss.org/best", "Hacker News RSS 镜像", 84)
+	case "www.v2ex.com", "v2ex.com":
+		add(root.ResolveReference(&url.URL{Path: "/index.xml"}).String(), "V2EX feed", 80)
+	}
+}
+
+func extractFeedLinksFromHTML(baseURL string, body []byte) []string {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		return nil
+	}
+
+	base, _ := url.Parse(baseURL)
+	seen := map[string]struct{}{}
+	feeds := make([]string, 0, 8)
+	appendFeed := func(rawHref string) {
+		normalized, ok := normalizeCandidateURL(base, rawHref)
+		if !ok {
+			return
+		}
+		if _, exists := seen[normalized]; exists {
+			return
+		}
+		seen[normalized] = struct{}{}
+		feeds = append(feeds, normalized)
+	}
+
+	doc.Find("link[href]").Each(func(_ int, s *goquery.Selection) {
+		href, ok := s.Attr("href")
+		if !ok || strings.TrimSpace(href) == "" {
+			return
+		}
+		rel := strings.ToLower(strings.TrimSpace(attrOrEmpty(s, "rel")))
+		typ := strings.ToLower(strings.TrimSpace(attrOrEmpty(s, "type")))
+		if strings.Contains(rel, "alternate") &&
+			(strings.Contains(typ, "rss") || strings.Contains(typ, "atom") || strings.Contains(typ, "xml") || isLikelyFeedURL(href)) {
+			appendFeed(href)
+		}
+	})
+
+	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+		href, ok := s.Attr("href")
+		if !ok || !isLikelyFeedURL(href) {
+			return
+		}
+		appendFeed(href)
+	})
+
+	return feeds
+}
+
+func extractFeedLikeURLsFromText(input string) []string {
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+	splitter := func(r rune) bool {
+		return r == '\n' || r == '\r' || r == '\t' || r == ' ' || r == '"' || r == '\'' || r == '<' || r == '>'
+	}
+	parts := strings.FieldsFunc(input, splitter)
+	seen := map[string]struct{}{}
+	urls := make([]string, 0, 8)
+	for _, token := range parts {
+		if !(strings.HasPrefix(token, "http://") || strings.HasPrefix(token, "https://")) {
+			continue
+		}
+		token = strings.TrimSpace(strings.TrimRight(token, ".,);"))
+		if !isLikelyFeedURL(token) {
+			continue
+		}
+		normalized := canonicalizeURL(token)
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		urls = append(urls, normalized)
+	}
+	return urls
+}
+
+func extractSitemapURLsFromRobots(input string) []string {
+	lines := strings.Split(input, "\n")
+	result := make([]string, 0, 4)
+	for _, line := range lines {
+		text := strings.TrimSpace(line)
+		if text == "" {
+			continue
+		}
+		if !strings.HasPrefix(strings.ToLower(text), "sitemap:") {
+			continue
+		}
+		value := strings.TrimSpace(text[len("sitemap:"):])
+		if value == "" {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
+}
+
+func extractSitemapLocURLs(body []byte) (locURLs []string, sitemapURLs []string) {
+	var parsed struct {
+		URLs []struct {
+			Loc string `xml:"loc"`
+		} `xml:"url"`
+		Sitemaps []struct {
+			Loc string `xml:"loc"`
+		} `xml:"sitemap"`
+	}
+
+	decoder := xml.NewDecoder(bytes.NewReader(body))
+	if err := decoder.Decode(&parsed); err != nil {
+		return nil, nil
+	}
+	for _, item := range parsed.URLs {
+		value := strings.TrimSpace(item.Loc)
+		if value != "" {
+			locURLs = append(locURLs, value)
+		}
+	}
+	for _, item := range parsed.Sitemaps {
+		value := strings.TrimSpace(item.Loc)
+		if value != "" {
+			sitemapURLs = append(sitemapURLs, value)
+		}
+	}
+	return locURLs, sitemapURLs
+}
+
+func isLikelyFeedURL(rawURL string) bool {
+	value := strings.ToLower(strings.TrimSpace(rawURL))
+	if value == "" {
+		return false
+	}
+	return strings.Contains(value, "rss") ||
+		strings.Contains(value, "atom") ||
+		strings.Contains(value, "/feed") ||
+		strings.Contains(value, ".xml")
+}
+
+func attrOrEmpty(selection *goquery.Selection, name string) string {
+	value, ok := selection.Attr(name)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func confidenceFromScore(score int) string {
+	switch {
+	case score >= 88:
+		return "high"
+	case score >= 70:
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func confidenceRank(value string) int {
+	switch value {
+	case "high":
+		return 3
+	case "medium":
+		return 2
+	default:
+		return 1
+	}
+}
+
+func firstNonEmptyTrimmed(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func sampleTextFromRSSItems(items []probeRSSItem) []string {
+	const maxItems = 8
+	samples := make([]string, 0, maxItems)
+	for i, item := range items {
+		if i >= maxItems {
+			break
+		}
+		text := firstNonEmptyTrimmed(item.Title, strings.Join(item.Categories, " "), item.Description)
+		if text == "" {
+			continue
+		}
+		samples = append(samples, compactFeedText(text))
+	}
+	return samples
+}
+
+func sampleTextFromAtomEntries(entries []probeAtomEntry) []string {
+	const maxItems = 8
+	samples := make([]string, 0, maxItems)
+	for i, entry := range entries {
+		if i >= maxItems {
+			break
+		}
+		text := firstNonEmptyTrimmed(entry.Title, entry.Summary, entry.Content)
+		if text == "" {
+			continue
+		}
+		samples = append(samples, compactFeedText(text))
+	}
+	return samples
+}
+
+func compactFeedText(raw string) string {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return ""
+	}
+	text = strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(text)
+	text = strings.Join(strings.Fields(text), " ")
+	return text
+}
+
+func normalizeSourceForResponse(source *models.Source) {
+	if source == nil {
+		return
+	}
+	source.SiteKey = normalizeSiteKey(source.RSSURL)
+	source.Tags = mergeSourceTags(source.Tags)
+}
+
+func mergeSourceTags(rawTags []string) models.StringArray {
+	tags := normalizeSourceTags(rawTags)
+	if len(tags) == 0 {
+		tags = append(tags, defaultSourceTag)
+	}
+	return tags
+}
+
+func normalizeSourceTags(rawTags []string) models.StringArray {
+	if len(rawTags) == 0 {
+		return models.StringArray{}
+	}
+	seen := make(map[string]struct{}, len(rawTags))
+	out := make(models.StringArray, 0, len(rawTags))
+	for _, raw := range rawTags {
+		tag := normalizeSourceTag(raw)
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
+func normalizeSourceTag(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
+}
+
+func containsSourceTag(tags []string, candidate string) bool {
+	for _, tag := range tags {
+		if normalizeSourceTag(tag) == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldAutoInferTag(tag string) bool {
+	value := strings.ToLower(strings.TrimSpace(tag))
+	return value == "" || value == defaultSourceTag || value == "auto"
+}
+
+func shouldInferFromProvidedTags(tags []string) bool {
+	if len(tags) == 0 {
+		return true
+	}
+	return len(tags) == 1 && shouldAutoInferTag(tags[0])
+}
+
+func resolveSourceTag(requestedTag string, rssURL string, probe *probeResult) string {
+	tag, _ := resolveSourceTagWithReason(requestedTag, rssURL, probe)
+	return tag
+}
+
+func resolveSourceTagWithReason(requestedTag string, rssURL string, probe *probeResult) (string, string) {
+	if !shouldAutoInferTag(requestedTag) {
+		return strings.TrimSpace(requestedTag), "explicit"
+	}
+
+	if tag, ok := inferSourceTagByRule(rssURL); ok {
+		return tag, "rule"
+	}
+
+	if tag := inferSourceTagByKeywords(rssURL, probe); tag != "" {
+		return tag, "keywords"
+	}
+
+	return defaultSourceTag, "fallback"
+}
+
+func inferSourceTagByRule(rssURL string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(rssURL))
+	if err != nil {
+		return "", false
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	path := strings.ToLower(strings.TrimSpace(parsed.Path))
+
+	switch {
+	case host == "hnrss.org" || host == "news.ycombinator.com":
+		return "tech", true
+	case host == "www.uscardforum.com" || host == "uscardforum.com":
+		return "forum", true
+	case host == "www.reddit.com" || host == "reddit.com" || host == "old.reddit.com" || host == "redd.it":
+		return "forum", true
+	case host == "www.v2ex.com" || host == "v2ex.com":
+		return "tech", true
+	case strings.Contains(host, "bloomberg.com"):
+		return "finance", true
+	case strings.Contains(host, "espn.com"):
+		return "sports", true
+	case strings.Contains(host, "nature.com") || strings.Contains(host, "science.org"):
+		return "science", true
+	case isRSSHubHost(host):
+		segment := firstPathSegment(path)
+		switch segment {
+		case "v2ex", "hackernews", "github":
+			return "tech", true
+		case "reddit", "1point3acres", "uscardforum", "nga", "tieba":
+			return "forum", true
+		case "bloomberg":
+			return "finance", true
+		}
+	}
+	return "", false
+}
+
+func inferSourceTagByKeywords(rssURL string, probe *probeResult) string {
+	parts := []string{strings.ToLower(strings.TrimSpace(rssURL))}
+	if probe != nil {
+		if title := strings.ToLower(strings.TrimSpace(probe.Title)); title != "" {
+			parts = append(parts, title)
+		}
+		for _, sample := range probe.SampleText {
+			if text := strings.ToLower(strings.TrimSpace(sample)); text != "" {
+				parts = append(parts, text)
+			}
+		}
+	}
+	corpus := strings.Join(parts, " ")
+	if corpus == "" {
+		return ""
+	}
+
+	bestTag := ""
+	bestScore := 0
+	for _, rule := range sourceTagKeywordRules {
+		score := 0
+		for _, keyword := range rule.Keywords {
+			if strings.Contains(corpus, keyword) {
+				score++
+			}
+		}
+		if score > bestScore {
+			bestScore = score
+			bestTag = rule.Tag
+		}
+	}
+
+	if bestScore < 2 {
+		return ""
+	}
+	return bestTag
+}
+
+func equalStringArrays(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if normalizeSourceTag(left[i]) != normalizeSourceTag(right[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func applySourceTagBulkAction(current []string, tags []string, action string) models.StringArray {
+	base := mergeSourceTags(current)
+	target := normalizeSourceTags(tags)
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "replace":
+		return mergeSourceTags(target)
+	case "remove":
+		return removeSourceTags(base, target)
+	default:
+		return mergeSourceTags(append(base, target...))
+	}
+}
+
+func removeSourceTags(current []string, toRemove []string) models.StringArray {
+	if len(current) == 0 {
+		return mergeSourceTags(nil)
+	}
+	removeSet := make(map[string]struct{}, len(toRemove))
+	for _, tag := range toRemove {
+		value := normalizeSourceTag(tag)
+		if value == "" {
+			continue
+		}
+		removeSet[value] = struct{}{}
+	}
+	if len(removeSet) == 0 {
+		return mergeSourceTags(current)
+	}
+
+	next := make([]string, 0, len(current))
+	for _, tag := range current {
+		value := normalizeSourceTag(tag)
+		if value == "" {
+			continue
+		}
+		if _, exists := removeSet[value]; exists {
+			continue
+		}
+		next = append(next, value)
+	}
+	return mergeSourceTags(next)
+}
+
+func uniqueUint64(values []uint64) []uint64 {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[uint64]struct{}, len(values))
+	out := make([]uint64, 0, len(values))
+	for _, value := range values {
+		if value == 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 func fallbackSourceNameFromURL(rawURL string) string {
@@ -491,7 +1594,7 @@ func normalizeSiteKey(rawURL string) string {
 	if host == "" {
 		return "unknown-site"
 	}
-	if host == "rsshub.rssforever.com" {
+	if isRSSHubHost(host) {
 		firstSegment := firstPathSegment(u.Path)
 		if firstSegment != "" {
 			return firstSegment
@@ -517,4 +1620,13 @@ func firstPathSegment(pathValue string) string {
 		}
 	}
 	return ""
+}
+
+func isRSSHubHost(host string) bool {
+	switch strings.TrimSpace(strings.ToLower(host)) {
+	case "rsshub.rssforever.com", "rsshub.app", "www.rsshub.app":
+		return true
+	default:
+		return false
+	}
 }

@@ -1,39 +1,136 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
-  createSource,
-  deleteSource,
+  createFeedBriefing,
   getArticle,
   getArticleSummary,
   listFeed,
   listSources,
   listSourceStatus,
-  refreshSource,
   summarizeArticle,
   trackArticleThread,
-  testSource,
-  updateSource,
 } from './api'
-import type { ArticleDetail, FeedItem, Source, SourceStatus } from './types'
+import type {
+  ArticleDetail,
+  FeedBriefingInputItem,
+  FeedItem,
+  Source,
+  SourceStatus,
+} from './types'
+import { AppTopbar } from '@/components/app-topbar'
+import { NoticeBanner } from '@/components/notice-banner'
+import { ReaderFeedPanel } from '@/components/reader-feed-panel'
+import { ReaderSubscriptionSidebar } from '@/components/reader-subscription-sidebar'
+import { MarkdownBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
+import type { SourceManagementPanelController } from '@/components/source-management-panel'
+import { SummaryTaskStrip } from '@/components/summary-task-strip'
+import { Button } from '@/components/ui/button'
+import {
+  SourceContextMenuOverlay,
+  SourceDeleteConfirmDialog,
+  SourceProfileDialog,
+} from '@/components/source-overlays'
+import { ReaderDetailPanel } from '@/components/reader-detail-panel'
+import { useReaderStream } from './hooks/use-reader-stream'
+import { useDetailPanel } from './hooks/use-detail-panel'
+import { useFeedBriefingCacheRestore } from './hooks/use-feed-briefing-cache-restore'
+import { useSummaryTaskPoller } from './hooks/use-summary-task-poller'
+import { useSourceManagementState } from './hooks/use-source-management-state'
+import { useSourceManagementActions } from './hooks/use-source-management-actions'
+import {
+  aiModelOptions,
+  aiModelStorageKey,
+  type AppTab,
+  type AppliedSourceGroupFilter,
+  type FeedBriefingSnapshot,
+  type Notice,
+  readArticleStorageKey,
+  readMarkMinScrollProgress,
+  type ReaderSession,
+  type ReaderView,
+  sidebarTagCollapseCount,
+  type SidebarTagFilterMode,
+  type SourceContextMenuState,
+  type SourceGroup,
+  type SummaryTask,
+  threadPreviewCommentLimit,
+  trackedSidebarPreviewLimit,
+} from './lib/app-domain'
+import {
+  buildCompactTitleParts,
+  bulkActionLabel,
+  clampContextMenuPosition,
+  compareSourcesByClicksDesc,
+  compareTrackedSourcesByActivityDesc,
+  confidenceLabel,
+  equalStringList,
+  formatDateTime,
+  formatReplyCount,
+  formatTimeAgo,
+  formatTimeAgoCompact,
+  healthLabel,
+  healthToneClass,
+  isTrackableForumLink,
+  maxStoredReadArticles,
+  normalizeImageURL,
+  normalizeSourceKind,
+  normalizeSourceTags,
+  parseRSSLines,
+  parseSourceIDFilter,
+  parseSourceTagInput,
+  parseStoredReadArticleIDs,
+  plainText,
+  plainTextBlock,
+  resolveReadDwellThresholdMs,
+  resolveSourceHealth,
+  resolveSourceSiteKey,
+  sourceClickCount,
+  sourceHealthPriority,
+  sourceTagList,
+  toErrorMessage,
+  truncate,
+  upsertReadArticleID,
+} from './lib/app-utils'
+import {
+  buildFeedBriefingTaskKey,
+  buildSummaryTaskKey,
+  isArticleSummaryReadyResponse,
+  isPollableArticleSummaryTask,
+  isSummaryTaskPending,
+  normalizeSummaryTaskStatus,
+  parseTimestamp,
+  pruneSummaryTasks,
+  resolveFeedBriefingScopeLabel,
+  summaryTaskKindLabel,
+  summaryTaskStatusLabel,
+  summaryTaskStatusPriority,
+  upsertSummaryTaskState,
+} from './lib/summary-task-utils'
 import './App.css'
 
-type Notice = {
-  kind: 'info' | 'error'
-  text: string
-}
-
-type FeedDensity = 'compact' | 'cozy'
-type AppTab = 'reader' | 'sources'
-type ReaderView = 'stream' | 'detail'
-type SourceGroup = {
-  siteKey: string
-  sources: Source[]
-}
-
-const threadPreviewCommentLimit = 3
+const SourceManagementPanel = lazy(async () => {
+  const module = await import('@/components/source-management-panel')
+  return { default: module.SourceManagementPanel }
+})
 
 function App() {
   const floatingDetailRef = useRef<HTMLElement | null>(null)
+  const sourceSelectAllRef = useRef<HTMLInputElement | null>(null)
+  const sourceContextMenuRef = useRef<HTMLDivElement | null>(null)
+  const feedAIMoreRef = useRef<HTMLDivElement | null>(null)
+  const feedBriefingCacheAttemptedRef = useRef<Map<string, number>>(new Map())
+  const sidebarSourceItemRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const previousSidebarSourceItemRectsRef = useRef<Map<number, DOMRect>>(new Map())
+  const previousSidebarSourceIDsRef = useRef<number[]>([])
+  const feedAutoLoadRef = useRef<HTMLDivElement | null>(null)
+  const sidebarTagFilterTimerRef = useRef<number | null>(null)
+  const feedAutoLoadCooldownRef = useRef(0)
+  const streamScrollYRef = useRef<number | null>(null)
+  const feedRequestSeqRef = useRef(0)
+  const articleRequestSeqRef = useRef(0)
+  const summaryRequestSeqRef = useRef(0)
+  const summaryTaskNotifiedRef = useRef<Set<string>>(new Set())
+  const readerSessionRef = useRef<ReaderSession | null>(null)
 
   const [sources, setSources] = useState<Source[]>([])
   const [feed, setFeed] = useState<FeedItem[]>([])
@@ -41,52 +138,114 @@ function App() {
   const [selectedArticleID, setSelectedArticleID] = useState<number | null>(null)
   const [articleSummary, setArticleSummary] = useState('')
   const [articleSummaryMeta, setArticleSummaryMeta] = useState('')
+  const [summaryTasks, setSummaryTasks] = useState<SummaryTask[]>([])
   const [loadingArticleSummary, setLoadingArticleSummary] = useState(false)
   const [articleSummaryError, setArticleSummaryError] = useState<string | null>(null)
+  const [feedBriefing, setFeedBriefing] = useState('')
+  const [feedBriefingMeta, setFeedBriefingMeta] = useState('')
+  const [feedBriefingItems, setFeedBriefingItems] = useState<FeedBriefingInputItem[]>([])
+  const [feedBriefingArticleCount, setFeedBriefingArticleCount] = useState(0)
+  const [feedBriefingScopeLabel, setFeedBriefingScopeLabel] = useState('')
+  const [feedBriefingGeneratedAt, setFeedBriefingGeneratedAt] = useState('')
+  const [feedBriefingAnchorArticleIDs, setFeedBriefingAnchorArticleIDs] = useState<number[]>([])
+  const [feedBriefingTaskKey, setFeedBriefingTaskKey] = useState('')
+  const [feedBriefingSnapshots, setFeedBriefingSnapshots] = useState<Record<string, FeedBriefingSnapshot>>({})
+  const [loadingFeedBriefing, setLoadingFeedBriefing] = useState(false)
+  const [feedBriefingError, setFeedBriefingError] = useState<string | null>(null)
+  const [aiModel, setAIModel] = useState(() => {
+    if (typeof window === 'undefined') {
+      return aiModelOptions[0]
+    }
+    const cached = window.localStorage.getItem(aiModelStorageKey)?.trim()
+    if (cached) {
+      return cached
+    }
+    return aiModelOptions[0]
+  })
 
   const [loadingSources, setLoadingSources] = useState(false)
   const [loadingFeed, setLoadingFeed] = useState(false)
   const [loadingArticle, setLoadingArticle] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState(false)
-  const [creatingSource, setCreatingSource] = useState(false)
-  const [busySourceID, setBusySourceID] = useState<number | null>(null)
 
   const [sourcesError, setSourcesError] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<string | null>(null)
   const [articleError, setArticleError] = useState<string | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
-  const [editingSourceID, setEditingSourceID] = useState<number | null>(null)
-  const [editSourceName, setEditSourceName] = useState('')
-  const [editSourceURL, setEditSourceURL] = useState('')
-  const [editSourceCategory, setEditSourceCategory] = useState('')
-  const [editSourcePollSec, setEditSourcePollSec] = useState('900')
-
   const [feedCursor, setFeedCursor] = useState('')
   const [hasMoreFeed, setHasMoreFeed] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [sourceStatus, setSourceStatus] = useState<SourceStatus[]>([])
 
-  const [newSourceName, setNewSourceName] = useState('')
-  const [newSourceURL, setNewSourceURL] = useState('')
-  const [newSourceCategory, setNewSourceCategory] = useState('general')
-
   const [keyword, setKeyword] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
+  const [tagFilter, setTagFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [sourceGroupFilter, setSourceGroupFilter] = useState<AppliedSourceGroupFilter | null>(null)
+  const [sidebarTagFilters, setSidebarTagFilters] = useState<string[]>([])
+  const [sidebarTagFilterMode, setSidebarTagFilterMode] = useState<SidebarTagFilterMode>('or')
+  const [showAllSidebarTags, setShowAllSidebarTags] = useState(false)
   const [mutedSiteKeys, setMutedSiteKeys] = useState<string[]>([])
+  const [feedTitleOnlyMode, setFeedTitleOnlyMode] = useState(true)
+  const [showFeedImages, setShowFeedImages] = useState(false)
+  const [showFeedSearch, setShowFeedSearch] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [showFeedAIMoreMenu, setShowFeedAIMoreMenu] = useState(false)
+  const [showManageModelPicker, setShowManageModelPicker] = useState(false)
   const [, setNowTick] = useState(Date.now())
 
   const [activeTab, setActiveTab] = useState<AppTab>('reader')
   const [readerView, setReaderView] = useState<ReaderView>('stream')
   const [showFloatingReader, setShowFloatingReader] = useState(false)
-  const [feedDensity, setFeedDensity] = useState<FeedDensity>('cozy')
+  const [selectedFeedBriefing, setSelectedFeedBriefing] = useState(false)
   const [expandedThreadComments, setExpandedThreadComments] = useState(false)
-  const [showSubscriptionSidebar, setShowSubscriptionSidebar] = useState(true)
+  const [threadCommentsNewestFirst, setThreadCommentsNewestFirst] = useState(false)
+  const [showSubscriptionSidebar, setShowSubscriptionSidebar] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return !window.matchMedia('(max-width: 980px)').matches
+  })
+  const [showTrackedSidebar, setShowTrackedSidebar] = useState(false)
+  const [showAllTrackedSidebar, setShowAllTrackedSidebar] = useState(false)
+  const [readArticleIDs, setReadArticleIDs] = useState<number[]>(() => {
+    if (typeof window === 'undefined') {
+      return []
+    }
+    return parseStoredReadArticleIDs(window.localStorage.getItem(readArticleStorageKey))
+  })
+  const [sourceContextMenu, setSourceContextMenu] = useState<SourceContextMenuState | null>(null)
+  const [sourceProfileSource, setSourceProfileSource] = useState<Source | null>(null)
+  const [sourceProfileTagPickerOpen, setSourceProfileTagPickerOpen] = useState(false)
+  const [sourceProfileTagInput, setSourceProfileTagInput] = useState('')
+  const [pendingDeleteSource, setPendingDeleteSource] = useState<Source | null>(null)
 
-  const categories = useMemo(() => {
-    const values = sources.map((source) => source.category).filter(Boolean)
+  const readerFeedSources = useMemo(
+    () =>
+      sources
+        .filter((source) => normalizeSourceKind(source.kind) === 'feed' && !source.hidden_in_sidebar)
+        .sort(compareSourcesByClicksDesc),
+    [sources],
+  )
+
+  const readerTrackedSources = useMemo(
+    () =>
+      sources
+        .filter((source) => normalizeSourceKind(source.kind) === 'thread' && !source.hidden_in_sidebar)
+        .sort(compareTrackedSourcesByActivityDesc),
+    [sources],
+  )
+
+  const readerSources = useMemo(() => [...readerFeedSources, ...readerTrackedSources], [readerFeedSources, readerTrackedSources])
+
+  const visibleTrackedSidebarSources = useMemo(
+    () => (showAllTrackedSidebar ? readerTrackedSources : readerTrackedSources.slice(0, trackedSidebarPreviewLimit)),
+    [readerTrackedSources, showAllTrackedSidebar],
+  )
+
+  const hasMoreTrackedSidebarSources = readerTrackedSources.length > trackedSidebarPreviewLimit
+
+  const availableTags = useMemo(() => {
+    const values = sources.flatMap((source) => sourceTagList(source))
     return Array.from(new Set(values)).sort()
   }, [sources])
 
@@ -99,48 +258,469 @@ function App() {
   }, [sources])
 
   const sourceGroups = useMemo<SourceGroup[]>(() => {
-    const groupMap = new Map<string, Source[]>()
-    for (const source of sources) {
-      const siteKey = resolveSourceSiteKey(source)
-      const bucket = groupMap.get(siteKey)
-      if (bucket) {
-        bucket.push(source)
-      } else {
-        groupMap.set(siteKey, [source])
+    const groupMap = new Map<string, SourceGroup>()
+    for (const source of readerFeedSources) {
+      for (const label of sourceTagList(source)) {
+        const key = label.toLowerCase()
+        const bucket = groupMap.get(key)
+        if (bucket) {
+          bucket.sources.push(source)
+          bucket.clickTotal += sourceClickCount(source)
+        } else {
+          groupMap.set(key, {
+            key,
+            label,
+            clickTotal: sourceClickCount(source),
+            sources: [source],
+          })
+        }
       }
     }
 
-    const groups = Array.from(groupMap.entries()).map(([siteKey, groupedSources]) => ({
-      siteKey,
-      sources: groupedSources.sort((a, b) => b.id - a.id),
+    const groups = Array.from(groupMap.values()).map((group) => ({
+      ...group,
+      sources: [...group.sources].sort(compareSourcesByClicksDesc),
     }))
-    groups.sort((a, b) => a.siteKey.localeCompare(b.siteKey))
+    groups.sort((a, b) => {
+      if (a.clickTotal !== b.clickTotal) {
+        return b.clickTotal - a.clickTotal
+      }
+      return a.label.localeCompare(b.label)
+    })
     return groups
+  }, [readerFeedSources])
+
+  const sidebarTagFilterSet = useMemo(() => new Set(sidebarTagFilters), [sidebarTagFilters])
+
+  const sidebarVisibleFeedSources = useMemo(() => {
+    if (sidebarTagFilterSet.size === 0) {
+      return readerFeedSources
+    }
+    return readerFeedSources.filter((source) => {
+      const tagSet = new Set(sourceTagList(source).map((tag) => tag.toLowerCase()))
+      if (sidebarTagFilterMode === 'and') {
+        return sidebarTagFilters.every((tag) => tagSet.has(tag))
+      }
+      return sidebarTagFilters.some((tag) => tagSet.has(tag))
+    })
+  }, [readerFeedSources, sidebarTagFilterMode, sidebarTagFilterSet, sidebarTagFilters])
+
+  const sourceByID = useMemo(() => {
+    const map = new Map<number, Source>()
+    for (const source of sources) {
+      map.set(source.id, source)
+    }
+    return map
   }, [sources])
 
+  const sourceStatusMap = useMemo(() => {
+    const map = new Map<number, SourceStatus>()
+    for (const item of sourceStatus) {
+      map.set(item.source_id, item)
+    }
+    return map
+  }, [sourceStatus])
+
+  const {
+    sourceManageKeyword,
+    setSourceManageKeyword,
+    sourceManageTagFilter,
+    setSourceManageTagFilter,
+    sourceManageHealthFilter,
+    setSourceManageHealthFilter,
+    sourceHealthCounts,
+    filteredSources,
+    selectedSourceIDs,
+    selectedSourceIDSet,
+    visibleSourceIDs,
+    selectedVisibleCount,
+    allVisibleSelected,
+    hasSelectedSources,
+    bulkSourceAction,
+    setBulkSourceAction,
+    bulkTagInput,
+    setBulkTagInput,
+    editingSourceID,
+    editSourceName,
+    setEditSourceName,
+    editSourceURL,
+    setEditSourceURL,
+    editSourceTags,
+    setEditSourceTags,
+    editSourcePollSec,
+    setEditSourcePollSec,
+    onStartEdit,
+    onCancelEdit,
+    toggleSourceSelection,
+    toggleSelectAllVisibleSources,
+    clearSourceManageFilters,
+    clearSelectedSourceIDs,
+    newSourceName,
+    setNewSourceName,
+    newSourceURL,
+    setNewSourceURL,
+    newSourceTags,
+    setNewSourceTags,
+    batchSourceURLs,
+    setBatchSourceURLs,
+    batchSourceTags,
+    setBatchSourceTags,
+    batchCreatingSources,
+    setBatchCreatingSources,
+    batchCreateResult,
+    setBatchCreateResult,
+    discoverURL,
+    setDiscoverURL,
+    discoveringSources,
+    setDiscoveringSources,
+    discoveredSources,
+    setDiscoveredSources,
+    reclassifyingSources,
+    setReclassifyingSources,
+    creatingSource,
+    setCreatingSource,
+    busySourceID,
+    setBusySourceID,
+  } = useSourceManagementState({
+    sources,
+    sourceStatusMap,
+    sourceSiteKeyMap,
+    sourceTagList,
+    resolveSourceHealth,
+    sourceHealthPriority,
+  })
+
   const mutedSiteSet = useMemo(() => new Set(mutedSiteKeys), [mutedSiteKeys])
-  const visibleFeed = useMemo(
-    () =>
-      feed.filter((item) => {
-        const siteKey = sourceSiteKeyMap.get(item.source_id)
-        if (!siteKey) return true
-        return !mutedSiteSet.has(siteKey)
-      }),
-    [feed, mutedSiteSet, sourceSiteKeyMap],
+  const readArticleIDSet = useMemo(() => new Set(readArticleIDs), [readArticleIDs])
+  const hasFeedBriefingEntry = Boolean(feedBriefing || feedBriefingError || loadingFeedBriefing)
+  const {
+    visibleFeed,
+    feedBriefingInsertIndex,
+    feedBriefingNewArticleCount,
+    readerStreamItems,
+    selectedFeedIndex,
+    unreadVisibleCount,
+  } = useReaderStream({
+    feed,
+    unreadOnly,
+    readArticleIDSet,
+    sourceSiteKeyMap,
+    mutedSiteSet,
+    hasFeedBriefingEntry,
+    feedBriefingAnchorArticleIDs,
+    selectedFeedBriefing,
+    selectedArticleID,
+  })
+  const sourceProfileStatus = sourceProfileSource ? sourceStatusMap.get(sourceProfileSource.id) ?? null : null
+  const sourceProfileHealth = sourceProfileSource ? resolveSourceHealth(sourceProfileSource, sourceStatusMap) : null
+  const sourceProfileTags = useMemo(() => sourceTagList(sourceProfileSource ?? { tags: [] }), [sourceProfileSource])
+  const sourceProfileTagSet = useMemo(() => new Set(sourceProfileTags), [sourceProfileTags])
+  const sourceProfileTagCandidates = useMemo(() => {
+    const keyword = sourceProfileTagInput.trim().toLowerCase()
+    return availableTags.filter((tag) => {
+      if (sourceProfileTagSet.has(tag)) {
+        return false
+      }
+      if (!keyword) {
+        return true
+      }
+      return tag.includes(keyword)
+    })
+  }, [availableTags, sourceProfileTagInput, sourceProfileTagSet])
+  const sourceProfileTagDrafts = useMemo(
+    () => parseSourceTagInput(sourceProfileTagInput).filter((tag) => !sourceProfileTagSet.has(tag)),
+    [sourceProfileTagInput, sourceProfileTagSet],
   )
+  const sourceFilterIDs = useMemo(() => parseSourceIDFilter(sourceFilter), [sourceFilter])
+  const activeFeedBriefingSourceIDs = useMemo(
+    () => [...sourceFilterIDs].sort((left, right) => left - right),
+    [sourceFilterIDs],
+  )
+  const activeFeedBriefingKeyword = useMemo(() => keyword.trim(), [keyword])
+  const activeFeedBriefingMutedSiteKeys = useMemo(
+    () => [...mutedSiteKeys].map((item) => item.trim().toLowerCase()).filter(Boolean).sort(),
+    [mutedSiteKeys],
+  )
+  const activeFeedBriefingTaskKey = useMemo(
+    () =>
+      buildFeedBriefingTaskKey({
+        model: aiModel,
+        sourceIDs: activeFeedBriefingSourceIDs,
+        tag: tagFilter,
+        keyword: activeFeedBriefingKeyword,
+        unreadOnly,
+        mutedSiteKeys: activeFeedBriefingMutedSiteKeys,
+      }),
+    [aiModel, activeFeedBriefingKeyword, activeFeedBriefingMutedSiteKeys, activeFeedBriefingSourceIDs, tagFilter, unreadOnly],
+  )
+  const activeFeedBriefingScopeLabel = useMemo(
+    () => resolveFeedBriefingScopeLabel(activeFeedBriefingSourceIDs, sourceByID, tagFilter),
+    [activeFeedBriefingSourceIDs, sourceByID, tagFilter],
+  )
+  const activeFeedBriefingAnchorArticleIDs = useMemo(() => visibleFeed.slice(0, 30).map((item) => item.id), [visibleFeed])
+  const sourceFilterSelectValue = useMemo(() => {
+    if (sourceGroupFilter) return ''
+    if (sourceFilterIDs.length !== 1) return ''
+    return String(sourceFilterIDs[0])
+  }, [sourceFilterIDs, sourceGroupFilter])
+  const sourceFilterChipLabel = useMemo(() => {
+    if (!sourceFilter) return ''
+    if (sourceGroupFilter) return `标签: ${sourceGroupFilter.label}`
+    if (sourceFilterIDs.length === 1) {
+      const matched = readerSources.find((item) => item.id === sourceFilterIDs[0])
+      return matched ? `来源: ${matched.name}` : `来源: ${sourceFilterIDs[0]}`
+    }
+    return `来源: ${sourceFilterIDs.length} 个来源`
+  }, [sourceFilter, sourceGroupFilter, sourceFilterIDs, readerSources])
+  const summaryTaskByArticleID = useMemo(() => {
+    const map = new Map<number, SummaryTask>()
+    for (const task of summaryTasks) {
+      if (task.kind !== 'article_summary' || typeof task.articleID !== 'number' || task.articleID <= 0) {
+        continue
+      }
+      const previous = map.get(task.articleID)
+      if (!previous) {
+        map.set(task.articleID, task)
+        continue
+      }
+      const pendingGap = Number(isSummaryTaskPending(task.status)) - Number(isSummaryTaskPending(previous.status))
+      if (pendingGap > 0) {
+        map.set(task.articleID, task)
+        continue
+      }
+      if (pendingGap < 0) {
+        continue
+      }
+      if (summaryTaskStatusPriority(task.status) > summaryTaskStatusPriority(previous.status)) {
+        map.set(task.articleID, task)
+        continue
+      }
+      const currentUpdated = parseTimestamp(task.updatedAt)
+      const previousUpdated = parseTimestamp(previous.updatedAt)
+      if (currentUpdated >= previousUpdated) {
+        map.set(task.articleID, task)
+      }
+    }
+    return map
+  }, [summaryTasks])
+  const scopedSummaryTasks = useMemo(() => {
+    if (sourceFilterIDs.length === 0) {
+      return summaryTasks
+    }
+    const sourceIDSet = new Set(sourceFilterIDs)
+    const visibleFeedArticleIDSet = new Set(visibleFeed.map((item) => item.id))
+    return summaryTasks.filter((task) => {
+      if (task.kind === 'feed_briefing') {
+        if (!task.sourceIDs || task.sourceIDs.length === 0) {
+          return false
+        }
+        return task.sourceIDs.some((sourceID) => sourceIDSet.has(sourceID))
+      }
+      if (typeof task.sourceID === 'number' && task.sourceID > 0) {
+        return sourceIDSet.has(task.sourceID)
+      }
+      // Backward-compatible fallback for tasks created before sourceID was recorded.
+      return typeof task.articleID === 'number' && visibleFeedArticleIDSet.has(task.articleID)
+    })
+  }, [sourceFilterIDs, summaryTasks, visibleFeed])
+  const visibleSummaryTasks = useMemo(
+    () =>
+      [...scopedSummaryTasks]
+        .sort((left, right) => {
+          const statusGap = summaryTaskStatusPriority(right.status) - summaryTaskStatusPriority(left.status)
+          if (statusGap !== 0) {
+            return statusGap
+          }
+          const updatedGap = parseTimestamp(right.updatedAt) - parseTimestamp(left.updatedAt)
+          if (updatedGap !== 0) {
+            return updatedGap
+          }
+          const rightID = typeof right.articleID === 'number' ? right.articleID : 0
+          const leftID = typeof left.articleID === 'number' ? left.articleID : 0
+          return rightID - leftID
+        })
+        .slice(0, 8),
+    [scopedSummaryTasks],
+  )
+  const summaryTaskStats = useMemo(() => {
+    const stats = {
+      running: 0,
+      queued: 0,
+      failed: 0,
+      succeeded: 0,
+    }
+    for (const task of scopedSummaryTasks) {
+      if (task.status === 'running') stats.running += 1
+      else if (task.status === 'queued') stats.queued += 1
+      else if (task.status === 'failed') stats.failed += 1
+      else if (task.status === 'succeeded') stats.succeeded += 1
+    }
+    return stats
+  }, [scopedSummaryTasks])
+  const pendingArticleSummaryTasks = useMemo(
+    () => summaryTasks.filter((task) => isPollableArticleSummaryTask(task) && isSummaryTaskPending(task.status)),
+    [summaryTasks],
+  )
+  const selectedSummaryTask = selectedArticleID ? summaryTaskByArticleID.get(selectedArticleID) ?? null : null
+  const feedBriefingPreviewText = useMemo(() => {
+    if (feedBriefingError) {
+      return `生成失败：${feedBriefingError}`
+    }
+    if (feedBriefing) {
+      return truncate(plainText(feedBriefing), 190)
+    }
+    if (loadingFeedBriefing) {
+      return '正在生成聚合速览...'
+    }
+    return '暂无可展示速览内容。'
+  }, [feedBriefing, feedBriefingError, loadingFeedBriefing])
+  const feedBriefingFreshnessLabel = useMemo(() => {
+    if (!feedBriefingGeneratedAt) {
+      return ''
+    }
+    return formatTimeAgo(feedBriefingGeneratedAt)
+  }, [feedBriefingGeneratedAt])
 
-  const selectedFeedIndex = useMemo(() => {
-    if (!selectedArticleID) return -1
-    return visibleFeed.findIndex((item) => item.id === selectedArticleID)
-  }, [visibleFeed, selectedArticleID])
-
-  const hasActiveFilters = keyword.trim() || categoryFilter || sourceFilter || mutedSiteKeys.length > 0
-  const threadComments = selectedArticle?.thread?.comments ?? []
+  const hasActiveFilters = keyword.trim() || tagFilter || sourceFilter || unreadOnly || mutedSiteKeys.length > 0
+  const enabledSourceCount = useMemo(() => sources.filter((source) => source.enabled).length, [sources])
+  const unhealthySourceCount = useMemo(
+    () => sourceStatus.filter((item) => item.health === 'warn' || item.health === 'error' || item.health === 'stale').length,
+    [sourceStatus],
+  )
+  const {
+    detailMoreMenuRef,
+    showDetailMoreMenu,
+    closeDetailMoreMenu,
+    toggleDetailMoreMenu,
+    isThreadArticle,
+    threadPrimaryBody,
+    canTrackThread,
+    canForceRecalcSummary,
+    hasDetailMoreActions,
+  } = useDetailPanel({
+    activeTab,
+    selectedArticle,
+    selectedArticleID,
+    selectedFeedBriefing,
+    isTrackableForumLink,
+  })
+  const threadComments = useMemo(
+    () => selectedArticle?.thread?.comments ?? [],
+    [selectedArticle?.thread?.comments],
+  )
+  const selectedArticleImageURL = useMemo(
+    () => normalizeImageURL(selectedArticle?.image_url),
+    [selectedArticle?.image_url],
+  )
+  const selectedArticleReplyCountLabel = useMemo(
+    () => formatReplyCount(selectedArticle?.reply_count),
+    [selectedArticle?.reply_count],
+  )
   const hasHiddenThreadComments =
     Boolean(selectedArticle?.thread) && !expandedThreadComments && threadComments.length > threadPreviewCommentLimit
+  const orderedThreadComments = useMemo(
+    () => (threadCommentsNewestFirst ? [...threadComments].reverse() : threadComments),
+    [threadComments, threadCommentsNewestFirst],
+  )
   const visibleThreadComments = expandedThreadComments
-    ? threadComments
-    : threadComments.slice(0, threadPreviewCommentLimit)
+    ? orderedThreadComments
+    : orderedThreadComments.slice(0, threadPreviewCommentLimit)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(aiModelStorageKey, aiModel)
+  }, [aiModel])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (readArticleIDs.length === 0) {
+      window.localStorage.removeItem(readArticleStorageKey)
+      return
+    }
+    window.localStorage.setItem(
+      readArticleStorageKey,
+      JSON.stringify(readArticleIDs.slice(0, maxStoredReadArticles)),
+    )
+  }, [readArticleIDs])
+
+  useEffect(() => {
+    if (!selectedSummaryTask) return
+    if (!isSummaryTaskPending(selectedSummaryTask.status)) return
+    setArticleSummaryMeta(`后台生成中 · ${summaryTaskStatusLabel(selectedSummaryTask.status)} · ${selectedSummaryTask.model}`)
+  }, [selectedSummaryTask])
+
+  const loadCachedSummary = useCallback(async (articleID: number, model: string, requestID?: number) => {
+    const activeRequestID = requestID ?? ++summaryRequestSeqRef.current
+    try {
+      const cachedSummary = await getArticleSummary(articleID, model)
+      if (activeRequestID !== summaryRequestSeqRef.current) {
+        return
+      }
+      if (cachedSummary?.data?.summary) {
+        setArticleSummary(cachedSummary.data.summary)
+        setArticleSummaryMeta(`缓存命中 · ${cachedSummary.data.provider} · ${cachedSummary.data.model}`)
+        setArticleSummaryError(null)
+      }
+    } catch (error) {
+      if (activeRequestID !== summaryRequestSeqRef.current) {
+        return
+      }
+      setArticleSummaryError(`读取缓存摘要失败: ${toErrorMessage(error)}`)
+    }
+  }, [])
+
+  const resolveSummaryTaskIdentity = useCallback((articleID?: number) => {
+    const resolvedArticleID = typeof articleID === 'number' && articleID > 0 ? articleID : null
+    if (resolvedArticleID !== null && selectedArticle?.id === resolvedArticleID) {
+      return {
+        title: selectedArticle.title,
+        sourceName: selectedArticle.source_name,
+        sourceID: selectedArticle.source_id,
+      }
+    }
+    const item = resolvedArticleID !== null ? feed.find((entry) => entry.id === resolvedArticleID) : null
+    if (item) {
+      return {
+        title: item.title,
+        sourceName: item.source_name,
+        sourceID: item.source_id,
+      }
+    }
+    return {
+      title: resolvedArticleID !== null ? `文章 #${resolvedArticleID}` : '未知文章',
+      sourceName: '未知来源',
+      sourceID: undefined,
+    }
+  }, [feed, selectedArticle])
+
+  const upsertSummaryTask = useCallback((task: SummaryTask) => {
+    setSummaryTasks((previous) => upsertSummaryTaskState(previous, task))
+  }, [])
+
+  const removeSummaryTask = useCallback((taskKey: string) => {
+    setSummaryTasks((previous) => previous.filter((task) => task.key !== taskKey))
+    summaryTaskNotifiedRef.current.delete(taskKey)
+  }, [])
+
+  const clearCompletedSummaryTasks = useCallback(() => {
+    setSummaryTasks((previous) => {
+      const next = previous.filter((task) => isSummaryTaskPending(task.status))
+      const keys = new Set(next.map((task) => task.key))
+      for (const key of summaryTaskNotifiedRef.current) {
+        if (!keys.has(key)) {
+          summaryTaskNotifiedRef.current.delete(key)
+        }
+      }
+      return next
+    })
+  }, [])
+
+  const cancelSidebarTagFeedReload = useCallback(() => {
+    if (sidebarTagFilterTimerRef.current !== null) {
+      window.clearTimeout(sidebarTagFilterTimerRef.current)
+      sidebarTagFilterTimerRef.current = null
+    }
+  }, [])
 
   async function loadSources() {
     try {
@@ -185,24 +765,35 @@ function App() {
 
   async function loadFeed(
     append = false,
-    overrides?: Partial<{ category: string; sourceID: string; keyword: string; cursor: string }>,
+    overrides?: Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>,
   ) {
+    const requestID = ++feedRequestSeqRef.current
     try {
       setLoadingFeed(true)
       setFeedError(null)
-      const activeCategory = overrides?.category ?? categoryFilter
+      const activeTag = overrides?.tag ?? tagFilter
       const activeSourceID = overrides?.sourceID ?? sourceFilter
       const activeKeyword = (overrides?.keyword ?? keyword).trim()
+      const filteredSourceIDs = parseSourceIDFilter(activeSourceID)
+      const includeHidden = filteredSourceIDs.some((sourceID) => normalizeSourceKind(sourceByID.get(sourceID)?.kind) === 'thread')
 
       const response = await listFeed({
         limit: 20,
         cursor: overrides?.cursor ?? (append ? feedCursor : ''),
-        category: activeCategory,
+        tag: activeTag,
         sourceID: activeSourceID,
         keyword: activeKeyword,
+        includeHidden,
       })
+      if (requestID !== feedRequestSeqRef.current) {
+        return
+      }
 
-      const articleItems: FeedItem[] = response.data.map((item) => ({ ...item }))
+      const scopedItems =
+        filteredSourceIDs.length > 0
+          ? response.data.filter((item) => filteredSourceIDs.includes(item.source_id))
+          : response.data
+      const articleItems: FeedItem[] = scopedItems.map((item) => ({ ...item }))
 
       if (append) {
         setFeed((previous) => [...previous, ...articleItems])
@@ -213,6 +804,9 @@ function App() {
       setFeedCursor(response.meta.next_cursor || '')
       setHasMoreFeed(Boolean(response.meta.next_cursor))
     } catch (error) {
+      if (requestID !== feedRequestSeqRef.current) {
+        return
+      }
       const message = toErrorMessage(error)
       setFeedError(message)
       setNotice({
@@ -220,37 +814,148 @@ function App() {
         text: `加载 feed 失败: ${message}`,
       })
     } finally {
-      setLoadingFeed(false)
+      if (requestID === feedRequestSeqRef.current) {
+        setLoadingFeed(false)
+      }
     }
   }
 
-  async function openArticle(articleID: number) {
+  function scheduleSidebarTagFeedReload(sourceID: string) {
+    cancelSidebarTagFeedReload()
+    sidebarTagFilterTimerRef.current = window.setTimeout(() => {
+      sidebarTagFilterTimerRef.current = null
+      void loadFeed(false, { sourceID })
+    }, 180)
+  }
+
+  useEffect(() => {
+    return () => {
+      cancelSidebarTagFeedReload()
+    }
+  }, [cancelSidebarTagFeedReload])
+
+  const markArticleRead = useCallback((articleID: number) => {
+    setReadArticleIDs((previous) => upsertReadArticleID(previous, articleID))
+  }, [])
+
+  const startReaderSession = useCallback((articleID: number, minDwellMs: number) => {
+    readerSessionRef.current = {
+      articleID,
+      openedAt: Date.now(),
+      maxScrollProgress: 0,
+      minDwellMs,
+    }
+  }, [])
+
+  const finalizeReaderSession = useCallback(
+    (reason: 'close' | 'navigate') => {
+      const session = readerSessionRef.current
+      if (!session) return
+      readerSessionRef.current = null
+
+      if (reason === 'navigate') {
+        markArticleRead(session.articleID)
+        return
+      }
+
+      const dwellMs = Date.now() - session.openedAt
+      if (dwellMs >= session.minDwellMs || session.maxScrollProgress >= readMarkMinScrollProgress) {
+        markArticleRead(session.articleID)
+      }
+    },
+    [markArticleRead],
+  )
+
+  const closeFloatingReader = useCallback(() => {
+    finalizeReaderSession('close')
+    setShowFloatingReader(false)
+    closeDetailMoreMenu()
+  }, [closeDetailMoreMenu, finalizeReaderSession])
+
+  const openFeedBriefing = useCallback(() => {
+    finalizeReaderSession('close')
+    ++articleRequestSeqRef.current
+    ++summaryRequestSeqRef.current
+    closeDetailMoreMenu()
+    setLoadingArticle(false)
+    setArticleError(null)
+    setSelectedArticle(null)
+    setSelectedArticleID(null)
+    setSelectedFeedBriefing(true)
+    setArticleSummary('')
+    setArticleSummaryMeta('')
+    setArticleSummaryError(null)
+    setLoadingArticleSummary(false)
+    setExpandedThreadComments(false)
+    setThreadCommentsNewestFirst(false)
+    setReaderView('stream')
+    setShowFloatingReader(true)
+
+    if (floatingDetailRef.current) {
+      floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [closeDetailMoreMenu, finalizeReaderSession])
+
+  const applyFeedBriefingSnapshot = useCallback((snapshot: FeedBriefingSnapshot) => {
+    setFeedBriefing(snapshot.summary)
+    setFeedBriefingMeta(snapshot.meta)
+    setFeedBriefingItems(snapshot.items)
+    setFeedBriefingArticleCount(snapshot.articleCount)
+    setFeedBriefingTaskKey(snapshot.taskKey)
+    setFeedBriefingScopeLabel(snapshot.scopeLabel)
+    setFeedBriefingGeneratedAt(snapshot.generatedAt)
+    setFeedBriefingAnchorArticleIDs(snapshot.anchorArticleIDs)
+    setFeedBriefingError(snapshot.error)
+    setSelectedFeedBriefing(false)
+  }, [])
+
+  const saveFeedBriefingSnapshot = useCallback((snapshot: FeedBriefingSnapshot) => {
+    setFeedBriefingSnapshots((previous) => ({
+      ...previous,
+      [snapshot.taskKey]: snapshot,
+    }))
+  }, [])
+
+  const openArticle = useCallback(async (articleID: number) => {
+    const activeSession = readerSessionRef.current
+    if (activeSession && activeSession.articleID !== articleID) {
+      finalizeReaderSession('navigate')
+    }
+
+    const articleRequestID = ++articleRequestSeqRef.current
+    const summaryRequestID = ++summaryRequestSeqRef.current
     try {
       setLoadingArticle(true)
+      closeDetailMoreMenu()
       setReaderView('stream')
       setShowFloatingReader(true)
       setArticleError(null)
+      setSelectedFeedBriefing(false)
       setSelectedArticleID(articleID)
       setArticleSummary('')
       setArticleSummaryMeta('')
       setArticleSummaryError(null)
       setLoadingArticleSummary(false)
       setExpandedThreadComments(false)
+      setThreadCommentsNewestFirst(false)
+
+      if (floatingDetailRef.current) {
+        floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
+      }
 
       const detail = await getArticle(articleID)
-      setSelectedArticle(detail)
-
-      try {
-        const cachedSummary = await getArticleSummary(articleID)
-        if (cachedSummary?.data?.summary) {
-          setArticleSummary(cachedSummary.data.summary)
-          setArticleSummaryMeta(`缓存命中 · ${cachedSummary.data.provider} · ${cachedSummary.data.model}`)
-          setArticleSummaryError(null)
-        }
-      } catch (error) {
-        setArticleSummaryError(`读取缓存摘要失败: ${toErrorMessage(error)}`)
+      if (articleRequestID !== articleRequestSeqRef.current) {
+        return
       }
+      setSelectedArticle(detail)
+      setExpandedThreadComments(isTrackableForumLink(detail.link))
+      setThreadCommentsNewestFirst(normalizeSourceKind(sourceByID.get(detail.source_id)?.kind) === 'thread')
+      startReaderSession(articleID, resolveReadDwellThresholdMs(detail))
+      void loadCachedSummary(articleID, aiModel, summaryRequestID)
     } catch (error) {
+      if (articleRequestID !== articleRequestSeqRef.current) {
+        return
+      }
       const message = toErrorMessage(error)
       setArticleError(message)
       setNotice({
@@ -258,9 +963,11 @@ function App() {
         text: `加载文章详情失败: ${message}`,
       })
     } finally {
-      setLoadingArticle(false)
+      if (articleRequestID === articleRequestSeqRef.current) {
+        setLoadingArticle(false)
+      }
     }
-  }
+  }, [aiModel, closeDetailMoreMenu, finalizeReaderSession, loadCachedSummary, sourceByID, startReaderSession])
 
   async function onSummarizeArticle(refresh = false) {
     if (!selectedArticleID || selectedArticleID <= 0) {
@@ -268,22 +975,97 @@ function App() {
       return
     }
 
+    const requestID = ++summaryRequestSeqRef.current
+    const articleID = selectedArticleID
+
     try {
       setLoadingArticleSummary(true)
       setArticleSummaryError(null)
-      const response = await summarizeArticle(selectedArticleID, refresh)
-      setArticleSummary(response.data.summary)
-      setArticleSummaryMeta(
-        `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model}`,
-      )
-      setNotice({ kind: 'info', text: response.data.cache_hit ? '已加载缓存摘要。' : 'AI 摘要已生成。' })
+      const response = await summarizeArticle(articleID, refresh, aiModel)
+      if (requestID !== summaryRequestSeqRef.current) {
+        return
+      }
+      if (isArticleSummaryReadyResponse(response)) {
+        setArticleSummary(response.data.summary)
+        setArticleSummaryMeta(
+          `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model}`,
+        )
+        setNotice({ kind: 'info', text: response.data.cache_hit ? '已加载缓存摘要。' : 'AI 摘要已生成。' })
+        return
+      }
+
+      if (response.data.status === 'failed') {
+        throw new Error(response.data.error || 'AI 摘要生成失败')
+      }
+
+      const taskModel = response.data.model?.trim() || aiModel
+      const taskKey = buildSummaryTaskKey(articleID, taskModel)
+      const identity = resolveSummaryTaskIdentity(articleID)
+      summaryTaskNotifiedRef.current.delete(taskKey)
+      upsertSummaryTask({
+        kind: 'article_summary',
+        key: taskKey,
+        articleID,
+        title: identity.title,
+        sourceName: identity.sourceName,
+        sourceID: identity.sourceID,
+        model: taskModel,
+        status: normalizeSummaryTaskStatus(response.data.status),
+        updatedAt: response.data.updated_at || new Date().toISOString(),
+        error: response.data.error,
+      })
+      setArticleSummaryMeta(`后台生成中 · ${response.data.status} · ${taskModel}`)
+      setNotice({ kind: 'info', text: 'AI 摘要已进入后台任务，正在生成中。' })
     } catch (error) {
+      if (requestID !== summaryRequestSeqRef.current) {
+        return
+      }
       const message = toErrorMessage(error)
       setArticleSummaryError(message)
+      const identity = resolveSummaryTaskIdentity(articleID)
+      const taskKey = buildSummaryTaskKey(articleID, aiModel)
+      upsertSummaryTask({
+        kind: 'article_summary',
+        key: taskKey,
+        articleID,
+        title: identity.title,
+        sourceName: identity.sourceName,
+        sourceID: identity.sourceID,
+        model: aiModel,
+        status: 'failed',
+        updatedAt: new Date().toISOString(),
+        error: message,
+      })
       setNotice({ kind: 'error', text: `AI 摘要失败: ${message}` })
     } finally {
-      setLoadingArticleSummary(false)
+      if (requestID === summaryRequestSeqRef.current) {
+        setLoadingArticleSummary(false)
+      }
     }
+  }
+
+  function onOpenSummaryTask(task: SummaryTask) {
+    if (task.kind === 'feed_briefing') {
+      const snapshot = feedBriefingSnapshots[task.key]
+      if (snapshot) {
+        applyFeedBriefingSnapshot(snapshot)
+      } else {
+        setNotice({ kind: 'info', text: '该 AI 速览未在本地缓存，请重新生成一次。' })
+      }
+      setActiveTab('reader')
+      openFeedBriefing()
+      return
+    }
+    if (typeof task.articleID !== 'number' || task.articleID <= 0) {
+      return
+    }
+    setActiveTab('reader')
+    setReaderView('stream')
+    void openArticle(task.articleID)
+  }
+
+  function onDismissSummaryTask(taskKey: string) {
+    removeSummaryTask(taskKey)
   }
 
   async function onTrackThread() {
@@ -309,192 +1091,237 @@ function App() {
     }
   }
 
-  async function onCreateSource(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!newSourceURL.trim()) {
-      setNotice({ kind: 'error', text: '请填写 RSS URL。' })
-      return
-    }
-
-    try {
-      setCreatingSource(true)
-      const payload: {
-        name?: string
-        rss_url: string
-        category: string
-      } = {
-        rss_url: newSourceURL.trim(),
-        category: newSourceCategory.trim() || 'general',
-      }
-
-      const name = newSourceName.trim()
-      if (name) {
-        payload.name = name
-      }
-
-      await createSource(payload)
-
-      setNewSourceName('')
-      setNewSourceURL('')
-      setNewSourceCategory('general')
-      setNotice({ kind: 'info', text: '来源创建成功。' })
-      await loadSources()
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `创建来源失败: ${toErrorMessage(error)}`,
-      })
-    } finally {
-      setCreatingSource(false)
-    }
+  function resetFeedBriefingState() {
+    setFeedBriefing('')
+    setFeedBriefingMeta('')
+    setFeedBriefingItems([])
+    setFeedBriefingArticleCount(0)
+    setFeedBriefingTaskKey('')
+    setFeedBriefingScopeLabel('')
+    setFeedBriefingGeneratedAt('')
+    setFeedBriefingAnchorArticleIDs([])
+    setFeedBriefingError(null)
+    setLoadingFeedBriefing(false)
+    setSelectedFeedBriefing(false)
   }
 
-  async function onTestSource(sourceID: number) {
+  async function onGenerateFeedBriefing(refresh = false) {
+    const articleIDs = activeFeedBriefingAnchorArticleIDs
+    if (articleIDs.length === 0) {
+      setNotice({ kind: 'error', text: '当前没有可用文章，无法生成 AI 速览。' })
+      return
+    }
+    const sourceIDs = activeFeedBriefingSourceIDs
+    const taskScopeLabel = activeFeedBriefingScopeLabel
+    const taskKey = activeFeedBriefingTaskKey
+    setFeedBriefingTaskKey(taskKey)
+    setFeedBriefingScopeLabel(taskScopeLabel)
+    setFeedBriefingAnchorArticleIDs(articleIDs)
+    upsertSummaryTask({
+      kind: 'feed_briefing',
+      key: taskKey,
+      sourceIDs,
+      sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
+      title: 'AI 聚合速览',
+      sourceName: taskScopeLabel,
+      model: aiModel,
+      status: 'running',
+      updatedAt: new Date().toISOString(),
+      error: '',
+    })
+
     try {
-      setBusySourceID(sourceID)
-      const result = await testSource(sourceID)
+      setLoadingFeedBriefing(true)
+      setFeedBriefingError(null)
+      const response = await createFeedBriefing({
+        limit: Math.min(articleIDs.length, 30),
+        tag: tagFilter || undefined,
+        keyword: activeFeedBriefingKeyword || undefined,
+        model: aiModel,
+        source_ids: sourceIDs.length > 0 ? sourceIDs : undefined,
+        article_ids: articleIDs,
+        refresh,
+      })
+      setFeedBriefing(response.data.summary)
+      setFeedBriefingItems(response.data.input_items ?? [])
+      setFeedBriefingArticleCount(response.data.article_count ?? 0)
+      setFeedBriefingTaskKey(taskKey)
+      setFeedBriefingGeneratedAt(response.data.generated_at || new Date().toISOString())
+      saveFeedBriefingSnapshot({
+        taskKey,
+        summary: response.data.summary,
+        meta: `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model} · ${response.data.article_count} 篇`,
+        items: response.data.input_items ?? [],
+        articleCount: response.data.article_count ?? 0,
+        scopeLabel: taskScopeLabel,
+        generatedAt: response.data.generated_at || new Date().toISOString(),
+        anchorArticleIDs: articleIDs,
+        error: null,
+      })
+      upsertSummaryTask({
+        kind: 'feed_briefing',
+        key: taskKey,
+        sourceIDs,
+        sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
+        title: 'AI 聚合速览',
+        sourceName: taskScopeLabel,
+        model: response.data.model || aiModel,
+        status: 'succeeded',
+        updatedAt: response.data.generated_at || new Date().toISOString(),
+        error: '',
+      })
+      setFeedBriefingMeta(
+        `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model} · ${response.data.article_count} 篇`,
+      )
       setNotice({
         kind: 'info',
-        text: `测试成功: ${result.title}（${result.item_count} 条）`,
+        text: response.data.cache_hit ? '已加载缓存速览。' : 'AI 聚合速览已生成。',
       })
     } catch (error) {
+      const message = toErrorMessage(error)
+      setFeedBriefingTaskKey(taskKey)
+      setFeedBriefingError(message)
+      saveFeedBriefingSnapshot({
+        taskKey,
+        summary: '',
+        meta: '',
+        items: [],
+        articleCount: 0,
+        scopeLabel: taskScopeLabel,
+        generatedAt: new Date().toISOString(),
+        anchorArticleIDs: articleIDs,
+        error: message,
+      })
+      upsertSummaryTask({
+        kind: 'feed_briefing',
+        key: taskKey,
+        sourceIDs,
+        sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
+        title: 'AI 聚合速览',
+        sourceName: taskScopeLabel,
+        model: aiModel,
+        status: 'failed',
+        updatedAt: new Date().toISOString(),
+        error: message,
+      })
       setNotice({
         kind: 'error',
-        text: `测试来源失败: ${toErrorMessage(error)}`,
+        text: `AI 聚合速览失败: ${message}`,
       })
     } finally {
-      setBusySourceID(null)
+      setLoadingFeedBriefing(false)
     }
   }
 
-  async function onRefreshSource(sourceID: number) {
-    try {
-      setBusySourceID(sourceID)
-      await refreshSource(sourceID)
-      setNotice({
-        kind: 'info',
-        text: `来源 ${sourceID} 刷新成功。`,
-      })
-      await loadFeed(false)
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `刷新来源失败: ${toErrorMessage(error)}`,
-      })
-    } finally {
-      setBusySourceID(null)
-    }
-  }
-
-  function onStartEdit(source: Source) {
-    setEditingSourceID(source.id)
-    setEditSourceName(source.name)
-    setEditSourceURL(source.rss_url)
-    setEditSourceCategory(source.category)
-    setEditSourcePollSec(String(source.poll_interval_sec))
-  }
-
-  function onCancelEdit() {
-    setEditingSourceID(null)
-    setEditSourceName('')
-    setEditSourceURL('')
-    setEditSourceCategory('')
-    setEditSourcePollSec('900')
-  }
-
-  async function onSaveSourceEdit(sourceID: number) {
-    const name = editSourceName.trim()
-    const rssURL = editSourceURL.trim()
-    const category = editSourceCategory.trim() || 'general'
-    const pollIntervalSec = Number.parseInt(editSourcePollSec, 10)
-
-    if (!name || !rssURL) {
-      setNotice({ kind: 'error', text: '名称和 RSS URL 不能为空。' })
-      return
-    }
-    if (Number.isNaN(pollIntervalSec) || pollIntervalSec <= 0) {
-      setNotice({ kind: 'error', text: '抓取间隔必须是正整数。' })
-      return
-    }
-
-    try {
-      setBusySourceID(sourceID)
-      await updateSource(sourceID, {
-        name,
-        rss_url: rssURL,
-        category,
-        poll_interval_sec: pollIntervalSec,
-      })
-      setNotice({ kind: 'info', text: `来源 ${sourceID} 更新成功。` })
-      onCancelEdit()
-      await loadSources()
-      await loadFeed(false)
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `更新来源失败: ${toErrorMessage(error)}`,
-      })
-    } finally {
-      setBusySourceID(null)
-    }
-  }
-
-  async function onToggleSourceEnabled(source: Source) {
-    try {
-      setBusySourceID(source.id)
-      await updateSource(source.id, { enabled: !source.enabled })
-      setNotice({
-        kind: 'info',
-        text: `来源 ${source.id} 已${source.enabled ? '停用' : '启用'}。`,
-      })
-      await loadSources()
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `切换状态失败: ${toErrorMessage(error)}`,
-      })
-    } finally {
-      setBusySourceID(null)
-    }
-  }
-
-  async function onDeleteSource(source: Source) {
-    if (!window.confirm(`确定删除来源「${source.name}」吗？`)) {
-      return
-    }
-
-    try {
-      setBusySourceID(source.id)
-      await deleteSource(source.id)
-      if (sourceFilter === String(source.id)) {
+  const onAfterDeleteSourceStateSync = useCallback(
+    (source: Source, containsSourceInFilter: boolean) => {
+      if (containsSourceInFilter) {
         setSourceFilter('')
+        setSourceGroupFilter(null)
+        setSidebarTagFilters([])
       }
       if (selectedArticle?.source_id === source.id) {
         setSelectedArticle(null)
         setSelectedArticleID(null)
       }
-      setNotice({ kind: 'info', text: `来源 ${source.id} 已删除。` })
-      await loadSources()
-      await loadFeed(false, sourceFilter === String(source.id) ? { sourceID: '' } : undefined)
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `删除来源失败: ${toErrorMessage(error)}`,
-      })
-    } finally {
-      if (editingSourceID === source.id) {
-        onCancelEdit()
+      if (sourceProfileSource?.id === source.id) {
+        setSourceProfileSource(null)
       }
-      setBusySourceID(null)
-    }
+      if (pendingDeleteSource?.id === source.id) {
+        setPendingDeleteSource(null)
+      }
+      setSourceContextMenu(null)
+    },
+    [pendingDeleteSource, selectedArticle, sourceProfileSource],
+  )
+
+  const {
+    onCreateSource,
+    onDiscoverSources,
+    onBatchCreateSources,
+    onAddDiscoveredSource,
+    onTestSource,
+    onRefreshSource,
+    onSaveSourceEdit,
+    onToggleSourceEnabled,
+    onDeleteSource,
+    onReclassifySources,
+    onRunBulkSourceAction,
+    onRunBulkTagAction,
+    onConfirmDeleteSource,
+    onQuickSetSourceEnabled,
+    onRemoveSourceProfileTag,
+    onAddSourceProfileTags,
+  } = useSourceManagementActions({
+    newSourceName,
+    newSourceURL,
+    newSourceTags,
+    batchSourceURLs,
+    batchSourceTags,
+    discoverURL,
+    editSourceName,
+    editSourceURL,
+    editSourceTags,
+    editSourcePollSec,
+    sourceFilter,
+    editingSourceID,
+    selectedSourceIDs,
+    bulkTagInput,
+    sourceProfileSource,
+    sourceProfileTags,
+    pendingDeleteSource,
+    sourceByID,
+    setNotice,
+    setCreatingSource,
+    setNewSourceName,
+    setNewSourceURL,
+    setNewSourceTags,
+    setBatchCreatingSources,
+    setBatchCreateResult,
+    setDiscoveringSources,
+    setDiscoveredSources,
+    setBusySourceID,
+    setReclassifyingSources,
+    setBulkSourceAction,
+    setSources,
+    setSourceProfileSource,
+    setSourceProfileTagInput,
+    clearSourceContextMenu: () => setSourceContextMenu(null),
+    onCancelEdit,
+    onAfterDeleteSourceStateSync,
+    loadSources,
+    loadFeed,
+    refreshStatusIfVisible,
+    parseSourceTagInput,
+    parseRSSLines,
+    parseSourceIDFilter,
+    normalizeSourceTags,
+    sourceTagList,
+    equalStringList,
+    bulkActionLabel,
+    toErrorMessage,
+  })
+
+  function openImmersiveReader() {
+    streamScrollYRef.current = window.scrollY
+    setReaderView('detail')
+    setShowFloatingReader(false)
+  }
+
+  function returnToReaderStream() {
+    finalizeReaderSession('close')
+    setReaderView('stream')
+    setShowFloatingReader(false)
+    const targetY = streamScrollYRef.current
+    if (targetY === null) return
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: targetY, behavior: 'auto' })
+    })
   }
 
   function applyFilters() {
+    cancelSidebarTagFeedReload()
+    resetFeedBriefingState()
     setSelectedArticle(null)
     setSelectedArticleID(null)
     setFeedCursor('')
@@ -502,42 +1329,76 @@ function App() {
   }
 
   function clearFilters() {
+    cancelSidebarTagFeedReload()
+    resetFeedBriefingState()
     setKeyword('')
-    setCategoryFilter('')
+    setTagFilter('')
     setSourceFilter('')
+    setUnreadOnly(false)
+    setSourceGroupFilter(null)
+    setSidebarTagFilters([])
     setMutedSiteKeys([])
     setSelectedArticle(null)
     setSelectedArticleID(null)
     setFeedCursor('')
     void loadFeed(false, {
-      category: '',
+      tag: '',
       sourceID: '',
       keyword: '',
       cursor: '',
     })
   }
 
-  function removeFilter(type: 'keyword' | 'category' | 'source' | 'muted_sites') {
+  function removeFilter(type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread') {
+    cancelSidebarTagFeedReload()
     if (type === 'keyword') {
+      resetFeedBriefingState()
       setKeyword('')
       void loadFeed(false, { keyword: '' })
       return
     }
-    if (type === 'category') {
-      setCategoryFilter('')
-      void loadFeed(false, { category: '' })
+    if (type === 'tag') {
+      resetFeedBriefingState()
+      setTagFilter('')
+      void loadFeed(false, { tag: '' })
       return
     }
     if (type === 'muted_sites') {
       setMutedSiteKeys([])
       return
     }
+    if (type === 'unread') {
+      setUnreadOnly(false)
+      return
+    }
 
     setSourceFilter('')
+    setSourceGroupFilter(null)
+    setSidebarTagFilters([])
+    resetFeedBriefingState()
     void loadFeed(false, { sourceID: '' })
   }
 
+  function onChangeAIModel(nextModel: string) {
+    const model = nextModel.trim()
+    if (!model || model === aiModel) {
+      return
+    }
+    const requestID = ++summaryRequestSeqRef.current
+    setAIModel(model)
+    resetFeedBriefingState()
+    setArticleSummary('')
+    setArticleSummaryMeta('')
+    setArticleSummaryError(null)
+    if (selectedArticleID) {
+      void loadCachedSummary(selectedArticleID, model, requestID)
+    }
+    setShowManageModelPicker(false)
+    setNotice({ kind: 'info', text: `已切换模型：${model}` })
+  }
+
   function toggleSiteMuted(siteKey: string) {
+    resetFeedBriefingState()
     setMutedSiteKeys((previous) => {
       if (previous.includes(siteKey)) {
         return previous.filter((item) => item !== siteKey)
@@ -546,12 +1407,128 @@ function App() {
     })
   }
 
-  function applySourceFilterFromSidebar(sourceID: string) {
+  function applySourceFilterFromSidebar(sourceID: string, options?: { preserveSidebarTags?: boolean }) {
+    cancelSidebarTagFeedReload()
+    resetFeedBriefingState()
+    const preserveSidebarTags = options?.preserveSidebarTags ?? false
+    setSourceGroupFilter(null)
+    if (!preserveSidebarTags) {
+      setSidebarTagFilters([])
+    }
     setSourceFilter(sourceID)
     setSelectedArticle(null)
     setSelectedArticleID(null)
     setFeedCursor('')
     void loadFeed(false, { sourceID })
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
+      setShowSubscriptionSidebar(false)
+    }
+  }
+
+  const registerSidebarSourceItemRef = useCallback((sourceID: number, node: HTMLDivElement | null) => {
+    if (!node) {
+      sidebarSourceItemRefs.current.delete(sourceID)
+      return
+    }
+    sidebarSourceItemRefs.current.set(sourceID, node)
+  }, [])
+
+  function applySidebarTagFilters(nextKeys: string[], mode: SidebarTagFilterMode = sidebarTagFilterMode) {
+    resetFeedBriefingState()
+    const normalized = Array.from(
+      new Set(
+        nextKeys
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ).sort()
+
+    setSidebarTagFilters(normalized)
+    setSidebarTagFilterMode(mode)
+
+    if (normalized.length === 0) {
+      setSourceGroupFilter(null)
+      setSourceFilter('')
+      setFeedCursor('')
+      scheduleSidebarTagFeedReload('')
+      return
+    }
+
+    const sourceIDs = readerFeedSources
+      .filter((source) => {
+        const tagSet = new Set(sourceTagList(source).map((tag) => tag.toLowerCase()))
+        if (mode === 'and') {
+          return normalized.every((tag) => tagSet.has(tag))
+        }
+        return normalized.some((tag) => tagSet.has(tag))
+      })
+      .map((source) => source.id)
+      .sort((left, right) => left - right)
+    const sourceIDValue = sourceIDs.length > 0 ? sourceIDs.join(',') : '0'
+    const labels = normalized.map((key) => sourceGroups.find((group) => group.key === key)?.label ?? key)
+    const modeLabel = mode === 'and' ? 'AND' : 'OR'
+    const label = labels.length === 1 ? `${labels[0]} (${modeLabel})` : `${modeLabel}: ${labels[0]} +${labels.length - 1}`
+
+    setSourceGroupFilter({
+      key: `tags:${mode}:${normalized.join(',')}`,
+      label,
+    })
+    setSourceFilter(sourceIDValue)
+    setFeedCursor('')
+    scheduleSidebarTagFeedReload(sourceIDValue)
+  }
+
+  function toggleSidebarTagFilter(tagKey: string) {
+    if (sidebarTagFilterSet.has(tagKey)) {
+      applySidebarTagFilters(sidebarTagFilters.filter((item) => item !== tagKey))
+      return
+    }
+    applySidebarTagFilters([...sidebarTagFilters, tagKey])
+  }
+
+  function switchSidebarTagFilterMode(mode: SidebarTagFilterMode) {
+    if (mode === sidebarTagFilterMode) {
+      return
+    }
+    if (sidebarTagFilters.length === 0) {
+      setSidebarTagFilterMode(mode)
+      return
+    }
+    applySidebarTagFilters(sidebarTagFilters, mode)
+  }
+
+  function openSourceContextMenu(event: ReactMouseEvent<HTMLElement>, source: Source) {
+    event.preventDefault()
+    event.stopPropagation()
+    const margin = 10
+    const x = Math.max(margin, Math.min(event.clientX, window.innerWidth - margin))
+    const y = Math.max(margin, Math.min(event.clientY, window.innerHeight - margin))
+    setSourceContextMenu({
+      source,
+      x,
+      y,
+    })
+  }
+
+  function openSourceContextMenuAt(source: Source, x: number, y: number) {
+    const margin = 10
+    setSourceContextMenu({
+      source,
+      x: Math.max(margin, Math.min(x, window.innerWidth - margin)),
+      y: Math.max(margin, Math.min(y, window.innerHeight - margin)),
+    })
+  }
+
+  function openSourceProfile(source: Source) {
+    setSourceProfileSource(source)
+    setSourceProfileTagPickerOpen(false)
+    setSourceProfileTagInput('')
+    setSourceContextMenu(null)
+  }
+
+  function openDeleteSourceConfirm(source: Source) {
+    setPendingDeleteSource(source)
+    setSourceContextMenu(null)
   }
 
   async function refreshAll() {
@@ -575,6 +1552,55 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSummaryTasks((previous) => {
+        const next = pruneSummaryTasks(previous)
+        const keys = new Set(next.map((task) => task.key))
+        for (const key of summaryTaskNotifiedRef.current) {
+          if (!keys.has(key)) {
+            summaryTaskNotifiedRef.current.delete(key)
+          }
+        }
+        return next
+      })
+    }, 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useSummaryTaskPoller({
+    aiModel,
+    pendingArticleSummaryTasks,
+    resolveSummaryTaskIdentity,
+    selectedArticleID,
+    upsertSummaryTask,
+    setArticleSummary,
+    setArticleSummaryMeta,
+    setArticleSummaryError,
+    setNotice: (notice) => setNotice(notice),
+    summaryTaskNotifiedRef,
+  })
+
+  useFeedBriefingCacheRestore({
+    activeTab,
+    loadingFeed,
+    loadingFeedBriefing,
+    activeFeedBriefingAnchorArticleIDs,
+    hasFeedBriefingEntry,
+    feedBriefingTaskKey,
+    activeFeedBriefingTaskKey,
+    feedBriefingSnapshots,
+    applyFeedBriefingSnapshot,
+    activeFeedBriefingKeyword,
+    tagFilter,
+    aiModel,
+    activeFeedBriefingSourceIDs,
+    activeFeedBriefingScopeLabel,
+    saveFeedBriefingSnapshot,
+    upsertSummaryTask,
+    feedBriefingCacheAttemptedRef,
+  })
+
+  useEffect(() => {
     if (activeTab === 'sources' && sourceStatus.length === 0 && !loadingStatus) {
       void loadStatus()
     }
@@ -582,9 +1608,287 @@ function App() {
   }, [activeTab])
 
   useEffect(() => {
-    const validSiteKeys = new Set(sourceGroups.map((group) => group.siteKey))
+    const validSiteKeys = new Set(sourceSiteKeyMap.values())
     setMutedSiteKeys((previous) => previous.filter((siteKey) => validSiteKeys.has(siteKey)))
-  }, [sourceGroups])
+  }, [sourceSiteKeyMap])
+
+  useEffect(() => {
+    const validTagKeys = new Set(sourceGroups.map((group) => group.key))
+    const nextTagFilters = sidebarTagFilters.filter((key) => validTagKeys.has(key))
+    if (nextTagFilters.length === sidebarTagFilters.length) {
+      return
+    }
+    applySidebarTagFilters(nextTagFilters, sidebarTagFilterMode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceGroups, sidebarTagFilters, sidebarTagFilterMode])
+
+  useEffect(() => {
+    if (sourceGroups.length <= sidebarTagCollapseCount) {
+      setShowAllSidebarTags(false)
+    }
+  }, [sourceGroups.length])
+
+  useEffect(() => {
+    if (sidebarTagFilters.length > 0) {
+      setShowAllSidebarTags(true)
+    }
+  }, [sidebarTagFilters.length])
+
+  useEffect(() => {
+    if (showTrackedSidebar) return
+    setShowAllTrackedSidebar(false)
+  }, [showTrackedSidebar])
+
+  useEffect(() => {
+    if (readerTrackedSources.length > trackedSidebarPreviewLimit) return
+    setShowAllTrackedSidebar(false)
+  }, [readerTrackedSources])
+
+  useEffect(() => {
+    if (!sourceGroupFilter) return
+    if (sourceGroupFilter.key.startsWith('tags:')) return
+    const exists = sourceGroups.some((group) => group.key === sourceGroupFilter.key)
+    if (exists) return
+    setSourceGroupFilter(null)
+    setSourceFilter('')
+    void loadFeed(false, { sourceID: '' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceGroupFilter, sourceGroups])
+
+  useEffect(() => {
+    if (!sourceFilter.trim()) return
+    const validSourceIDs = new Set(readerSources.map((source) => source.id))
+    const selectedIDs = parseSourceIDFilter(sourceFilter)
+    if (selectedIDs.length === 0) return
+    const allValid = selectedIDs.every((sourceID) => validSourceIDs.has(sourceID))
+    if (allValid) return
+    setSourceGroupFilter(null)
+    setSourceFilter('')
+    void loadFeed(false, { sourceID: '' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readerSources, sourceFilter])
+
+  useEffect(() => {
+    const input = sourceSelectAllRef.current
+    if (!input) return
+    input.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected
+  }, [allVisibleSelected, selectedVisibleCount])
+
+  useEffect(() => {
+    if (!sourceContextMenu) return
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.source-context-menu')) {
+        return
+      }
+      setSourceContextMenu(null)
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSourceContextMenu(null)
+      }
+    }
+
+    function handleScroll() {
+      setSourceContextMenu(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
+  }, [sourceContextMenu])
+
+  useEffect(() => {
+    if (!showFeedAIMoreMenu) return
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null
+      if (target && feedAIMoreRef.current?.contains(target)) {
+        return
+      }
+      setShowFeedAIMoreMenu(false)
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setShowFeedAIMoreMenu(false)
+      }
+    }
+
+    function handleScroll() {
+      setShowFeedAIMoreMenu(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
+  }, [showFeedAIMoreMenu])
+
+  useEffect(() => {
+    if (activeTab !== 'reader' && showFeedAIMoreMenu) {
+      setShowFeedAIMoreMenu(false)
+    }
+  }, [activeTab, showFeedAIMoreMenu])
+
+  useLayoutEffect(() => {
+    if (activeTab !== 'reader' || !showSubscriptionSidebar) {
+      previousSidebarSourceItemRectsRef.current = new Map()
+      previousSidebarSourceIDsRef.current = []
+      return
+    }
+
+    const reduceMotion =
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const nextIDs = sidebarVisibleFeedSources.map((source) => source.id)
+    const nextRects = new Map<number, DOMRect>()
+
+    for (const sourceID of nextIDs) {
+      const node = sidebarSourceItemRefs.current.get(sourceID)
+      if (!node) continue
+      nextRects.set(sourceID, node.getBoundingClientRect())
+    }
+
+    if (!reduceMotion) {
+      const previousRects = previousSidebarSourceItemRectsRef.current
+      const previousIDs = previousSidebarSourceIDsRef.current
+
+      for (const sourceID of nextIDs) {
+        const node = sidebarSourceItemRefs.current.get(sourceID)
+        if (!node) continue
+
+        const previousRect = previousRects.get(sourceID)
+        const nextRect = nextRects.get(sourceID)
+        if (previousRect && nextRect) {
+          const deltaY = previousRect.top - nextRect.top
+          if (Math.abs(deltaY) > 1) {
+            node.animate([{ transform: `translateY(${deltaY}px)` }, { transform: 'translateY(0)' }], {
+              duration: 170,
+              easing: 'cubic-bezier(.2,.8,.2,1)',
+            })
+          }
+          continue
+        }
+
+        if (previousIDs.length > 0) {
+          node.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }], {
+            duration: 150,
+            easing: 'ease-out',
+          })
+        }
+      }
+    }
+
+    previousSidebarSourceItemRectsRef.current = nextRects
+    previousSidebarSourceIDsRef.current = nextIDs
+  }, [activeTab, showSubscriptionSidebar, sidebarVisibleFeedSources])
+
+  useEffect(() => {
+    if (!sourceContextMenu) return
+    const activeMenu = sourceContextMenu
+
+    function adjustSourceContextMenuPosition() {
+      const menu = sourceContextMenuRef.current
+      if (!menu) return
+      const rect = menu.getBoundingClientRect()
+      const next = clampContextMenuPosition(activeMenu.x, activeMenu.y, rect.width, rect.height)
+      if (next.x === activeMenu.x && next.y === activeMenu.y) {
+        return
+      }
+      setSourceContextMenu((previous) => {
+        if (!previous) return previous
+        if (previous.x === next.x && previous.y === next.y) {
+          return previous
+        }
+        return { ...previous, x: next.x, y: next.y }
+      })
+    }
+
+    const frame = window.requestAnimationFrame(adjustSourceContextMenuPosition)
+    window.addEventListener('resize', adjustSourceContextMenuPosition)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', adjustSourceContextMenuPosition)
+    }
+  }, [sourceContextMenu])
+
+  useEffect(() => {
+    if (activeTab === 'reader' && showSubscriptionSidebar) return
+    setSourceContextMenu(null)
+    setPendingDeleteSource(null)
+  }, [activeTab, showSubscriptionSidebar])
+
+  useEffect(() => {
+    if (activeTab !== 'sources') {
+      setShowManageModelPicker(false)
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!showManageModelPicker) return
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.manage-model-entry')) {
+        return
+      }
+      setShowManageModelPicker(false)
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setShowManageModelPicker(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [showManageModelPicker])
+
+  useEffect(() => {
+    if (!sourceProfileSource) return
+    const latest = sourceByID.get(sourceProfileSource.id)
+    if (!latest) {
+      setSourceProfileSource(null)
+      return
+    }
+    if (latest !== sourceProfileSource) {
+      setSourceProfileSource(latest)
+    }
+  }, [sourceByID, sourceProfileSource])
+
+  useEffect(() => {
+    if (sourceProfileSource) return
+    setSourceProfileTagPickerOpen(false)
+    setSourceProfileTagInput('')
+  }, [sourceProfileSource])
+
+  useEffect(() => {
+    if (!pendingDeleteSource) return
+    const latest = sourceByID.get(pendingDeleteSource.id)
+    if (!latest) {
+      setPendingDeleteSource(null)
+      return
+    }
+    if (latest !== pendingDeleteSource) {
+      setPendingDeleteSource(latest)
+    }
+  }, [sourceByID, pendingDeleteSource])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -599,16 +1903,31 @@ function App() {
         return
       }
 
+      if (sourceProfileSource || sourceContextMenu || pendingDeleteSource || showFeedAIMoreMenu || showDetailMoreMenu) {
+        if (event.key === 'Escape') {
+          setSourceProfileSource(null)
+          setSourceContextMenu(null)
+          setPendingDeleteSource(null)
+          setShowFeedAIMoreMenu(false)
+          closeDetailMoreMenu()
+        }
+        return
+      }
+
       if (event.key === 'j' || event.key === 'k') {
-        if (visibleFeed.length === 0) return
+        if (readerStreamItems.length === 0) return
         event.preventDefault()
 
         const direction = event.key === 'j' ? 1 : -1
-        const baseIndex = selectedFeedIndex >= 0 ? selectedFeedIndex : 0
-        const nextIndex = Math.min(Math.max(baseIndex + direction, 0), visibleFeed.length - 1)
-        const nextItem = visibleFeed[nextIndex]
-        if (nextItem) {
-          void openArticle(nextItem.id)
+        const baseIndex = selectedFeedIndex >= 0 ? selectedFeedIndex : event.key === 'j' ? -1 : 0
+        const nextIndex = Math.min(Math.max(baseIndex + direction, 0), readerStreamItems.length - 1)
+        const nextItem = readerStreamItems[nextIndex]
+        if (nextItem?.kind === 'briefing') {
+          openFeedBriefing()
+          return
+        }
+        if (nextItem?.kind === 'article') {
+          void openArticle(nextItem.articleID)
         }
         return
       }
@@ -623,7 +1942,48 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [visibleFeed, selectedFeedIndex, selectedArticle])
+  }, [
+    readerStreamItems,
+    selectedFeedIndex,
+    selectedArticle,
+    openArticle,
+    openFeedBriefing,
+    sourceProfileSource,
+    sourceContextMenu,
+    pendingDeleteSource,
+    showFeedAIMoreMenu,
+    showDetailMoreMenu,
+    closeDetailMoreMenu,
+  ])
+
+  useEffect(() => {
+    const target = feedAutoLoadRef.current
+    if (!target) return
+    if (activeTab !== 'reader' || !hasMoreFeed) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+        if (loadingFeed) return
+        const now = Date.now()
+        if (now - feedAutoLoadCooldownRef.current < 900) {
+          return
+        }
+        feedAutoLoadCooldownRef.current = now
+        void loadFeed(true)
+      },
+      {
+        root: null,
+        rootMargin: '0px 0px 420px 0px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(target)
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, hasMoreFeed, loadingFeed, feedCursor])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000)
@@ -643,12 +2003,12 @@ function App() {
       if (target && panel.contains(target)) {
         return
       }
-      setShowFloatingReader(false)
+      closeFloatingReader()
     }
 
     function handleEscKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setShowFloatingReader(false)
+        closeFloatingReader()
       }
     }
 
@@ -658,781 +2018,441 @@ function App() {
       document.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('keydown', handleEscKey)
     }
-  }, [activeTab, readerView, showFloatingReader])
+  }, [activeTab, readerView, showFloatingReader, closeFloatingReader])
+
+  useEffect(() => {
+    if (!selectedArticleID) {
+      return
+    }
+    if (activeTab !== 'reader') {
+      return
+    }
+    if (!showFloatingReader && readerView !== 'detail') {
+      return
+    }
+    const panel = floatingDetailRef.current
+    if (!panel) {
+      return
+    }
+    const panelElement = panel
+
+    function updateReaderSessionProgress() {
+      const session = readerSessionRef.current
+      if (!session || session.articleID !== selectedArticleID) {
+        return
+      }
+      const scrollable = panelElement.scrollHeight - panelElement.clientHeight
+      if (scrollable <= 0) {
+        return
+      }
+      const progress = panelElement.scrollTop / scrollable
+      if (progress > session.maxScrollProgress) {
+        session.maxScrollProgress = progress
+      }
+    }
+
+    updateReaderSessionProgress()
+    panelElement.addEventListener('scroll', updateReaderSessionProgress, { passive: true })
+    window.addEventListener('resize', updateReaderSessionProgress)
+    return () => {
+      panelElement.removeEventListener('scroll', updateReaderSessionProgress)
+      window.removeEventListener('resize', updateReaderSessionProgress)
+    }
+  }, [activeTab, selectedArticleID, readerView, showFloatingReader])
+
+  useEffect(() => {
+    if (activeTab !== 'reader' || readerView !== 'detail') {
+      return
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [activeTab, readerView])
+
+  const sourceManagementController: SourceManagementPanelController = {
+    aiModel,
+    aiModelOptions,
+    showManageModelPicker,
+    onToggleManageModelPicker: () => setShowManageModelPicker((value) => !value),
+    onChangeAIModel,
+    sources,
+    enabledSourceCount,
+    unhealthySourceCount,
+    mutedSiteKeys,
+    sourceHealthCounts,
+    healthToneClass,
+    loadingStatus,
+    onLoadStatus: loadStatus,
+    reclassifyingSources,
+    onReclassifySources,
+    sourceManageKeyword,
+    onSetSourceManageKeyword: setSourceManageKeyword,
+    sourceManageTagFilter,
+    onSetSourceManageTagFilter: setSourceManageTagFilter,
+    sourceManageHealthFilter,
+    onSetSourceManageHealthFilter: setSourceManageHealthFilter,
+    availableTags,
+    onClearSourceManageFilters: clearSourceManageFilters,
+    loadingSources,
+    onLoadSources: loadSources,
+    selectedSourceIDs,
+    visibleSourceIDs,
+    bulkTagInput,
+    onSetBulkTagInput: setBulkTagInput,
+    bulkSourceAction,
+    hasSelectedSources,
+    onRunBulkTagAction,
+    onRunBulkSourceAction,
+    onClearSelectedSourceIDs: clearSelectedSourceIDs,
+    sourcesError,
+    statusError,
+    sourceSelectAllRef,
+    allVisibleSelected,
+    onToggleSelectAllVisibleSources: toggleSelectAllVisibleSources,
+    filteredSources,
+    sourceStatusMap,
+    resolveSourceHealth,
+    sourceSiteKeyMap,
+    resolveSourceSiteKey,
+    busySourceID,
+    editingSourceID,
+    selectedSourceIDSet,
+    onToggleSourceSelection: toggleSourceSelection,
+    editSourceName,
+    onSetEditSourceName: setEditSourceName,
+    editSourceTags,
+    onSetEditSourceTags: setEditSourceTags,
+    editSourcePollSec,
+    onSetEditSourcePollSec: setEditSourcePollSec,
+    editSourceURL,
+    onSetEditSourceURL: setEditSourceURL,
+    sourceTagList,
+    normalizeSourceKind,
+    sourceClickCount,
+    formatTimeAgo,
+    healthLabel,
+    onSaveSourceEdit,
+    onCancelEdit,
+    onTestSource,
+    onRefreshSource,
+    onStartEdit,
+    onToggleSourceEnabled,
+    onToggleSiteMuted: toggleSiteMuted,
+    mutedSiteSet,
+    onDeleteSource,
+    newSourceName,
+    onSetNewSourceName: setNewSourceName,
+    newSourceURL,
+    onSetNewSourceURL: setNewSourceURL,
+    newSourceTags,
+    onSetNewSourceTags: setNewSourceTags,
+    creatingSource,
+    onCreateSource,
+    batchSourceURLs,
+    onSetBatchSourceURLs: setBatchSourceURLs,
+    batchSourceTags,
+    onSetBatchSourceTags: setBatchSourceTags,
+    batchCreatingSources,
+    onBatchCreateSources,
+    batchCreateResult,
+    discoverURL,
+    onSetDiscoverURL: setDiscoverURL,
+    discoveringSources,
+    onDiscoverSources,
+    discoveredSources,
+    confidenceLabel,
+    onAddDiscoveredSource,
+  }
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Quick News Aggregator</p>
-          <h1>新闻聚合后台演示</h1>
-        </div>
-        <div className="topbar-actions">
-          <div className="view-tabs" role="tablist" aria-label="页面">
-            <button
-              className={`ghost-btn view-tab ${activeTab === 'reader' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('reader')
-                setReaderView('stream')
-                setShowFloatingReader(false)
-              }}
-            >
-              阅读流
-            </button>
-            <button
-              className={`ghost-btn view-tab ${activeTab === 'sources' ? 'active' : ''}`}
-              onClick={() => setActiveTab('sources')}
-            >
-              来源与健康 ({sources.length})
-            </button>
-          </div>
-          <button
-            className="ghost-btn"
-            onClick={() => void refreshAll()}
-            disabled={loadingSources || loadingFeed}
-          >
-            刷新全部
-          </button>
-        </div>
-      </header>
+      <AppTopbar
+        activeTab={activeTab}
+        sourcesCount={sources.length}
+        loadingSources={loadingSources}
+        loadingFeed={loadingFeed}
+        onOpenReaderTab={() => {
+          finalizeReaderSession('close')
+          setActiveTab('reader')
+          setReaderView('stream')
+          setShowFloatingReader(false)
+        }}
+        onOpenSourcesTab={() => {
+          finalizeReaderSession('close')
+          setShowFloatingReader(false)
+          setReaderView('stream')
+          setActiveTab('sources')
+        }}
+        onRefreshAll={() => {
+          void refreshAll()
+        }}
+      />
 
-      {notice && (
-        <div className={`notice ${notice.kind}`}>
-          <span>{notice.text}</span>
-          <button onClick={() => setNotice(null)}>关闭</button>
-        </div>
-      )}
+      <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
+
+      <SummaryTaskStrip
+        tasks={visibleSummaryTasks}
+        stats={summaryTaskStats}
+        onClearCompleted={clearCompletedSummaryTasks}
+        onOpenTask={onOpenSummaryTask}
+        onDismissTask={onDismissSummaryTask}
+        summaryTaskKindLabel={summaryTaskKindLabel}
+        summaryTaskStatusLabel={summaryTaskStatusLabel}
+        formatTimeAgo={formatTimeAgo}
+      />
 
       {activeTab === 'reader' && (
         <>
+          <div className="mobile-reader-toolbar">
+            <Button
+              type="button"
+              variant={showSubscriptionSidebar ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowSubscriptionSidebar((value) => !value)}
+            >
+              {showSubscriptionSidebar ? '收起来源' : '来源与标签'}
+            </Button>
+          </div>
+
+          {showSubscriptionSidebar && (
+            <button
+              type="button"
+              className="mobile-sidebar-backdrop"
+              aria-label="关闭来源侧栏"
+              onClick={() => setShowSubscriptionSidebar(false)}
+            />
+          )}
+
           <main className="reader-layout">
             <div className={`reader-stack ${showSubscriptionSidebar ? 'sidebar-open' : 'sidebar-closed'}`}>
-              <aside className={`panel subscription-sidebar ${showSubscriptionSidebar ? 'open' : 'collapsed'}`}>
-                <div className="subscription-sidebar-header">
-                  {showSubscriptionSidebar && <h3>订阅源</h3>}
-                  <button
-                    type="button"
-                    className="ghost-btn subscription-sidebar-toggle"
-                    onClick={() => setShowSubscriptionSidebar((value) => !value)}
-                  >
-                    {showSubscriptionSidebar ? '收起' : '展开'}
-                  </button>
-                </div>
-                {showSubscriptionSidebar && (
-                  <>
-                    <button
-                      type="button"
-                      className={`subscription-item all ${!sourceFilter ? 'active' : ''}`}
-                      onClick={() => applySourceFilterFromSidebar('')}
-                    >
-                      全部来源
-                      <span>{sources.length}</span>
-                    </button>
+              <ReaderSubscriptionSidebar
+                showSubscriptionSidebar={showSubscriptionSidebar}
+                sourceFilter={sourceFilter}
+                readerSources={readerSources}
+                sourceGroups={sourceGroups}
+                sidebarTagFilterMode={sidebarTagFilterMode}
+                sidebarTagFilters={sidebarTagFilters}
+                sidebarTagFilterSet={sidebarTagFilterSet}
+                showAllSidebarTags={showAllSidebarTags}
+                sidebarTagCollapseCount={sidebarTagCollapseCount}
+                sidebarVisibleFeedSources={sidebarVisibleFeedSources}
+                isSourceGroupFilterActive={Boolean(sourceGroupFilter)}
+                readerTrackedSources={readerTrackedSources}
+                showTrackedSidebar={showTrackedSidebar}
+                visibleTrackedSidebarSources={visibleTrackedSidebarSources}
+                hasMoreTrackedSidebarSources={hasMoreTrackedSidebarSources}
+                showAllTrackedSidebar={showAllTrackedSidebar}
+                onToggleSubscriptionSidebar={() => setShowSubscriptionSidebar((value) => !value)}
+                onApplySourceFilterFromSidebar={applySourceFilterFromSidebar}
+                onSwitchSidebarTagFilterMode={switchSidebarTagFilterMode}
+                onApplySidebarTagFilters={(keys) => applySidebarTagFilters(keys)}
+                onToggleShowAllSidebarTags={() => setShowAllSidebarTags((value) => !value)}
+                onToggleSidebarTagFilter={toggleSidebarTagFilter}
+                onRegisterSidebarSourceItemRef={registerSidebarSourceItemRef}
+                onOpenSourceContextMenu={openSourceContextMenu}
+                onOpenSourceContextMenuAt={openSourceContextMenuAt}
+                onToggleShowTrackedSidebar={() => setShowTrackedSidebar((value) => !value)}
+                onToggleShowAllTrackedSidebar={() => setShowAllTrackedSidebar((value) => !value)}
+              />
 
-                    <div className="subscription-tree">
-                      {sourceGroups.map((group) => (
-                        <article key={group.siteKey} className="subscription-group">
-                          <div className="subscription-group-head">
-                            <p className="subscription-group-title">{group.siteKey}</p>
-                            <span>{group.sources.length}</span>
-                          </div>
-                          <div className="subscription-items">
-                            {group.sources.map((source) => (
-                              <button
-                                key={source.id}
-                                type="button"
-                                className={`subscription-item ${sourceFilter === String(source.id) ? 'active' : ''}`}
-                                onClick={() => applySourceFilterFromSidebar(String(source.id))}
-                              >
-                                <span className="subscription-item-name">{source.name}</span>
-                                <span className={`subscription-item-state ${source.enabled ? '' : 'disabled'}`}>
-                                  {source.enabled ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </aside>
-
-              <section className={`panel feed reader-panel ${showFloatingReader && readerView === 'stream' ? 'feed-with-floating' : ''}`}>
-                <div className="feed-header">
-                  <h2>聚合流</h2>
-                  <div className="density-toggle">
-                    <button
-                      className={feedDensity === 'compact' ? 'active' : ''}
-                      onClick={() => setFeedDensity('compact')}
-                    >
-                      紧凑
-                    </button>
-                    <button
-                      className={feedDensity === 'cozy' ? 'active' : ''}
-                      onClick={() => setFeedDensity('cozy')}
-                    >
-                      舒适
-                    </button>
-                  </div>
-                </div>
-
-                <div className="feed-filters compact">
-                  <input
-                    value={keyword}
-                    onChange={(event) => setKeyword(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        applyFilters()
-                      }
-                    }}
-                    placeholder="搜索标题/摘要"
-                  />
-                  <div className="feed-filter-actions">
-                    <button onClick={applyFilters}>搜索</button>
-                    <button className="btn-muted" onClick={() => setShowAdvancedFilters((value) => !value)}>
-                      {showAdvancedFilters ? '收起筛选' : '筛选'}
-                    </button>
-                  </div>
-                </div>
-
-                {showAdvancedFilters && (
-                  <div className="feed-filters-advanced">
-                    <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                      <option value="">全部分类</option>
-                      {categories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                    <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                      <option value="">全部来源</option>
-                      {sources.map((source) => (
-                        <option key={source.id} value={String(source.id)}>
-                          {source.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button className="btn-muted" onClick={clearFilters}>
-                      清空筛选
-                    </button>
-                  </div>
-                )}
-
-                {hasActiveFilters && (
-                  <div className="filter-chips">
-                    {keyword.trim() && (
-                      <button className="chip" onClick={() => removeFilter('keyword')}>
-                        关键词: {keyword.trim()} ×
-                      </button>
-                    )}
-                    {categoryFilter && (
-                      <button className="chip" onClick={() => removeFilter('category')}>
-                        分类: {categoryFilter} ×
-                      </button>
-                    )}
-                    {sourceFilter && (
-                      <button className="chip" onClick={() => removeFilter('source')}>
-                        来源: {sources.find((item) => String(item.id) === sourceFilter)?.name ?? sourceFilter} ×
-                      </button>
-                    )}
-                    {mutedSiteKeys.length > 0 && (
-                      <button className="chip" onClick={() => removeFilter('muted_sites')}>
-                        已隐藏网站: {mutedSiteKeys.length} ×
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <div className={`feed-list ${feedDensity}`}>
-                  {loadingFeed && visibleFeed.length === 0 && (
-                    <>
-                      <FeedSkeleton />
-                      <FeedSkeleton />
-                      <FeedSkeleton />
-                    </>
-                  )}
-
-                  {feedError && visibleFeed.length === 0 && (
-                    <div className="inline-error">
-                      <span>聚合流加载失败: {feedError}</span>
-                      <button className="ghost-btn" onClick={() => void loadFeed(false)}>
-                        重试
-                      </button>
-                    </div>
-                  )}
-
-                  {!loadingFeed && !feedError && visibleFeed.length === 0 && (
-                    <p className="hint">{feed.length > 0 ? '当前网站都被临时隐藏了，可点击“恢复全部”。' : '暂无文章'}</p>
-                  )}
-
-                  {visibleFeed.map((item) => (
-                    <article
-                      key={item.id}
-                      className={`feed-item ${selectedArticleID === item.id ? 'active' : ''}`}
-                      onClick={() => void openArticle(item.id)}
-                    >
-                      <div className="feed-topline">
-                        <span>{item.source_name}</span>
-                        <span>{formatTimeAgo(item.published_at ?? item.created_at)}</span>
-                      </div>
-                      <h3>{item.title}</h3>
-                      <p>{truncate(plainText(item.summary), feedDensity === 'compact' ? 95 : 160)}</p>
-                    </article>
-                  ))}
-                </div>
-
-                <div className="feed-footer">
-                  <button onClick={loadMore} disabled={!hasMoreFeed || loadingFeed}>
-                    {loadingFeed ? '加载中...' : hasMoreFeed ? '加载更多' : '没有更多了'}
-                  </button>
-                </div>
-              </section>
+              <ReaderFeedPanel
+                showFloatingReader={showFloatingReader}
+                readerView={readerView}
+                feedTitleOnlyMode={feedTitleOnlyMode}
+                showFeedImages={showFeedImages}
+                showFeedSearch={showFeedSearch}
+                showAdvancedFilters={showAdvancedFilters}
+                showFeedAIMoreMenu={showFeedAIMoreMenu}
+                loadingFeedBriefing={loadingFeedBriefing}
+                unreadVisibleCount={unreadVisibleCount}
+                unreadOnly={unreadOnly}
+                hasActiveFilters={Boolean(hasActiveFilters)}
+                keyword={keyword}
+                tagFilter={tagFilter}
+                sourceFilter={sourceFilter}
+                mutedSiteKeys={mutedSiteKeys}
+                availableTags={availableTags}
+                readerSources={readerSources}
+                sourceFilterSelectValue={sourceFilterSelectValue}
+                sourceFilterChipLabel={sourceFilterChipLabel}
+                loadingFeed={loadingFeed}
+                feedError={feedError}
+                feed={feed}
+                visibleFeed={visibleFeed}
+                hasFeedBriefingEntry={hasFeedBriefingEntry}
+                feedBriefingInsertIndex={feedBriefingInsertIndex}
+                selectedArticleID={selectedArticleID}
+                selectedFeedBriefing={selectedFeedBriefing}
+                readArticleIDSet={readArticleIDSet}
+                feedAIMoreRef={feedAIMoreRef}
+                feedAutoLoadRef={feedAutoLoadRef}
+                hasMoreFeed={hasMoreFeed}
+                feedBriefingPreviewText={feedBriefingPreviewText}
+                feedBriefingScopeLabel={feedBriefingScopeLabel}
+                feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+                feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+                feedBriefingArticleCount={feedBriefingArticleCount}
+                feedBriefingItems={feedBriefingItems}
+                onGenerateFeedBriefing={onGenerateFeedBriefing}
+                onCloseFeedAIMoreMenu={() => setShowFeedAIMoreMenu(false)}
+                onToggleFeedAIMoreMenu={() => setShowFeedAIMoreMenu((value) => !value)}
+                onSetUnreadOnly={setUnreadOnly}
+                onToggleFeedTitleOnlyMode={() => setFeedTitleOnlyMode((value) => !value)}
+                onToggleFeedImages={() => setShowFeedImages((value) => !value)}
+                onToggleFeedSearch={() => {
+                  setShowFeedSearch((value) => {
+                    const next = !value
+                    if (!next) {
+                      setShowAdvancedFilters(false)
+                    }
+                    return next
+                  })
+                }}
+                onApplyFilters={applyFilters}
+                onToggleAdvancedFilters={() => setShowAdvancedFilters((value) => !value)}
+                onChangeKeyword={setKeyword}
+                onChangeTagFilter={setTagFilter}
+                onChangeSourceFilter={(value) => {
+                  setSourceGroupFilter(null)
+                  setSidebarTagFilters([])
+                  setSourceFilter(value)
+                }}
+                onClearFilters={clearFilters}
+                onRemoveFilter={removeFilter}
+                onRetryLoadFeed={() => loadFeed(false)}
+                onOpenArticle={openArticle}
+                onOpenFeedBriefing={openFeedBriefing}
+                onLoadMore={loadMore}
+                normalizeImageURL={normalizeImageURL}
+                formatTimeAgo={formatTimeAgo}
+                formatTimeAgoCompact={formatTimeAgoCompact}
+                formatReplyCount={formatReplyCount}
+                buildCompactTitleParts={buildCompactTitleParts}
+                plainText={plainText}
+                truncate={truncate}
+                getSummaryTaskStatus={(articleID) => summaryTaskByArticleID.get(articleID)?.status ?? null}
+                summaryTaskStatusLabel={summaryTaskStatusLabel}
+              />
             </div>
           </main>
 
-          {(showFloatingReader || readerView === 'detail') && (
-            <section
-              ref={floatingDetailRef}
-              className={`panel detail reader-panel ${readerView === 'detail' ? 'detail-page' : 'detail-floating'}`}
-            >
-              <div className="detail-page-header">
-                <div className="detail-mode-actions">
-                  {readerView === 'detail' ? (
-                    <button
-                      type="button"
-                      className="ghost-btn"
-                      onClick={() => {
-                        setReaderView('stream')
-                        setShowFloatingReader(false)
-                      }}
-                    >
-                      返回列表
-                    </button>
-                  ) : (
-                    <>
-                      <button type="button" className="ghost-btn" onClick={() => setShowFloatingReader(false)}>
-                        关闭
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-btn"
-                        onClick={() => {
-                          setReaderView('detail')
-                          setShowFloatingReader(false)
-                        }}
-                        disabled={!selectedArticleID}
-                      >
-                        沉浸阅读
-                      </button>
-                    </>
-                  )}
-                </div>
-                <h2>文章详情</h2>
-              </div>
-
-              {!selectedArticle && !loadingArticle && !articleError && (
-                <div className="hint-group">
-                  <p className="hint">请先从列表选择一篇文章</p>
-                  <p className="hint">快捷键: j/k 切换文章，o 打开原文</p>
-                </div>
-              )}
-
-              {loadingArticle && (
-                <div className="detail-content">
-                  <div className="skeleton skeleton-title" />
-                  <div className="skeleton skeleton-line" />
-                  <div className="skeleton skeleton-line" />
-                  <div className="skeleton skeleton-line short" />
-                </div>
-              )}
-
-              {articleError && selectedArticleID && !loadingArticle && (
-                <div className="inline-error">
-                  <span>文章详情加载失败: {articleError}</span>
-                  <button className="ghost-btn" onClick={() => void openArticle(selectedArticleID)}>
-                    重试
-                  </button>
-                </div>
-              )}
-
-              {selectedArticle && !loadingArticle && (
-                <article className="detail-content">
-                  <header className="detail-header">
-                    <p className="detail-meta">
-                      {selectedArticle.source_name} · {formatTimeAgo(selectedArticle.published_at ?? selectedArticle.created_at)}
-                    </p>
-                    <h3 className="detail-title">{selectedArticle.title}</h3>
-                    <div className="detail-toolbar">
-                      {selectedArticle.author && <p className="detail-author">作者: {selectedArticle.author}</p>}
-                      <div className="detail-toolbar-actions">
-                        <a href={selectedArticle.link} target="_blank" rel="noreferrer" className="ghost-btn detail-open-link">
-                          打开原文
-                        </a>
-                        {isTrackableForumLink(selectedArticle.link) && (
-                          <button className="ghost-btn" onClick={() => void onTrackThread()}>
-                            持续跟踪评论
-                          </button>
-                        )}
-                        {selectedArticleID && selectedArticleID > 0 && (
-                          <div className="summary-actions">
-                            <button className="ghost-btn" onClick={() => void onSummarizeArticle(false)} disabled={loadingArticleSummary}>
-                              {loadingArticleSummary ? '生成中...' : '生成 AI 摘要'}
-                            </button>
-                            <button className="ghost-btn" onClick={() => void onSummarizeArticle(true)} disabled={loadingArticleSummary}>
-                              强制重算
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </header>
-
-                  {articleSummaryError && <p className="hint">AI 摘要错误: {articleSummaryError}</p>}
-
-                  {articleSummary && (
-                    <section className="ai-summary">
-                      <h4>AI 摘要</h4>
-                      {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
-                      <p className="reading-block">{plainTextBlock(articleSummary)}</p>
-                    </section>
-                  )}
-
-                  {selectedArticle.summary && (
-                    <section className="detail-section">
-                      <h4>原始摘要</h4>
-                      <p className="reading-block">{plainTextBlock(selectedArticle.summary)}</p>
-                    </section>
-                  )}
-
-                  {selectedArticle.content && (
-                    <section className="detail-section">
-                      <h4>正文</h4>
-                      <p className="reading-block prose">{plainTextBlock(selectedArticle.content)}</p>
-                    </section>
-                  )}
-
-                  {selectedArticle.external?.content && (
-                    <section className="detail-section">
-                      <h4>原文抓取（实验）</h4>
-                      <p className="hint">{selectedArticle.external.title}</p>
-                      <p className="reading-block prose">{plainTextBlock(selectedArticle.external.content)}</p>
-                      <div className="detail-toolbar-actions">
-                        <a href={selectedArticle.external.url} target="_blank" rel="noreferrer" className="ghost-btn detail-open-link">
-                          打开抓取原文
-                        </a>
-                      </div>
-                      {selectedArticle.external.truncated && <p className="hint">原文较长，已截断显示。</p>}
-                    </section>
-                  )}
-
-                  {selectedArticle.thread && (
-                    <section className="thread-section detail-section">
-                      <div className="thread-header">
-                        <h4>话题全文与评论</h4>
-                        <span className="thread-counts">
-                          共 {selectedArticle.thread.total_posts} 帖 · 展示 {visibleThreadComments.length}
-                        </span>
-                      </div>
-                      <p className="hint">{selectedArticle.thread.topic_title}</p>
-                      {selectedArticle.thread.full_content && (
-                        <p className="reading-block prose">{plainTextBlock(selectedArticle.thread.full_content)}</p>
-                      )}
-
-                      {threadComments.length > 0 && (
-                        <>
-                          <div className="thread-comments">
-                            {visibleThreadComments.map((comment, index) => (
-                              <article key={`${comment.link}-${index}`} className="thread-comment">
-                                <p className="thread-comment-meta">
-                                  #{comment.post_number || index + 2} · {comment.author || 'unknown'} ·{' '}
-                                  {comment.published_at ? formatTimeAgo(comment.published_at) : '-'}
-                                </p>
-                                <p className="reading-block">{plainTextBlock(comment.content)}</p>
-                                <a href={comment.link} target="_blank" rel="noreferrer">
-                                  定位到该评论
-                                </a>
-                              </article>
-                            ))}
-                          </div>
-                          {threadComments.length > threadPreviewCommentLimit && (
-                            <button
-                              type="button"
-                              className="ghost-btn comment-toggle"
-                              onClick={() => setExpandedThreadComments((value) => !value)}
-                            >
-                              {expandedThreadComments ? '收起评论' : `查看全部评论（${threadComments.length}）`}
-                            </button>
-                          )}
-                        </>
-                      )}
-
-                      {hasHiddenThreadComments && (
-                        <p className="hint">默认只展示前 {threadPreviewCommentLimit} 条评论，避免打断正文阅读。</p>
-                      )}
-                      {selectedArticle.thread.truncated && <p className="hint">评论过多，仅展示前 120 条。</p>}
-                    </section>
-                  )}
-                </article>
-              )}
-            </section>
-          )}
+          <ReaderDetailPanel
+            floatingDetailRef={floatingDetailRef}
+            showFloatingReader={showFloatingReader}
+            readerView={readerView}
+            selectedArticle={selectedArticle}
+            selectedFeedBriefing={selectedFeedBriefing}
+            loadingArticle={loadingArticle}
+            articleError={articleError}
+            selectedArticleID={selectedArticleID}
+            openArticle={openArticle}
+            feedBriefingScopeLabel={feedBriefingScopeLabel}
+            feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+            returnToReaderStream={returnToReaderStream}
+            closeFloatingReader={closeFloatingReader}
+            openImmersiveReader={openImmersiveReader}
+            aiModel={aiModel}
+            onGenerateFeedBriefing={onGenerateFeedBriefing}
+            loadingFeedBriefing={loadingFeedBriefing}
+            feedBriefingMeta={feedBriefingMeta}
+            feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+            feedBriefingError={feedBriefingError}
+            feedBriefing={feedBriefing}
+            feedBriefingItems={feedBriefingItems}
+            feedBriefingArticleCount={feedBriefingArticleCount}
+            formatTimeAgo={formatTimeAgo}
+            MarkdownBlock={MarkdownBlock}
+            selectedArticleReplyCountLabel={selectedArticleReplyCountLabel}
+            selectedArticleImageURL={selectedArticleImageURL}
+            closeDetailMoreMenu={closeDetailMoreMenu}
+            onSummarizeArticle={onSummarizeArticle}
+            loadingArticleSummary={loadingArticleSummary}
+            hasDetailMoreActions={hasDetailMoreActions}
+            detailMoreMenuRef={detailMoreMenuRef}
+            showDetailMoreMenu={showDetailMoreMenu}
+            toggleDetailMoreMenu={toggleDetailMoreMenu}
+            canTrackThread={canTrackThread}
+            onTrackThread={onTrackThread}
+            canForceRecalcSummary={canForceRecalcSummary}
+            articleSummaryError={articleSummaryError}
+            articleSummary={articleSummary}
+            articleSummaryMeta={articleSummaryMeta}
+            selectedSummaryTask={selectedSummaryTask}
+            isThreadArticle={isThreadArticle}
+            threadPrimaryBody={threadPrimaryBody}
+            plainTextBlock={plainTextBlock}
+            SafeHTMLBlock={SafeHTMLBlock}
+            visibleThreadComments={visibleThreadComments}
+            threadComments={threadComments}
+            threadCommentsNewestFirst={threadCommentsNewestFirst}
+            onToggleThreadCommentsNewestFirst={() => setThreadCommentsNewestFirst((value) => !value)}
+            threadPreviewCommentLimit={threadPreviewCommentLimit}
+            expandedThreadComments={expandedThreadComments}
+            onToggleExpandedThreadComments={() => setExpandedThreadComments((value) => !value)}
+            hasHiddenThreadComments={hasHiddenThreadComments}
+          />
         </>
       )}
 
       {activeTab === 'sources' && (
-        <main className="source-page-grid">
-          <section className="panel status-panel">
-              <div className="status-header">
-                <h3>来源健康面板（最近 24h）</h3>
-                <button className="ghost-btn" onClick={() => void loadStatus()} disabled={loadingStatus}>
-                  {loadingStatus ? '刷新中...' : '刷新状态'}
-                </button>
-              </div>
-              {loadingStatus && sourceStatus.length === 0 && <p className="hint">加载状态中...</p>}
-              {!loadingStatus && sourceStatus.length === 0 && <p className="hint">暂无来源状态</p>}
-
-              {sourceStatus.length > 0 && (
-                <div className="status-list">
-                  {sourceStatus.map((item) => (
-                    <article key={item.source_id} className="status-card">
-                      <div className="status-main">
-                        <div>
-                          <p className="status-name">{item.name}</p>
-                          <p className="status-meta">
-                            {item.category} · {item.enabled ? '启用' : '停用'}
-                          </p>
-                        </div>
-                        <span className={`health-badge health-${item.health}`}>{healthLabel(item.health)}</span>
-                      </div>
-
-                      <div className="status-stats">
-                        <span>成功率: {item.window_success_rate.toFixed(1)}%</span>
-                        <span>失败: {item.window_failed}</span>
-                        <span>总抓取: {item.window_total}</span>
-                        <span>连续失败: {item.consecutive_failures}</span>
-                        <span>当前间隔: {item.effective_poll_interval_sec}s</span>
-                        <span>最新状态: {item.latest_status ?? '-'}</span>
-                      </div>
-
-                      {item.last_error && <p className="status-error">最近错误: {truncate(item.last_error, 140)}</p>}
-                    </article>
-                  ))}
-                </div>
-              )}
-
-              {statusError && (
-                <div className="inline-error">
-                  <span>状态加载失败: {statusError}</span>
-                  <button className="ghost-btn" onClick={() => void loadStatus()}>
-                    重试
-                  </button>
-                </div>
-              )}
-          </section>
-
-          <section className="panel sources">
-            <h3>来源管理</h3>
-            <form className="source-form" onSubmit={onCreateSource}>
-              <label>
-                名称（可选）
-                <input
-                  value={newSourceName}
-                  onChange={(event) => setNewSourceName(event.target.value)}
-                  placeholder="留空则自动使用 RSS title"
-                />
-              </label>
-              <label>
-                RSS URL
-                <input
-                  value={newSourceURL}
-                  onChange={(event) => setNewSourceURL(event.target.value)}
-                  placeholder="https://example.com/feed.xml"
-                />
-              </label>
-              <label>
-                分类
-                <input
-                  value={newSourceCategory}
-                  onChange={(event) => setNewSourceCategory(event.target.value)}
-                  placeholder="tech"
-                />
-              </label>
-              <button type="submit" disabled={creatingSource}>
-                {creatingSource ? '创建中...' : '新增来源'}
-              </button>
-            </form>
-
-            {sourcesError && (
-              <div className="inline-error">
-                <span>来源加载失败: {sourcesError}</span>
-                <button className="ghost-btn" onClick={() => void loadSources()}>
-                  重试
-                </button>
-              </div>
-            )}
-
-            <div className="site-groups">
-              {loadingSources && <p className="hint">加载来源中...</p>}
-              {!loadingSources && sources.length === 0 && <p className="hint">暂无来源</p>}
-
-              {sourceGroups.map((group) => (
-                <section key={group.siteKey} className="site-group-card">
-                  <div className="site-group-header">
-                    <div>
-                      <p className="site-group-title">{group.siteKey}</p>
-                      <p className="hint">{group.sources.length} 个订阅源</p>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-muted source-visibility-reset"
-                      onClick={() => toggleSiteMuted(group.siteKey)}
-                    >
-                      {mutedSiteSet.has(group.siteKey) ? '恢复到聚合流' : '从聚合流隐藏'}
-                    </button>
-                  </div>
-
-                  <div className="source-list">
-                    {group.sources.map((source) => (
-                      <article key={source.id} className="source-card">
-                        {editingSourceID === source.id ? (
-                          <div className="source-edit-grid">
-                            <label>
-                              名称
-                              <input value={editSourceName} onChange={(event) => setEditSourceName(event.target.value)} />
-                            </label>
-                            <label>
-                              RSS URL
-                              <input value={editSourceURL} onChange={(event) => setEditSourceURL(event.target.value)} />
-                            </label>
-                            <label>
-                              分类
-                              <input
-                                value={editSourceCategory}
-                                onChange={(event) => setEditSourceCategory(event.target.value)}
-                              />
-                            </label>
-                            <label>
-                              间隔(秒)
-                              <input value={editSourcePollSec} onChange={(event) => setEditSourcePollSec(event.target.value)} />
-                            </label>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="source-title">{source.name}</p>
-                            <p className="source-url">{source.rss_url}</p>
-                            <p className="source-meta">
-                              <span>{source.category}</span>
-                              <span>{source.enabled ? '启用' : '停用'}</span>
-                              <span>{source.poll_interval_sec}s</span>
-                            </p>
-                          </div>
-                        )}
-                        <div className="source-actions">
-                          {editingSourceID === source.id ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void onSaveSourceEdit(source.id)}
-                                disabled={busySourceID === source.id}
-                              >
-                                保存
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-muted"
-                                onClick={onCancelEdit}
-                                disabled={busySourceID === source.id}
-                              >
-                                取消
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void onTestSource(source.id)}
-                                disabled={busySourceID === source.id}
-                              >
-                                测试
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void onRefreshSource(source.id)}
-                                disabled={busySourceID === source.id}
-                              >
-                                刷新
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-muted"
-                                onClick={() => onStartEdit(source)}
-                                disabled={busySourceID === source.id}
-                              >
-                                编辑
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-muted"
-                                onClick={() => void onToggleSourceEnabled(source)}
-                                disabled={busySourceID === source.id}
-                              >
-                                {source.enabled ? '停用' : '启用'}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-danger"
-                                onClick={() => void onDeleteSource(source)}
-                                disabled={busySourceID === source.id}
-                              >
-                                删除
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </section>
-        </main>
+        <Suspense
+          fallback={
+            <main className="source-management-page">
+              <section className="panel sources source-manage-panel">
+                <p className="hint">加载管理页面中...</p>
+              </section>
+            </main>
+          }
+        >
+          <SourceManagementPanel controller={sourceManagementController} />
+        </Suspense>
       )}
+
+      <SourceContextMenuOverlay
+        contextMenuRef={sourceContextMenuRef}
+        sourceContextMenu={sourceContextMenu}
+        busySourceID={busySourceID}
+        onQuickSetSourceEnabled={onQuickSetSourceEnabled}
+        onOpenSourceProfile={openSourceProfile}
+        onOpenDeleteConfirm={openDeleteSourceConfirm}
+      />
+
+      <SourceProfileDialog
+        sourceProfileSource={sourceProfileSource}
+        sourceProfileStatus={sourceProfileStatus}
+        sourceProfileHealth={sourceProfileHealth}
+        sourceProfileTags={sourceProfileTags}
+        sourceProfileTagPickerOpen={sourceProfileTagPickerOpen}
+        onToggleSourceProfileTagPicker={() => setSourceProfileTagPickerOpen((value) => !value)}
+        sourceProfileTagInput={sourceProfileTagInput}
+        onSetSourceProfileTagInput={setSourceProfileTagInput}
+        sourceProfileTagDrafts={sourceProfileTagDrafts}
+        sourceProfileTagCandidates={sourceProfileTagCandidates}
+        busySourceID={busySourceID}
+        onRemoveSourceProfileTag={onRemoveSourceProfileTag}
+        onAddSourceProfileTags={onAddSourceProfileTags}
+        onQuickSetSourceEnabled={onQuickSetSourceEnabled}
+        onOpenDeleteConfirm={openDeleteSourceConfirm}
+        onCloseSourceProfile={() => setSourceProfileSource(null)}
+        normalizeSourceKind={normalizeSourceKind}
+        resolveSourceSiteKey={resolveSourceSiteKey}
+        formatDateTime={formatDateTime}
+        healthToneClass={healthToneClass}
+        healthLabel={healthLabel}
+        formatTimeAgo={formatTimeAgo}
+        sourceClickCount={sourceClickCount}
+      />
+
+      <SourceDeleteConfirmDialog
+        pendingDeleteSource={pendingDeleteSource}
+        busySourceID={busySourceID}
+        onCloseDeleteConfirm={() => setPendingDeleteSource(null)}
+        onConfirmDeleteSource={onConfirmDeleteSource}
+      />
     </div>
   )
-}
-
-function FeedSkeleton() {
-  return (
-    <article className="feed-item skeleton-block">
-      <div className="skeleton skeleton-line short" />
-      <div className="skeleton skeleton-title" />
-      <div className="skeleton skeleton-line" />
-      <div className="skeleton skeleton-line" />
-    </article>
-  )
-}
-
-function resolveSourceSiteKey(source: Pick<Source, 'site_key' | 'rss_url'>): string {
-  const normalized = source.site_key?.trim().toLowerCase()
-  if (normalized && normalized !== 'rsshub.rssforever.com') return normalized
-  return deriveSiteKeyFromURL(source.rss_url)
-}
-
-function deriveSiteKeyFromURL(rawURL: string): string {
-  try {
-    const parsed = new URL(rawURL)
-    const host = parsed.hostname.trim().toLowerCase()
-    if (!host) return 'unknown-site'
-    if (host === 'rsshub.rssforever.com') {
-      const firstSegment = parsed.pathname
-        .split('/')
-        .map((item) => item.trim().toLowerCase())
-        .find((item) => item.length > 0)
-      if (firstSegment) return firstSegment
-    }
-    if (host === 'localhost') return host
-    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return host
-    const parts = host.split('.').filter(Boolean)
-    if (parts.length >= 2) {
-      return parts.slice(-2).join('.')
-    }
-    return host
-  } catch {
-    return 'unknown-site'
-  }
-}
-
-function isTrackableForumLink(rawURL: string): boolean {
-  try {
-    const parsed = new URL(rawURL)
-    const host = parsed.hostname.trim().toLowerCase()
-    const path = parsed.pathname.trim()
-    if ((host === 'www.uscardforum.com' || host === 'uscardforum.com') && /^\/t\/topic\/\d+/.test(path)) {
-      return true
-    }
-    if ((host === 'www.v2ex.com' || host === 'v2ex.com') && /^\/t\/\d+/.test(path)) {
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-function plainText(input?: string): string {
-  if (!input) return ''
-  return input
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function plainTextBlock(input?: string): string {
-  if (!input) return ''
-  return input
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\r\n/g, '\n')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n[ \t]+/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function truncate(input: string, size: number): string {
-  if (input.length <= size) return input
-  return `${input.slice(0, size)}...`
-}
-
-function formatTimeAgo(input: string): string {
-  const date = new Date(input)
-  if (Number.isNaN(date.getTime())) return '-'
-
-  const diffMS = Date.now() - date.getTime()
-  if (diffMS < 60 * 1000) return '刚刚'
-
-  const minute = 60 * 1000
-  const hour = 60 * minute
-  const day = 24 * hour
-  const week = 7 * day
-
-  if (diffMS < hour) return `${Math.floor(diffMS / minute)} 分钟前`
-  if (diffMS < day) return `${Math.floor(diffMS / hour)} 小时前`
-  if (diffMS < week) return `${Math.floor(diffMS / day)} 天前`
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(date)
-}
-
-function healthLabel(health: SourceStatus['health']): string {
-  switch (health) {
-    case 'ok':
-      return '健康'
-    case 'warn':
-      return '警告'
-    case 'error':
-      return '错误'
-    case 'stale':
-      return '陈旧'
-    case 'disabled':
-      return '停用'
-    default:
-      return '新来源'
-  }
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return String(error)
 }
 
 export default App

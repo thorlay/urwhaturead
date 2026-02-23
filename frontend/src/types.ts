@@ -4,7 +4,13 @@ export type Source = {
   name: string
   rss_url: string
   site_key: string
-  category: string
+  kind?: 'feed' | 'thread' | string
+  topic_url?: string
+  hidden_in_sidebar?: boolean
+  tags?: string[]
+  click_count?: number
+  last_clicked_at?: string
+  last_fetched_at?: string
   enabled: boolean
   poll_interval_sec: number
   created_at: string
@@ -14,14 +20,18 @@ export type Source = {
 export type FeedItem = {
   id: number
   source_id: number
+  cluster_id?: number
   source_name: string
-  source_category: string
+  source_tag: string
   title: string
   link: string
   summary?: string
+  content?: string
   author?: string
   published_at?: string
   image_url?: string
+  reply_count?: number
+  duplicate_count?: number
   created_at: string
 }
 
@@ -47,15 +57,17 @@ export type ArticleDetail = {
   id: number
   source_id: number
   source_name: string
-  source_category: string
+  source_tag: string
   raw_guid?: string
   title: string
   link: string
   summary?: string
   content?: string
+  content_html?: string
   author?: string
   published_at?: string
   image_url?: string
+  reply_count?: number
   external?: {
     url: string
     title: string
@@ -93,7 +105,7 @@ export type FeedTestResult = {
 export type SourceStatus = {
   source_id: number
   name: string
-  category: string
+  primary_tag: string
   enabled: boolean
   rss_url: string
   poll_interval_sec: number
@@ -140,6 +152,16 @@ export type ArticleSummaryResponse = {
   }
 }
 
+export type ArticleSummaryStatusResponse = {
+  data: {
+    article_id: number
+    model: string
+    status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
+    error?: string
+    updated_at: string
+  }
+}
+
 export type TrackThreadResponse = {
   ok: boolean
   created: boolean
@@ -147,4 +169,75 @@ export type TrackThreadResponse = {
   topic_url: string
   feed_url: string
   source: Source
+}
+
+export type DiscoverSourceCandidate = {
+  rss_url: string
+  name: string
+  feed_type: string
+  item_count: number
+  http_status: number
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+  existing: boolean
+  source_id?: number
+  source_name?: string
+  suggested_tag: string
+}
+
+export type DiscoverSourcesResponse = {
+  data: DiscoverSourceCandidate[]
+  meta: {
+    seed_url: string
+    count: number
+    probed_count: number
+  }
+}
+
+export type ReclassifySourceResult = {
+  source_id: number
+  name: string
+  rss_url: string
+  old_tags: string[]
+  new_tags: string[]
+  changed: boolean
+  reason: string
+  error?: string
+}
+
+export type ReclassifySourcesResponse = {
+  data: ReclassifySourceResult[]
+  meta: {
+    count: number
+    changed: number
+    errors: number
+    only_general: boolean
+    probe: boolean
+    dry_run: boolean
+    limit: number
+  }
+}
+
+export type FeedBriefingResponse = {
+  data: {
+    digest_key: string
+    summary: string
+    model: string
+    provider: string
+    input_chars: number
+    truncated: boolean
+    generated_at: string
+    cache_hit: boolean
+    article_count: number
+    input_items: FeedBriefingInputItem[]
+  }
+}
+
+export type FeedBriefingInputItem = {
+  id: number
+  source_id: number
+  source_name: string
+  title: string
+  link: string
+  published_at?: string
 }

@@ -1,4 +1,5 @@
 .env
+oauth_creds.json
 .gocache/
 .gomodcache/
 .run/
@@ -9,3 +10,4 @@ data/pgadmin/
 bin/
 *.test
 coverage.out
+.token

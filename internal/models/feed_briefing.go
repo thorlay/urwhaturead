@@ -5,7 +5,7 @@ import "time"
 type FeedBriefing struct {
 	ID          uint64    `json:"id" gorm:"primaryKey;column:id"`
 	DigestKey   string    `json:"digest_key" gorm:"column:digest_key;not null;uniqueIndex:ux_feed_briefings_digest_key"`
-	Category    string    `json:"category" gorm:"column:category;not null;default:''"`
+	Tag         string    `json:"tag" gorm:"column:tag;not null;default:''"`
 	Keyword     string    `json:"keyword" gorm:"column:keyword;not null;default:''"`
 	SourceIDs   string    `json:"source_ids" gorm:"column:source_ids;not null;default:''"`
 	ArticleIDs  string    `json:"article_ids" gorm:"column:article_ids;not null;default:''"`

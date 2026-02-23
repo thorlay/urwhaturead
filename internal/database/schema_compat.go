@@ -1,0 +1,79 @@
+package database
+
+import (
+	"fmt"
+
+	"gorm.io/gorm"
+)
+
+// EnsureRuntimeCompatibilitySchema applies non-destructive compatibility adjustments
+// so older local databases keep working after model/schema evolutions.
+func EnsureRuntimeCompatibilitySchema(db *gorm.DB) error {
+	if err := ensureSourceTagSchema(db); err != nil {
+		return err
+	}
+	if err := ensureFeedBriefingTagSchema(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureSourceTagSchema(db *gorm.DB) error {
+	statements := []string{
+		`ALTER TABLE sources ADD COLUMN IF NOT EXISTS tags TEXT[]`,
+		`DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1
+				FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'sources' AND column_name = 'category'
+			) THEN
+				UPDATE sources
+				SET tags = ARRAY[LOWER(TRIM(category))]
+				WHERE (tags IS NULL OR cardinality(tags) = 0) AND TRIM(category) <> '';
+			END IF;
+		END
+		$$`,
+		`UPDATE sources SET tags = ARRAY['general']
+		 WHERE tags IS NULL OR cardinality(tags) = 0`,
+		`ALTER TABLE sources ALTER COLUMN tags SET NOT NULL`,
+		`ALTER TABLE sources ALTER COLUMN tags SET DEFAULT '{}'`,
+		`CREATE INDEX IF NOT EXISTS ix_sources_tags_gin ON sources USING GIN(tags)`,
+		`ALTER TABLE sources DROP COLUMN IF EXISTS category`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("exec source compatibility statement failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureFeedBriefingTagSchema(db *gorm.DB) error {
+	statements := []string{
+		`ALTER TABLE feed_briefings ADD COLUMN IF NOT EXISTS tag TEXT`,
+		`DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1
+				FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'feed_briefings' AND column_name = 'category'
+			) THEN
+				UPDATE feed_briefings
+				SET tag = category
+				WHERE COALESCE(tag, '') = '';
+			END IF;
+		END
+		$$`,
+		`UPDATE feed_briefings SET tag = '' WHERE tag IS NULL`,
+		`ALTER TABLE feed_briefings ALTER COLUMN tag SET NOT NULL`,
+		`ALTER TABLE feed_briefings ALTER COLUMN tag SET DEFAULT ''`,
+		`ALTER TABLE feed_briefings DROP COLUMN IF EXISTS category`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("exec feed briefing compatibility statement failed: %w", err)
+		}
+	}
+	return nil
+}

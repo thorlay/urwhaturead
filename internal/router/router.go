@@ -16,6 +16,9 @@ func New(
 	refresher worker.Refresher,
 	backoffMaxFactor int,
 	summaryClient *aisummary.Client,
+	articleOptions handlers.ArticleHandlerOptions,
+	adminAuthEnabled bool,
+	adminToken string,
 ) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
@@ -25,17 +28,25 @@ func New(
 	})
 
 	api := engine.Group("/api/v1")
-	adminStatusHandler := handlers.NewAdminStatusHandler(db, backoffMaxFactor)
-	adminStatusHandler.RegisterRoutes(api.Group("/admin"))
+	feedHandler := handlers.NewFeedHandler(db, summaryClient)
+	feedHandler.RegisterReadRoutes(api.Group("/feed"))
 
-	feedHandler := handlers.NewFeedHandler(db)
-	feedHandler.RegisterRoutes(api.Group("/feed"))
-
-	articleHandler := handlers.NewArticleHandler(db, summaryClient)
-	articleHandler.RegisterRoutes(api.Group("/articles"))
+	articleHandler := handlers.NewArticleHandlerWithOptions(db, summaryClient, articleOptions)
+	articleHandler.RegisterReadRoutes(api.Group("/articles"))
 
 	sourceHandler := handlers.NewSourceHandler(db, refresher)
-	sourceHandler.RegisterRoutes(api.Group("/sources"))
+	sourceHandler.RegisterReadRoutes(api.Group("/sources"))
+
+	adminAPI := engine.Group("/api/v1")
+	if adminAuthEnabled {
+		adminAPI.Use(RequireAdminToken(adminToken))
+	}
+
+	adminStatusHandler := handlers.NewAdminStatusHandler(db, backoffMaxFactor)
+	adminStatusHandler.RegisterRoutes(adminAPI.Group("/admin"))
+	feedHandler.RegisterWriteRoutes(adminAPI.Group("/feed"))
+	articleHandler.RegisterWriteRoutes(adminAPI.Group("/articles"))
+	sourceHandler.RegisterWriteRoutes(adminAPI.Group("/sources"))
 
 	return engine
 }

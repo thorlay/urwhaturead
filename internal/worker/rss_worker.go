@@ -15,7 +15,10 @@ import (
 	"sync"
 	"time"
 
+	"quick/internal/clustering"
+	"quick/internal/feedextract"
 	"quick/internal/models"
+	"quick/internal/textclean"
 
 	"github.com/mmcdole/gofeed"
 	"gorm.io/datatypes"
@@ -392,16 +395,19 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 		return models.Article{}, false
 	}
 
-	title := strings.TrimSpace(item.Title)
+	title := textclean.NormalizeInline(item.Title)
 	if title == "" {
 		title = link
 	}
 
-	summary := firstNonEmpty(item.Description, item.Content)
-	content := strings.TrimSpace(item.Content)
+	summary := firstNonEmpty(
+		textclean.NormalizeFromHTML(item.Description),
+		textclean.NormalizeFromHTML(item.Content),
+	)
+	content := textclean.NormalizeFromHTMLBlock(item.Content)
 	author := ""
 	if item.Author != nil {
-		author = strings.TrimSpace(item.Author.Name)
+		author = textclean.NormalizeInline(item.Author.Name)
 	}
 
 	var publishedAt *time.Time
@@ -419,20 +425,8 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 	}
 
 	var imageURL *string
-	if item.Image != nil {
-		if value := strings.TrimSpace(item.Image.URL); value != "" {
-			imageURL = &value
-		}
-	}
-	if imageURL == nil {
-		for _, enclosure := range item.Enclosures {
-			if strings.HasPrefix(strings.ToLower(enclosure.Type), "image/") {
-				if value := strings.TrimSpace(enclosure.URL); value != "" {
-					imageURL = &value
-					break
-				}
-			}
-		}
+	if value := feedextract.ImageFromFeedItem(item); value != "" {
+		imageURL = &value
 	}
 
 	payload, _ := json.Marshal(item)
@@ -445,13 +439,15 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 	hashBytes := sha256.Sum256([]byte(hashInput))
 
 	article := models.Article{
-		SourceID:    sourceID,
-		RawGUID:     rawGUID,
-		Link:        link,
-		Title:       title,
-		ContentHash: hex.EncodeToString(hashBytes[:]),
-		Raw:         datatypes.JSON(payload),
-		Tags:        models.StringArray(normalizeTags(item.Categories)),
+		SourceID:        sourceID,
+		RawGUID:         rawGUID,
+		Link:            link,
+		CanonicalLink:   clustering.CanonicalizeLink(link),
+		Title:           title,
+		NormalizedTitle: clustering.NormalizeTitle(title),
+		ContentHash:     hex.EncodeToString(hashBytes[:]),
+		Raw:             datatypes.JSON(payload),
+		Tags:            models.StringArray(normalizeTags(item.Categories)),
 	}
 	if summary != "" {
 		article.Summary = &summary
@@ -467,6 +463,9 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 	}
 	if imageURL != nil {
 		article.ImageURL = imageURL
+	}
+	if replyCount := feedextract.ReplyCountFromFeedItem(item); replyCount != nil {
+		article.ReplyCount = replyCount
 	}
 
 	return article, true
@@ -519,6 +518,9 @@ func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article
 			return false, err
 		}
 		if count > 0 {
+			if err := w.updateExistingArticleReplyCount(ctx, article); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 	}
@@ -531,6 +533,9 @@ func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article
 			return false, err
 		}
 		if count > 0 {
+			if err := w.updateExistingArticleReplyCount(ctx, article); err != nil {
+				return false, err
+			}
 			return false, nil
 		}
 	}
@@ -547,14 +552,36 @@ func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article
 		}
 	}
 
-	if err := tx.Create(&article).Error; err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "duplicate key value violates unique constraint") {
+	if err := tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&article).Error; err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate key value violates unique constraint") {
+				return gorm.ErrDuplicatedKey
+			}
+			return err
+		}
+		if err := clustering.AssignArticleToCluster(tx, &article); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return false, nil
 		}
 		return false, err
 	}
 
 	return true, nil
+}
+
+func (w *RSSWorker) updateExistingArticleReplyCount(ctx context.Context, article models.Article) error {
+	if article.ReplyCount == nil {
+		return nil
+	}
+	return w.db.WithContext(ctx).
+		Model(&models.Article{}).
+		Where("source_id = ? AND link = ?", article.SourceID, article.Link).
+		Where("reply_count IS NULL OR reply_count <> ?", *article.ReplyCount).
+		Update("reply_count", *article.ReplyCount).Error
 }
 
 func (w *RSSWorker) markSourceSuccess(
