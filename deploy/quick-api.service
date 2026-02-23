@@ -1,0 +1,17 @@
+[Unit]
+Description=Quick API Server
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=REPLACE_WITH_YOUR_LINUX_USER
+WorkingDirectory=/opt/quick
+EnvironmentFile=/opt/quick/.env
+ExecStart=/opt/quick/bin/quick-server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+

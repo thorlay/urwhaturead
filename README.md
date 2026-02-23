@@ -12,6 +12,15 @@
 docker compose ps
 ```
 
+Architecture quickstart for agents:
+
+- `docs/ARCHITECTURE.md`
+- `docs/DEPLOYMENT_ONE_VPS.md`
+- `deploy/Caddyfile.urwhaturead.com`
+- `deploy/quick-api.service`
+- `deploy/.env.prod.example`
+- `deploy/.env.prod.urwhaturead.example`
+
 `docker-compose.yml` uses `pgvector/pgvector:pg16` so vector similarity dedupe works out of the box.
 
 When healthy, connect with:
