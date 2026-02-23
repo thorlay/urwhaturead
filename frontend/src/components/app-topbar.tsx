@@ -6,9 +6,12 @@ type AppTopbarProps = {
   sourcesCount: number
   loadingSources: boolean
   loadingFeed: boolean
+  adminAuthenticated: boolean
   onOpenReaderTab: () => void
   onOpenSourcesTab: () => void
   onRefreshAll: () => void
+  onAdminLogin: () => void
+  onAdminLogout: () => void
 }
 
 export function AppTopbar(props: AppTopbarProps) {
@@ -17,9 +20,12 @@ export function AppTopbar(props: AppTopbarProps) {
     sourcesCount,
     loadingSources,
     loadingFeed,
+    adminAuthenticated,
     onOpenReaderTab,
     onOpenSourcesTab,
     onRefreshAll,
+    onAdminLogin,
+    onAdminLogout,
   } = props
 
   return (
@@ -52,6 +58,15 @@ export function AppTopbar(props: AppTopbarProps) {
         <Button type="button" variant="outline" size="sm" onClick={onRefreshAll} disabled={loadingSources || loadingFeed}>
           刷新全部
         </Button>
+        {adminAuthenticated ? (
+          <Button type="button" variant="outline" size="sm" onClick={onAdminLogout}>
+            退出管理
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" size="sm" onClick={onAdminLogin}>
+            管理员登录
+          </Button>
+        )}
       </div>
     </header>
   )

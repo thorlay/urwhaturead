@@ -241,3 +241,18 @@ export type FeedBriefingInputItem = {
   link: string
   published_at?: string
 }
+
+export type AdminLoginResponse = {
+  ok: boolean
+  username: string
+  expires_in_sec: number
+}
+
+export type AdminSessionResponse = {
+  data: {
+    enabled: boolean
+    configured: boolean
+    authenticated: boolean
+    username?: string
+  }
+}

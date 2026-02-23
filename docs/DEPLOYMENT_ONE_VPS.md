@@ -82,6 +82,8 @@ cp deploy/.env.prod.urwhaturead.example .env
 # 必改
 ADMIN_AUTH_ENABLED=true
 ADMIN_TOKEN=请换成强随机字符串
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=请换成强密码
 POSTGRES_PASSWORD=请换成强密码
 
 # 建议
@@ -104,6 +106,7 @@ AI_SUMMARY_MODEL=gemini-2.5-flash
 
 - 如果 AI 代理不在本机，`AI_SUMMARY_BASE_URL` 要改成真实外网/内网地址。
 - `ADMIN_TOKEN` 不要和其它密码复用。
+- `ADMIN_PASSWORD` 必须设置，否则管理员登录接口不可用。
 - 所有 `CHANGE_ME_*` 必须替换后再启动服务。
 
 ---
@@ -269,6 +272,7 @@ sudo ufw status
    （你的应为 `https://urwhaturead.com`）
 4. 前端可正常加载来源与 feed
 5. 管理写操作在未带 token 时被拒绝，带 token 时成功
+6. 页面右上角可用“管理员登录”按钮登录（使用 `ADMIN_USERNAME/ADMIN_PASSWORD`）
 
 ---
 

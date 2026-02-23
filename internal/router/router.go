@@ -19,6 +19,8 @@ func New(
 	articleOptions handlers.ArticleHandlerOptions,
 	adminAuthEnabled bool,
 	adminToken string,
+	adminUsername string,
+	adminPassword string,
 ) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
@@ -36,6 +38,14 @@ func New(
 
 	sourceHandler := handlers.NewSourceHandler(db, refresher)
 	sourceHandler.RegisterReadRoutes(api.Group("/sources"))
+
+	adminAuthHandler := handlers.NewAdminAuthHandler(handlers.AdminAuthOptions{
+		Enabled:  adminAuthEnabled,
+		Token:    adminToken,
+		Username: adminUsername,
+		Password: adminPassword,
+	})
+	adminAuthHandler.RegisterPublicRoutes(api.Group("/admin"))
 
 	adminAPI := engine.Group("/api/v1")
 	if adminAuthEnabled {

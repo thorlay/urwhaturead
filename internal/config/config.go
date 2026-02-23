@@ -10,6 +10,8 @@ type Config struct {
 	ServerPort                     string
 	AdminAuthEnabled               bool
 	AdminToken                     string
+	AdminUsername                  string
+	AdminPassword                  string
 	WorkerTickSec                  int
 	WorkerRequestRetries           int
 	WorkerRetryBaseSec             int
@@ -51,6 +53,8 @@ func Load() Config {
 		ServerPort:                     envOrDefault("SERVER_PORT", "8080"),
 		AdminAuthEnabled:               envOrDefaultBool("ADMIN_AUTH_ENABLED", strings.TrimSpace(adminToken) != ""),
 		AdminToken:                     adminToken,
+		AdminUsername:                  envOrDefault("ADMIN_USERNAME", "admin"),
+		AdminPassword:                  envOrDefault("ADMIN_PASSWORD", ""),
 		WorkerTickSec:                  envOrDefaultInt("WORKER_TICK_SEC", 30),
 		WorkerRequestRetries:           envOrDefaultInt("WORKER_REQUEST_RETRIES", 2),
 		WorkerRetryBaseSec:             envOrDefaultInt("WORKER_RETRY_BASE_SEC", 2),

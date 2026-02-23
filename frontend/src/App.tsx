@@ -1,5 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import {
+  adminLogin as adminLoginRequest,
+  adminLogout as adminLogoutRequest,
+  getAdminSession,
   getArticleSummary,
 } from './api'
 import type { Source, SourceStatus } from './types'
@@ -110,6 +113,7 @@ const SourceDeleteConfirmDialog = lazy(async () => {
 })
 
 function App() {
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const {
     floatingDetailRef,
     sourceSelectAllRef,
@@ -1121,9 +1125,58 @@ function App() {
     closeSourceContextMenu()
   }
 
+  const refreshAdminSession = useCallback(async () => {
+    try {
+      const response = await getAdminSession()
+      setAdminAuthenticated(Boolean(response.data.authenticated))
+    } catch {
+      setAdminAuthenticated(false)
+    }
+  }, [])
+
+  const onAdminLogin = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const username = window.prompt('管理员账号', 'admin')?.trim() ?? ''
+    if (!username) {
+      return
+    }
+    const password = window.prompt(`管理员密码 (${username})`) ?? ''
+    if (!password) {
+      setNotice({ kind: 'error', text: '管理员密码不能为空。' })
+      return
+    }
+
+    try {
+      await adminLoginRequest(username, password)
+      setAdminAuthenticated(true)
+      setNotice({ kind: 'info', text: '管理员登录成功。' })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `管理员登录失败: ${toErrorMessage(error)}` })
+    }
+  }, [setNotice])
+
+  const onAdminLogout = useCallback(async () => {
+    try {
+      await adminLogoutRequest()
+    } catch {
+      // keep logout UX idempotent
+    }
+    try {
+      window.localStorage.removeItem('quick_admin_token')
+    } catch {
+      // ignore storage failure
+    }
+    setAdminAuthenticated(false)
+    setNotice({ kind: 'info', text: '已退出管理权限。' })
+  }, [setNotice])
+
   useEffect(() => {
     void loadSources()
     void loadFeed(false)
+    void refreshAdminSession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1539,6 +1592,7 @@ function App() {
         sourcesCount={sources.length}
         loadingSources={loadingSources}
         loadingFeed={loadingFeed}
+        adminAuthenticated={adminAuthenticated}
         onOpenReaderTab={() => {
           finalizeReaderSession('close')
           setActiveTab('reader')
@@ -1553,6 +1607,12 @@ function App() {
         }}
         onRefreshAll={() => {
           void refreshAll()
+        }}
+        onAdminLogin={() => {
+          void onAdminLogin()
+        }}
+        onAdminLogout={() => {
+          void onAdminLogout()
         }}
       />
 

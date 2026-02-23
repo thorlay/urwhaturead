@@ -85,6 +85,8 @@ Main vars:
 - `SERVER_PORT`
 - `ADMIN_AUTH_ENABLED`
 - `ADMIN_TOKEN` (or `ADMIN_API_KEY`)
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
 - `WORKER_TICK_SEC`
 - `WORKER_REQUEST_RETRIES`
 - `WORKER_RETRY_BASE_SEC`
@@ -223,6 +225,22 @@ Source APIs:
 - `DELETE /api/v1/sources/:id`
 - `POST /api/v1/sources/:id/test`
 - `POST /api/v1/sources/:id/refresh`
+
+Admin auth APIs:
+
+- `POST /api/v1/admin/login`
+- `POST /api/v1/admin/logout`
+- `GET /api/v1/admin/session`
+
+Admin login example:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"your_admin_password"}'
+```
+
+After login succeeds, browser receives `HttpOnly` cookie `quick_admin_token`; write APIs then work without manually setting localStorage token.
 
 Background worker:
 

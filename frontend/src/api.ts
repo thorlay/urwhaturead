@@ -1,4 +1,6 @@
 import type {
+  AdminLoginResponse,
+  AdminSessionResponse,
   ArticleSummaryResponse,
   ArticleSummaryStatusResponse,
   DiscoverSourcesResponse,
@@ -283,4 +285,30 @@ export async function getFeedBriefingCache(payload: {
     throw new Error(await readErrorMessage(response))
   }
   return (await response.json()) as FeedBriefingResponse
+}
+
+export async function adminLogin(username: string, password: string): Promise<AdminLoginResponse> {
+  return request<AdminLoginResponse>('/api/v1/admin/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: username.trim(),
+      password,
+    }),
+  })
+}
+
+export async function adminLogout(): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/v1/admin/logout', {
+    method: 'POST',
+  })
+}
+
+export async function getAdminSession(): Promise<AdminSessionResponse> {
+  const response = await fetch('/api/v1/admin/session', {
+    headers: buildHeaders({ method: 'POST' }),
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response))
+  }
+  return (await response.json()) as AdminSessionResponse
 }

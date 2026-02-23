@@ -102,6 +102,8 @@ func main() {
 		articleOptions,
 		cfg.AdminAuthEnabled,
 		cfg.AdminToken,
+		cfg.AdminUsername,
+		cfg.AdminPassword,
 	)
 	server := &http.Server{
 		Addr:              ":" + cfg.ServerPort,
