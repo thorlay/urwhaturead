@@ -1,10 +1,13 @@
-import { Fragment, type RefObject } from 'react'
+import { Fragment, Suspense, lazy, memo, useCallback, useMemo, type RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
+
+const ReaderFeedFilters = lazy(async () => {
+  const module = await import('@/components/reader-feed-filters')
+  return { default: module.ReaderFeedFilters }
+})
 
 type FeedSummaryTaskStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -75,6 +78,274 @@ type ReaderFeedPanelProps = {
   summaryTaskStatusLabel: (status: FeedSummaryTaskStatus) => string
 }
 
+type FeedBriefingListItemProps = {
+  itemKey: string
+  selectedFeedBriefing: boolean
+  feedTitleOnlyMode: boolean
+  feedBriefingPreviewText: string
+  feedBriefingScopeLabel: string
+  feedBriefingFreshnessLabel: string
+  feedBriefingNewArticleCount: number
+  feedBriefingArticleCount: number
+  feedBriefingItemsCount: number
+  onOpenFeedBriefing: () => void
+}
+
+const FeedBriefingListItem = memo(function FeedBriefingListItem(props: FeedBriefingListItemProps) {
+  const {
+    itemKey,
+    selectedFeedBriefing,
+    feedTitleOnlyMode,
+    feedBriefingPreviewText,
+    feedBriefingScopeLabel,
+    feedBriefingFreshnessLabel,
+    feedBriefingNewArticleCount,
+    feedBriefingArticleCount,
+    feedBriefingItemsCount,
+    onOpenFeedBriefing,
+  } = props
+
+  return (
+    <article
+      key={itemKey}
+      className={cn('feed-item', 'feed-item-briefing', selectedFeedBriefing && 'active')}
+      onClick={onOpenFeedBriefing}
+    >
+      <div className="feed-item-body">
+        <div className="feed-item-content">
+          {feedTitleOnlyMode ? (
+            <div className="feed-item-compact-row">
+              <h3 className="feed-item-title">
+                <span className="feed-item-inline-title">AI 聚合速览</span>
+                {feedBriefingPreviewText && (
+                  <>
+                    <span className="feed-item-inline-sep" aria-hidden="true">
+                      {' '}
+                      ·{' '}
+                    </span>
+                    <span className="feed-item-inline-summary">{feedBriefingPreviewText}</span>
+                  </>
+                )}
+              </h3>
+              <div className="feed-item-compact-meta">
+                <span className="feed-source feed-item-compact-source">{feedBriefingScopeLabel || '当前阅读流'}</span>
+                {feedBriefingFreshnessLabel && (
+                  <>
+                    <span className="feed-sep">·</span>
+                    <span>{feedBriefingFreshnessLabel}</span>
+                  </>
+                )}
+                {feedBriefingNewArticleCount > 0 && (
+                  <>
+                    <span className="feed-sep">·</span>
+                    <span className="feed-briefing-stale">新增 {feedBriefingNewArticleCount}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="feed-topline">
+                <span className="feed-source">AI 聚合速览</span>
+                <span className="feed-sep">·</span>
+                <span>{feedBriefingScopeLabel || '当前阅读流'}</span>
+                {feedBriefingFreshnessLabel && (
+                  <>
+                    <span className="feed-sep">·</span>
+                    <span>{feedBriefingFreshnessLabel}</span>
+                  </>
+                )}
+                <span className="feed-sep">·</span>
+                <span>{feedBriefingArticleCount || feedBriefingItemsCount || 0} 篇</span>
+                {feedBriefingNewArticleCount > 0 && (
+                  <>
+                    <span className="feed-sep">·</span>
+                    <span className="feed-briefing-stale">速览后新增 {feedBriefingNewArticleCount} 条</span>
+                  </>
+                )}
+              </div>
+              <h3 className="feed-item-title">AI 聚合速览</h3>
+              <p className="feed-item-summary">{feedBriefingPreviewText}</p>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+})
+
+type FeedArticleListItemProps = {
+  item: FeedItem
+  isActive: boolean
+  isRead: boolean
+  feedTitleOnlyMode: boolean
+  showFeedImages: boolean
+  summaryTaskStatus: FeedSummaryTaskStatus | null
+  summaryTaskStatusLabel: (status: FeedSummaryTaskStatus) => string
+  onOpenArticle: (articleID: number) => Promise<void>
+  normalizeImageURL: (rawURL?: string) => string | null
+  formatTimeAgo: (input: string) => string
+  formatTimeAgoCompact: (input: string) => string
+  formatReplyCount: (value?: number) => string
+  buildCompactTitleParts: (title: string, summary?: string) => { title: string; summary: string }
+  plainText: (input?: string) => string
+  truncate: (input: string, size: number) => string
+}
+
+const FeedArticleListItem = memo(
+  function FeedArticleListItem(props: FeedArticleListItemProps) {
+    const {
+      item,
+      isActive,
+      isRead,
+      feedTitleOnlyMode,
+      showFeedImages,
+      summaryTaskStatus,
+      summaryTaskStatusLabel,
+      onOpenArticle,
+      normalizeImageURL,
+      formatTimeAgo,
+      formatTimeAgoCompact,
+      formatReplyCount,
+      buildCompactTitleParts,
+      plainText,
+      truncate,
+    } = props
+
+    const previewImageURL = useMemo(() => normalizeImageURL(item.image_url), [item.image_url, normalizeImageURL])
+    const publishedLabel = useMemo(
+      () => formatTimeAgo(item.published_at ?? item.created_at),
+      [formatTimeAgo, item.created_at, item.published_at],
+    )
+    const compactPublishedLabel = useMemo(
+      () => formatTimeAgoCompact(item.published_at ?? item.created_at),
+      [formatTimeAgoCompact, item.created_at, item.published_at],
+    )
+    const replyCountText = useMemo(() => formatReplyCount(item.reply_count), [formatReplyCount, item.reply_count])
+    const compactTitleParts = useMemo(
+      () => buildCompactTitleParts(item.title, item.summary),
+      [buildCompactTitleParts, item.summary, item.title],
+    )
+
+    const handleOpen = useCallback(() => {
+      void onOpenArticle(item.id)
+    }, [item.id, onOpenArticle])
+
+    return (
+      <article
+        className={cn('feed-item', isActive && 'active', isRead && 'read')}
+        onClick={handleOpen}
+      >
+        <div className="feed-item-body">
+          <div className="feed-item-content">
+            {feedTitleOnlyMode ? (
+              <div className="feed-item-compact-row">
+                <h3 className="feed-item-title">
+                  <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
+                  {compactTitleParts.summary && (
+                    <>
+                      <span className="feed-item-inline-sep" aria-hidden="true">
+                        {' '}
+                        ·{' '}
+                      </span>
+                      <span className="feed-item-inline-summary">{compactTitleParts.summary}</span>
+                    </>
+                  )}
+                </h3>
+                <div className="feed-item-compact-meta">
+                  <span className="feed-source feed-item-compact-source">{item.source_name}</span>
+                  <span className="feed-sep">·</span>
+                  <span>{compactPublishedLabel}</span>
+                  {replyCountText && (
+                    <>
+                      <span className="feed-sep">·</span>
+                      <span>{replyCountText}</span>
+                    </>
+                  )}
+                  {summaryTaskStatus && (
+                    <>
+                      <span className="feed-sep">·</span>
+                      <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
+                        AI {summaryTaskStatusLabel(summaryTaskStatus)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="feed-topline">
+                  <span className="feed-source">{item.source_name}</span>
+                  <span className="feed-sep">·</span>
+                  <span>{item.source_tag}</span>
+                  <span className="feed-sep">·</span>
+                  <span>{publishedLabel}</span>
+                  {replyCountText && (
+                    <>
+                      <span className="feed-sep">·</span>
+                      <span>{replyCountText}</span>
+                    </>
+                  )}
+                  {item.duplicate_count && item.duplicate_count > 1 && (
+                    <>
+                      <span className="feed-sep">·</span>
+                      <span>合并 {item.duplicate_count} 条</span>
+                    </>
+                  )}
+                  {summaryTaskStatus && (
+                    <>
+                      <span className="feed-sep">·</span>
+                      <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
+                        AI {summaryTaskStatusLabel(summaryTaskStatus)}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <h3 className="feed-item-title">{item.title}</h3>
+                <p className="feed-item-summary">{truncate(plainText(item.summary), 175)}</p>
+              </>
+            )}
+          </div>
+          {!feedTitleOnlyMode && showFeedImages && previewImageURL && (
+            <div className="feed-item-media">
+              <img
+                src={previewImageURL}
+                alt=""
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  const target = event.currentTarget
+                  const wrapper = target.parentElement
+                  target.style.display = 'none'
+                  if (wrapper) {
+                    wrapper.style.display = 'none'
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </article>
+    )
+  },
+  (prev, next) =>
+    prev.item === next.item &&
+    prev.isActive === next.isActive &&
+    prev.isRead === next.isRead &&
+    prev.feedTitleOnlyMode === next.feedTitleOnlyMode &&
+    prev.showFeedImages === next.showFeedImages &&
+    prev.summaryTaskStatus === next.summaryTaskStatus &&
+    prev.summaryTaskStatusLabel === next.summaryTaskStatusLabel &&
+    prev.onOpenArticle === next.onOpenArticle &&
+    prev.normalizeImageURL === next.normalizeImageURL &&
+    prev.formatTimeAgo === next.formatTimeAgo &&
+    prev.formatTimeAgoCompact === next.formatTimeAgoCompact &&
+    prev.formatReplyCount === next.formatReplyCount &&
+    prev.buildCompactTitleParts === next.buildCompactTitleParts &&
+    prev.plainText === next.plainText &&
+    prev.truncate === next.truncate,
+)
+
 export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
   const {
     showFloatingReader,
@@ -142,74 +413,6 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     getSummaryTaskStatus,
     summaryTaskStatusLabel,
   } = props
-
-  const renderFeedBriefingListItem = (key: string) => (
-    <article
-      key={key}
-      className={cn('feed-item', 'feed-item-briefing', selectedFeedBriefing && 'active')}
-      onClick={onOpenFeedBriefing}
-    >
-      <div className="feed-item-body">
-        <div className="feed-item-content">
-          {feedTitleOnlyMode ? (
-            <div className="feed-item-compact-row">
-              <h3 className="feed-item-title">
-                <span className="feed-item-inline-title">AI 聚合速览</span>
-                {feedBriefingPreviewText && (
-                  <>
-                    <span className="feed-item-inline-sep" aria-hidden="true">
-                      {' '}
-                      ·{' '}
-                    </span>
-                    <span className="feed-item-inline-summary">{feedBriefingPreviewText}</span>
-                  </>
-                )}
-              </h3>
-              <div className="feed-item-compact-meta">
-                <span className="feed-source feed-item-compact-source">{feedBriefingScopeLabel || '当前阅读流'}</span>
-                {feedBriefingFreshnessLabel && (
-                  <>
-                    <span className="feed-sep">·</span>
-                    <span>{feedBriefingFreshnessLabel}</span>
-                  </>
-                )}
-                {feedBriefingNewArticleCount > 0 && (
-                  <>
-                    <span className="feed-sep">·</span>
-                    <span className="feed-briefing-stale">新增 {feedBriefingNewArticleCount}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="feed-topline">
-                <span className="feed-source">AI 聚合速览</span>
-                <span className="feed-sep">·</span>
-                <span>{feedBriefingScopeLabel || '当前阅读流'}</span>
-                {feedBriefingFreshnessLabel && (
-                  <>
-                    <span className="feed-sep">·</span>
-                    <span>{feedBriefingFreshnessLabel}</span>
-                  </>
-                )}
-                <span className="feed-sep">·</span>
-                <span>{feedBriefingArticleCount || feedBriefingItems.length || 0} 篇</span>
-                {feedBriefingNewArticleCount > 0 && (
-                  <>
-                    <span className="feed-sep">·</span>
-                    <span className="feed-briefing-stale">速览后新增 {feedBriefingNewArticleCount} 条</span>
-                  </>
-                )}
-              </div>
-              <h3 className="feed-item-title">AI 聚合速览</h3>
-              <p className="feed-item-summary">{feedBriefingPreviewText}</p>
-            </>
-          )}
-        </div>
-      </div>
-    </article>
-  )
 
   return (
     <section
@@ -310,84 +513,30 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         {hasActiveFilters && !showFeedSearch && <p className="hint">已启用筛选，点击可快速调整。</p>}
       </div>
 
-      {showFeedSearch && (
-        <>
-          <div className="feed-filters">
-            <Input
-              value={keyword}
-              onChange={(event) => onChangeKeyword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  onApplyFilters()
-                }
-              }}
-              placeholder="搜索标题/摘要"
-            />
-            <div className="feed-filter-actions">
-              <Button type="button" onClick={onApplyFilters}>
-                搜索
-              </Button>
-              <Button type="button" variant="outline" onClick={onToggleAdvancedFilters}>
-                {showAdvancedFilters ? '收起筛选' : '筛选'}
-              </Button>
-            </div>
-          </div>
-
-          {showAdvancedFilters && (
-            <div className="feed-filters-advanced">
-              <Select value={tagFilter} onChange={(event) => onChangeTagFilter(event.target.value)}>
-                <option value="">全部标签</option>
-                {availableTags.map((tag) => (
-                  <option key={tag} value={tag}>
-                    {tag}
-                  </option>
-                ))}
-              </Select>
-              <Select value={sourceFilterSelectValue} onChange={(event) => onChangeSourceFilter(event.target.value)}>
-                <option value="">全部来源</option>
-                {readerSources.map((source) => (
-                  <option key={source.id} value={String(source.id)}>
-                    {source.name}
-                  </option>
-                ))}
-              </Select>
-              <Button type="button" variant="outline" onClick={onClearFilters}>
-                清空筛选
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-
-      {hasActiveFilters && (
-        <div className="filter-chips">
-          {keyword.trim() && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('keyword')}>
-              关键词: {keyword.trim()} ×
-            </Button>
-          )}
-          {tagFilter && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('tag')}>
-              标签: {tagFilter} ×
-            </Button>
-          )}
-          {sourceFilter && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('source')}>
-              {sourceFilterChipLabel} ×
-            </Button>
-          )}
-          {unreadOnly && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('unread')}>
-              仅未读 ×
-            </Button>
-          )}
-          {mutedSiteKeys.length > 0 && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('muted_sites')}>
-              已隐藏网站: {mutedSiteKeys.length} ×
-            </Button>
-          )}
-        </div>
+      {(showFeedSearch || hasActiveFilters) && (
+        <Suspense fallback={null}>
+          <ReaderFeedFilters
+            showFeedSearch={showFeedSearch}
+            showAdvancedFilters={showAdvancedFilters}
+            hasActiveFilters={hasActiveFilters}
+            keyword={keyword}
+            tagFilter={tagFilter}
+            sourceFilter={sourceFilter}
+            mutedSiteKeys={mutedSiteKeys}
+            availableTags={availableTags}
+            readerSources={readerSources}
+            sourceFilterSelectValue={sourceFilterSelectValue}
+            sourceFilterChipLabel={sourceFilterChipLabel}
+            onApplyFilters={onApplyFilters}
+            onToggleAdvancedFilters={onToggleAdvancedFilters}
+            onChangeKeyword={onChangeKeyword}
+            onChangeTagFilter={onChangeTagFilter}
+            onChangeSourceFilter={onChangeSourceFilter}
+            onClearFilters={onClearFilters}
+            onRemoveFilter={onRemoveFilter}
+            unreadOnly={unreadOnly}
+          />
+        </Suspense>
       )}
 
       <div className="module-divider" aria-hidden="true" />
@@ -416,119 +565,56 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           <p className="hint">{feed.length > 0 ? '当前网站都被临时隐藏了，可点击“恢复全部”。' : '暂无文章'}</p>
         )}
 
-        {hasFeedBriefingEntry && feedBriefingInsertIndex === 0 && renderFeedBriefingListItem('feed-briefing')}
+        {hasFeedBriefingEntry && feedBriefingInsertIndex === 0 && (
+          <FeedBriefingListItem
+            itemKey="feed-briefing"
+            selectedFeedBriefing={selectedFeedBriefing}
+            feedTitleOnlyMode={feedTitleOnlyMode}
+            feedBriefingPreviewText={feedBriefingPreviewText}
+            feedBriefingScopeLabel={feedBriefingScopeLabel}
+            feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+            feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+            feedBriefingArticleCount={feedBriefingArticleCount}
+            feedBriefingItemsCount={feedBriefingItems.length}
+            onOpenFeedBriefing={onOpenFeedBriefing}
+          />
+        )}
 
         {visibleFeed.map((item, index) => {
           const summaryTaskStatus = getSummaryTaskStatus(item.id)
-          const previewImageURL = normalizeImageURL(item.image_url)
-          const publishedLabel = formatTimeAgo(item.published_at ?? item.created_at)
-          const compactPublishedLabel = formatTimeAgoCompact(item.published_at ?? item.created_at)
-          const replyCountText = formatReplyCount(item.reply_count)
-          const compactTitleParts = buildCompactTitleParts(item.title, item.summary)
           return (
             <Fragment key={`feed-row-${item.id}`}>
               {hasFeedBriefingEntry && feedBriefingInsertIndex === index && feedBriefingInsertIndex > 0 && (
-                renderFeedBriefingListItem(`feed-briefing-before-${item.id}`)
+                <FeedBriefingListItem
+                  itemKey={`feed-briefing-before-${item.id}`}
+                  selectedFeedBriefing={selectedFeedBriefing}
+                  feedTitleOnlyMode={feedTitleOnlyMode}
+                  feedBriefingPreviewText={feedBriefingPreviewText}
+                  feedBriefingScopeLabel={feedBriefingScopeLabel}
+                  feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+                  feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+                  feedBriefingArticleCount={feedBriefingArticleCount}
+                  feedBriefingItemsCount={feedBriefingItems.length}
+                  onOpenFeedBriefing={onOpenFeedBriefing}
+                />
               )}
-              <article
-                key={item.id}
-                className={cn(
-                  'feed-item',
-                  selectedArticleID === item.id && !selectedFeedBriefing && 'active',
-                  readArticleIDSet.has(item.id) && 'read',
-                )}
-                onClick={() => void onOpenArticle(item.id)}
-              >
-                <div className="feed-item-body">
-                  <div className="feed-item-content">
-                    {feedTitleOnlyMode ? (
-                      <div className="feed-item-compact-row">
-                        <h3 className="feed-item-title">
-                          <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
-                          {compactTitleParts.summary && (
-                            <>
-                              <span className="feed-item-inline-sep" aria-hidden="true">
-                                {' '}
-                                ·{' '}
-                              </span>
-                              <span className="feed-item-inline-summary">{compactTitleParts.summary}</span>
-                            </>
-                          )}
-                        </h3>
-                        <div className="feed-item-compact-meta">
-                          <span className="feed-source feed-item-compact-source">{item.source_name}</span>
-                          <span className="feed-sep">·</span>
-                          <span>{compactPublishedLabel}</span>
-                          {replyCountText && (
-                            <>
-                              <span className="feed-sep">·</span>
-                              <span>{replyCountText}</span>
-                            </>
-                          )}
-                          {summaryTaskStatus && (
-                            <>
-                              <span className="feed-sep">·</span>
-                              <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
-                                AI {summaryTaskStatusLabel(summaryTaskStatus)}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="feed-topline">
-                          <span className="feed-source">{item.source_name}</span>
-                          <span className="feed-sep">·</span>
-                          <span>{item.source_tag}</span>
-                          <span className="feed-sep">·</span>
-                          <span>{publishedLabel}</span>
-                          {replyCountText && (
-                            <>
-                              <span className="feed-sep">·</span>
-                              <span>{replyCountText}</span>
-                            </>
-                          )}
-                          {item.duplicate_count && item.duplicate_count > 1 && (
-                            <>
-                              <span className="feed-sep">·</span>
-                              <span>合并 {item.duplicate_count} 条</span>
-                            </>
-                          )}
-                          {summaryTaskStatus && (
-                            <>
-                              <span className="feed-sep">·</span>
-                              <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
-                                AI {summaryTaskStatusLabel(summaryTaskStatus)}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <h3 className="feed-item-title">{item.title}</h3>
-                        <p className="feed-item-summary">{truncate(plainText(item.summary), 175)}</p>
-                      </>
-                    )}
-                  </div>
-                  {!feedTitleOnlyMode && showFeedImages && previewImageURL && (
-                    <div className="feed-item-media">
-                      <img
-                        src={previewImageURL}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        onError={(event) => {
-                          const target = event.currentTarget
-                          const wrapper = target.parentElement
-                          target.style.display = 'none'
-                          if (wrapper) {
-                            wrapper.style.display = 'none'
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </article>
+              <FeedArticleListItem
+                item={item}
+                isActive={selectedArticleID === item.id && !selectedFeedBriefing}
+                isRead={readArticleIDSet.has(item.id)}
+                feedTitleOnlyMode={feedTitleOnlyMode}
+                showFeedImages={showFeedImages}
+                summaryTaskStatus={summaryTaskStatus}
+                summaryTaskStatusLabel={summaryTaskStatusLabel}
+                onOpenArticle={onOpenArticle}
+                normalizeImageURL={normalizeImageURL}
+                formatTimeAgo={formatTimeAgo}
+                formatTimeAgoCompact={formatTimeAgoCompact}
+                formatReplyCount={formatReplyCount}
+                buildCompactTitleParts={buildCompactTitleParts}
+                plainText={plainText}
+                truncate={truncate}
+              />
             </Fragment>
           )
         })}

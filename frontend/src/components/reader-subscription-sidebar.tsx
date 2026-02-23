@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { Source } from '../types'
@@ -40,6 +40,81 @@ type ReaderSubscriptionSidebarProps = {
   onToggleShowTrackedSidebar: () => void
   onToggleShowAllTrackedSidebar: () => void
 }
+
+type SubscriptionSourceRowProps = {
+  source: Source
+  active: boolean
+  registerRef?: (sourceID: number, node: HTMLDivElement | null) => void
+  onApplySourceFilterFromSidebar: (sourceID: string, options?: { preserveSidebarTags?: boolean }) => void
+  onOpenSourceContextMenu: (event: ReactMouseEvent<HTMLElement>, source: Source) => void
+  onOpenSourceContextMenuAt: (source: Source, x: number, y: number) => void
+}
+
+const SubscriptionSourceRow = memo(function SubscriptionSourceRow(props: SubscriptionSourceRowProps) {
+  const {
+    source,
+    active,
+    registerRef,
+    onApplySourceFilterFromSidebar,
+    onOpenSourceContextMenu,
+    onOpenSourceContextMenuAt,
+  } = props
+
+  const handleSelect = useCallback(() => {
+    onApplySourceFilterFromSidebar(String(source.id), { preserveSidebarTags: true })
+  }, [onApplySourceFilterFromSidebar, source.id])
+
+  const handleContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      onOpenSourceContextMenu(event, source)
+    },
+    [onOpenSourceContextMenu, source],
+  )
+
+  const handleOpenMore = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const rect = event.currentTarget.getBoundingClientRect()
+      onOpenSourceContextMenuAt(source, rect.left + rect.width / 2, rect.bottom + 8)
+    },
+    [onOpenSourceContextMenuAt, source],
+  )
+
+  const rowContent = (
+    <div className="subscription-item-row-main">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={`subscription-item ${active ? 'active' : ''}`}
+        onClick={handleSelect}
+        onContextMenu={handleContextMenu}
+      >
+        <span className="subscription-item-name">{source.name}</span>
+        {!source.enabled && <span className="subscription-item-state disabled">停用</span>}
+      </Button>
+      <button
+        type="button"
+        className="subscription-item-more"
+        aria-label={`更多操作：${source.name}`}
+        onClick={handleOpenMore}
+      >
+        ⋯
+      </button>
+    </div>
+  )
+
+  if (registerRef) {
+    return (
+      <div ref={(node) => registerRef(source.id, node)} className="subscription-item-row">
+        {rowContent}
+      </div>
+    )
+  }
+
+  return rowContent
+})
 
 export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps) {
   const {
@@ -178,34 +253,15 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
             ) : (
               <div className="subscription-items">
                 {sidebarVisibleFeedSources.map((source) => (
-                  <div key={source.id} ref={(node) => onRegisterSidebarSourceItemRef(source.id, node)} className="subscription-item-row">
-                    <div className="subscription-item-row-main">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={`subscription-item ${!isSourceGroupFilterActive && sourceFilter === String(source.id) ? 'active' : ''}`}
-                        onClick={() => onApplySourceFilterFromSidebar(String(source.id), { preserveSidebarTags: true })}
-                        onContextMenu={(event) => onOpenSourceContextMenu(event, source)}
-                      >
-                        <span className="subscription-item-name">{source.name}</span>
-                        {!source.enabled && <span className="subscription-item-state disabled">停用</span>}
-                      </Button>
-                      <button
-                        type="button"
-                        className="subscription-item-more"
-                        aria-label={`更多操作：${source.name}`}
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          const rect = event.currentTarget.getBoundingClientRect()
-                          onOpenSourceContextMenuAt(source, rect.left + rect.width / 2, rect.bottom + 8)
-                        }}
-                      >
-                        ⋯
-                      </button>
-                    </div>
-                  </div>
+                  <SubscriptionSourceRow
+                    key={source.id}
+                    source={source}
+                    active={!isSourceGroupFilterActive && sourceFilter === String(source.id)}
+                    registerRef={onRegisterSidebarSourceItemRef}
+                    onApplySourceFilterFromSidebar={onApplySourceFilterFromSidebar}
+                    onOpenSourceContextMenu={onOpenSourceContextMenu}
+                    onOpenSourceContextMenuAt={onOpenSourceContextMenuAt}
+                  />
                 ))}
               </div>
             )}
@@ -229,32 +285,14 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                 <div className="tracked-thread-body">
                   <div className="subscription-items tracked-thread-items">
                     {visibleTrackedSidebarSources.map((source) => (
-                      <div key={source.id} className="subscription-item-row-main">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className={`subscription-item ${!isSourceGroupFilterActive && sourceFilter === String(source.id) ? 'active' : ''}`}
-                          onClick={() => onApplySourceFilterFromSidebar(String(source.id), { preserveSidebarTags: true })}
-                          onContextMenu={(event) => onOpenSourceContextMenu(event, source)}
-                        >
-                          <span className="subscription-item-name">{source.name}</span>
-                          {!source.enabled && <span className="subscription-item-state disabled">停用</span>}
-                        </Button>
-                        <button
-                          type="button"
-                          className="subscription-item-more"
-                          aria-label={`更多操作：${source.name}`}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            const rect = event.currentTarget.getBoundingClientRect()
-                            onOpenSourceContextMenuAt(source, rect.left + rect.width / 2, rect.bottom + 8)
-                          }}
-                        >
-                          ⋯
-                        </button>
-                      </div>
+                      <SubscriptionSourceRow
+                        key={source.id}
+                        source={source}
+                        active={!isSourceGroupFilterActive && sourceFilter === String(source.id)}
+                        onApplySourceFilterFromSidebar={onApplySourceFilterFromSidebar}
+                        onOpenSourceContextMenu={onOpenSourceContextMenu}
+                        onOpenSourceContextMenuAt={onOpenSourceContextMenuAt}
+                      />
                     ))}
                   </div>
                   {hasMoreTrackedSidebarSources && (

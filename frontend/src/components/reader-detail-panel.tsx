@@ -1,5 +1,6 @@
-import type { ReactNode, RefObject } from 'react'
+import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
+import { MarkdownBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
 
 type ThreadComment = {
@@ -39,7 +40,6 @@ type ReaderDetailPanelProps = {
   feedBriefingItems: FeedBriefingInputItem[]
   feedBriefingArticleCount: number
   formatTimeAgo: (input: string) => string
-  MarkdownBlock: (props: { content: string }) => ReactNode
   selectedArticleReplyCountLabel: string
   selectedArticleImageURL: string | null
   closeDetailMoreMenu: () => void
@@ -59,7 +59,6 @@ type ReaderDetailPanelProps = {
   isThreadArticle: boolean
   threadPrimaryBody: string
   plainTextBlock: (input?: string) => string
-  SafeHTMLBlock: (props: { content?: string; baseURL?: string }) => ReactNode
   visibleThreadComments: ThreadComment[]
   threadComments: ThreadComment[]
   threadCommentsNewestFirst: boolean
@@ -96,7 +95,6 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     feedBriefingItems,
     feedBriefingArticleCount,
     formatTimeAgo,
-    MarkdownBlock,
     selectedArticleReplyCountLabel,
     selectedArticleImageURL,
     closeDetailMoreMenu,
@@ -116,7 +114,6 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     isThreadArticle,
     threadPrimaryBody,
     plainTextBlock,
-    SafeHTMLBlock,
     visibleThreadComments,
     threadComments,
     threadCommentsNewestFirst,

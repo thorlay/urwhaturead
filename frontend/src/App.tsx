@@ -1,67 +1,43 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo } from 'react'
 import {
-  createFeedBriefing,
-  getArticle,
   getArticleSummary,
-  listFeed,
-  listSources,
-  listSourceStatus,
-  summarizeArticle,
-  trackArticleThread,
 } from './api'
-import type {
-  ArticleDetail,
-  FeedBriefingInputItem,
-  FeedItem,
-  Source,
-  SourceStatus,
-} from './types'
+import type { Source, SourceStatus } from './types'
 import { AppTopbar } from '@/components/app-topbar'
 import { NoticeBanner } from '@/components/notice-banner'
 import { ReaderFeedPanel } from '@/components/reader-feed-panel'
 import { ReaderSubscriptionSidebar } from '@/components/reader-subscription-sidebar'
-import { MarkdownBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { SourceManagementPanelController } from '@/components/source-management-panel'
-import { SummaryTaskStrip } from '@/components/summary-task-strip'
 import { Button } from '@/components/ui/button'
-import {
-  SourceContextMenuOverlay,
-  SourceDeleteConfirmDialog,
-  SourceProfileDialog,
-} from '@/components/source-overlays'
-import { ReaderDetailPanel } from '@/components/reader-detail-panel'
 import { useReaderStream } from './hooks/use-reader-stream'
 import { useDetailPanel } from './hooks/use-detail-panel'
 import { useFeedBriefingCacheRestore } from './hooks/use-feed-briefing-cache-restore'
+import { useFeedBriefingActions } from './hooks/use-feed-briefing-actions'
+import { useAppState } from './hooks/use-app-state'
+import { useReaderArticleActions } from './hooks/use-reader-article-actions'
+import { useReaderDataController } from './hooks/use-reader-data-controller'
+import { useReaderFilterControls } from './hooks/use-reader-filter-controls'
+import { useReaderKeyboardShortcuts } from './hooks/use-reader-keyboard-shortcuts'
+import { useReaderRuntimeEffects } from './hooks/use-reader-runtime-effects'
+import { useReaderSessionActions } from './hooks/use-reader-session-actions'
+import { useReaderSidebarState } from './hooks/use-reader-sidebar-state'
+import { useSourceContextMenu } from './hooks/use-source-context-menu'
 import { useSummaryTaskPoller } from './hooks/use-summary-task-poller'
 import { useSourceManagementState } from './hooks/use-source-management-state'
 import { useSourceManagementActions } from './hooks/use-source-management-actions'
 import {
   aiModelOptions,
   aiModelStorageKey,
-  type AppTab,
-  type AppliedSourceGroupFilter,
-  type FeedBriefingSnapshot,
-  type Notice,
   readArticleStorageKey,
   readMarkMinScrollProgress,
-  type ReaderSession,
-  type ReaderView,
   sidebarTagCollapseCount,
   type SidebarTagFilterMode,
-  type SourceContextMenuState,
-  type SourceGroup,
   type SummaryTask,
   threadPreviewCommentLimit,
-  trackedSidebarPreviewLimit,
 } from './lib/app-domain'
 import {
   buildCompactTitleParts,
   bulkActionLabel,
-  clampContextMenuPosition,
-  compareSourcesByClicksDesc,
-  compareTrackedSourcesByActivityDesc,
   confidenceLabel,
   equalStringList,
   formatDateTime,
@@ -78,10 +54,8 @@ import {
   parseRSSLines,
   parseSourceIDFilter,
   parseSourceTagInput,
-  parseStoredReadArticleIDs,
   plainText,
   plainTextBlock,
-  resolveReadDwellThresholdMs,
   resolveSourceHealth,
   resolveSourceSiteKey,
   sourceClickCount,
@@ -93,11 +67,8 @@ import {
 } from './lib/app-utils'
 import {
   buildFeedBriefingTaskKey,
-  buildSummaryTaskKey,
-  isArticleSummaryReadyResponse,
   isPollableArticleSummaryTask,
   isSummaryTaskPending,
-  normalizeSummaryTaskStatus,
   parseTimestamp,
   pruneSummaryTasks,
   resolveFeedBriefingScopeLabel,
@@ -113,136 +84,199 @@ const SourceManagementPanel = lazy(async () => {
   return { default: module.SourceManagementPanel }
 })
 
+const SummaryTaskStripPanel = lazy(async () => {
+  const module = await import('@/components/summary-task-strip-panel')
+  return { default: module.SummaryTaskStripPanel }
+})
+
+const ReaderDetailPanel = lazy(async () => {
+  const module = await import('@/components/reader-detail-panel')
+  return { default: module.ReaderDetailPanel }
+})
+
+const SourceContextMenuOverlay = lazy(async () => {
+  const module = await import('@/components/source-overlays')
+  return { default: module.SourceContextMenuOverlay }
+})
+
+const SourceProfileDialog = lazy(async () => {
+  const module = await import('@/components/source-overlays')
+  return { default: module.SourceProfileDialog }
+})
+
+const SourceDeleteConfirmDialog = lazy(async () => {
+  const module = await import('@/components/source-overlays')
+  return { default: module.SourceDeleteConfirmDialog }
+})
+
 function App() {
-  const floatingDetailRef = useRef<HTMLElement | null>(null)
-  const sourceSelectAllRef = useRef<HTMLInputElement | null>(null)
-  const sourceContextMenuRef = useRef<HTMLDivElement | null>(null)
-  const feedAIMoreRef = useRef<HTMLDivElement | null>(null)
-  const feedBriefingCacheAttemptedRef = useRef<Map<string, number>>(new Map())
-  const sidebarSourceItemRefs = useRef<Map<number, HTMLDivElement>>(new Map())
-  const previousSidebarSourceItemRectsRef = useRef<Map<number, DOMRect>>(new Map())
-  const previousSidebarSourceIDsRef = useRef<number[]>([])
-  const feedAutoLoadRef = useRef<HTMLDivElement | null>(null)
-  const sidebarTagFilterTimerRef = useRef<number | null>(null)
-  const feedAutoLoadCooldownRef = useRef(0)
-  const streamScrollYRef = useRef<number | null>(null)
-  const feedRequestSeqRef = useRef(0)
-  const articleRequestSeqRef = useRef(0)
-  const summaryRequestSeqRef = useRef(0)
-  const summaryTaskNotifiedRef = useRef<Set<string>>(new Set())
-  const readerSessionRef = useRef<ReaderSession | null>(null)
+  const {
+    floatingDetailRef,
+    sourceSelectAllRef,
+    sourceContextMenuRef,
+    feedAIMoreRef,
+    feedBriefingCacheAttemptedRef,
+    sidebarSourceItemRefs,
+    previousSidebarSourceItemRectsRef,
+    previousSidebarSourceIDsRef,
+    feedAutoLoadRef,
+    sidebarTagFilterTimerRef,
+    feedAutoLoadCooldownRef,
+    streamScrollYRef,
+    feedRequestSeqRef,
+    articleRequestSeqRef,
+    summaryRequestSeqRef,
+    summaryTaskNotifiedRef,
+    readerSessionRef,
+    sources,
+    setSources,
+    feed,
+    setFeed,
+    selectedArticle,
+    setSelectedArticle,
+    selectedArticleID,
+    setSelectedArticleID,
+    articleSummary,
+    setArticleSummary,
+    articleSummaryMeta,
+    setArticleSummaryMeta,
+    summaryTasks,
+    setSummaryTasks,
+    loadingArticleSummary,
+    setLoadingArticleSummary,
+    articleSummaryError,
+    setArticleSummaryError,
+    feedBriefing,
+    setFeedBriefing,
+    feedBriefingMeta,
+    setFeedBriefingMeta,
+    feedBriefingItems,
+    setFeedBriefingItems,
+    feedBriefingArticleCount,
+    setFeedBriefingArticleCount,
+    feedBriefingScopeLabel,
+    setFeedBriefingScopeLabel,
+    feedBriefingGeneratedAt,
+    setFeedBriefingGeneratedAt,
+    feedBriefingAnchorArticleIDs,
+    setFeedBriefingAnchorArticleIDs,
+    feedBriefingTaskKey,
+    setFeedBriefingTaskKey,
+    feedBriefingSnapshots,
+    setFeedBriefingSnapshots,
+    loadingFeedBriefing,
+    setLoadingFeedBriefing,
+    feedBriefingError,
+    setFeedBriefingError,
+    aiModel,
+    setAIModel,
+    loadingSources,
+    setLoadingSources,
+    loadingFeed,
+    setLoadingFeed,
+    loadingArticle,
+    setLoadingArticle,
+    loadingStatus,
+    setLoadingStatus,
+    sourcesError,
+    setSourcesError,
+    feedError,
+    setFeedError,
+    articleError,
+    setArticleError,
+    statusError,
+    setStatusError,
+    feedCursor,
+    setFeedCursor,
+    hasMoreFeed,
+    setHasMoreFeed,
+    notice,
+    setNotice,
+    sourceStatus,
+    setSourceStatus,
+    keyword,
+    setKeyword,
+    tagFilter,
+    setTagFilter,
+    sourceFilter,
+    setSourceFilter,
+    unreadOnly,
+    setUnreadOnly,
+    mutedSiteKeys,
+    setMutedSiteKeys,
+    feedTitleOnlyMode,
+    setFeedTitleOnlyMode,
+    showFeedImages,
+    setShowFeedImages,
+    showFeedSearch,
+    setShowFeedSearch,
+    showAdvancedFilters,
+    setShowAdvancedFilters,
+    showFeedAIMoreMenu,
+    setShowFeedAIMoreMenu,
+    showManageModelPicker,
+    setShowManageModelPicker,
+    setNowTick,
+    activeTab,
+    setActiveTab,
+    readerView,
+    setReaderView,
+    showFloatingReader,
+    setShowFloatingReader,
+    selectedFeedBriefing,
+    setSelectedFeedBriefing,
+    expandedThreadComments,
+    setExpandedThreadComments,
+    threadCommentsNewestFirst,
+    setThreadCommentsNewestFirst,
+    readArticleIDs,
+    setReadArticleIDs,
+    sourceProfileSource,
+    setSourceProfileSource,
+    sourceProfileTagPickerOpen,
+    setSourceProfileTagPickerOpen,
+    sourceProfileTagInput,
+    setSourceProfileTagInput,
+    pendingDeleteSource,
+    setPendingDeleteSource,
+  } = useAppState()
 
-  const [sources, setSources] = useState<Source[]>([])
-  const [feed, setFeed] = useState<FeedItem[]>([])
-  const [selectedArticle, setSelectedArticle] = useState<ArticleDetail | null>(null)
-  const [selectedArticleID, setSelectedArticleID] = useState<number | null>(null)
-  const [articleSummary, setArticleSummary] = useState('')
-  const [articleSummaryMeta, setArticleSummaryMeta] = useState('')
-  const [summaryTasks, setSummaryTasks] = useState<SummaryTask[]>([])
-  const [loadingArticleSummary, setLoadingArticleSummary] = useState(false)
-  const [articleSummaryError, setArticleSummaryError] = useState<string | null>(null)
-  const [feedBriefing, setFeedBriefing] = useState('')
-  const [feedBriefingMeta, setFeedBriefingMeta] = useState('')
-  const [feedBriefingItems, setFeedBriefingItems] = useState<FeedBriefingInputItem[]>([])
-  const [feedBriefingArticleCount, setFeedBriefingArticleCount] = useState(0)
-  const [feedBriefingScopeLabel, setFeedBriefingScopeLabel] = useState('')
-  const [feedBriefingGeneratedAt, setFeedBriefingGeneratedAt] = useState('')
-  const [feedBriefingAnchorArticleIDs, setFeedBriefingAnchorArticleIDs] = useState<number[]>([])
-  const [feedBriefingTaskKey, setFeedBriefingTaskKey] = useState('')
-  const [feedBriefingSnapshots, setFeedBriefingSnapshots] = useState<Record<string, FeedBriefingSnapshot>>({})
-  const [loadingFeedBriefing, setLoadingFeedBriefing] = useState(false)
-  const [feedBriefingError, setFeedBriefingError] = useState<string | null>(null)
-  const [aiModel, setAIModel] = useState(() => {
-    if (typeof window === 'undefined') {
-      return aiModelOptions[0]
-    }
-    const cached = window.localStorage.getItem(aiModelStorageKey)?.trim()
-    if (cached) {
-      return cached
-    }
-    return aiModelOptions[0]
+  const {
+    sourceGroupFilter,
+    setSourceGroupFilter,
+    sidebarTagFilters,
+    setSidebarTagFilters,
+    sidebarTagFilterMode,
+    setSidebarTagFilterMode,
+    showAllSidebarTags,
+    setShowAllSidebarTags,
+    showSubscriptionSidebar,
+    setShowSubscriptionSidebar,
+    showTrackedSidebar,
+    setShowTrackedSidebar,
+    showAllTrackedSidebar,
+    setShowAllTrackedSidebar,
+    readerFeedSources,
+    readerTrackedSources,
+    readerSources,
+    visibleTrackedSidebarSources,
+    hasMoreTrackedSidebarSources,
+    sourceGroups,
+    sidebarTagFilterSet,
+    sidebarVisibleFeedSources,
+  } = useReaderSidebarState({
+    sources,
+    sourceTagList,
   })
 
-  const [loadingSources, setLoadingSources] = useState(false)
-  const [loadingFeed, setLoadingFeed] = useState(false)
-  const [loadingArticle, setLoadingArticle] = useState(false)
-  const [loadingStatus, setLoadingStatus] = useState(false)
-
-  const [sourcesError, setSourcesError] = useState<string | null>(null)
-  const [feedError, setFeedError] = useState<string | null>(null)
-  const [articleError, setArticleError] = useState<string | null>(null)
-  const [statusError, setStatusError] = useState<string | null>(null)
-
-  const [feedCursor, setFeedCursor] = useState('')
-  const [hasMoreFeed, setHasMoreFeed] = useState(false)
-  const [notice, setNotice] = useState<Notice | null>(null)
-  const [sourceStatus, setSourceStatus] = useState<SourceStatus[]>([])
-
-  const [keyword, setKeyword] = useState('')
-  const [tagFilter, setTagFilter] = useState('')
-  const [sourceFilter, setSourceFilter] = useState('')
-  const [unreadOnly, setUnreadOnly] = useState(false)
-  const [sourceGroupFilter, setSourceGroupFilter] = useState<AppliedSourceGroupFilter | null>(null)
-  const [sidebarTagFilters, setSidebarTagFilters] = useState<string[]>([])
-  const [sidebarTagFilterMode, setSidebarTagFilterMode] = useState<SidebarTagFilterMode>('or')
-  const [showAllSidebarTags, setShowAllSidebarTags] = useState(false)
-  const [mutedSiteKeys, setMutedSiteKeys] = useState<string[]>([])
-  const [feedTitleOnlyMode, setFeedTitleOnlyMode] = useState(true)
-  const [showFeedImages, setShowFeedImages] = useState(false)
-  const [showFeedSearch, setShowFeedSearch] = useState(false)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [showFeedAIMoreMenu, setShowFeedAIMoreMenu] = useState(false)
-  const [showManageModelPicker, setShowManageModelPicker] = useState(false)
-  const [, setNowTick] = useState(Date.now())
-
-  const [activeTab, setActiveTab] = useState<AppTab>('reader')
-  const [readerView, setReaderView] = useState<ReaderView>('stream')
-  const [showFloatingReader, setShowFloatingReader] = useState(false)
-  const [selectedFeedBriefing, setSelectedFeedBriefing] = useState(false)
-  const [expandedThreadComments, setExpandedThreadComments] = useState(false)
-  const [threadCommentsNewestFirst, setThreadCommentsNewestFirst] = useState(false)
-  const [showSubscriptionSidebar, setShowSubscriptionSidebar] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return !window.matchMedia('(max-width: 980px)').matches
+  const {
+    sourceContextMenu,
+    closeSourceContextMenu,
+    openSourceContextMenu,
+    openSourceContextMenuAt,
+  } = useSourceContextMenu({
+    sourceContextMenuRef,
   })
-  const [showTrackedSidebar, setShowTrackedSidebar] = useState(false)
-  const [showAllTrackedSidebar, setShowAllTrackedSidebar] = useState(false)
-  const [readArticleIDs, setReadArticleIDs] = useState<number[]>(() => {
-    if (typeof window === 'undefined') {
-      return []
-    }
-    return parseStoredReadArticleIDs(window.localStorage.getItem(readArticleStorageKey))
-  })
-  const [sourceContextMenu, setSourceContextMenu] = useState<SourceContextMenuState | null>(null)
-  const [sourceProfileSource, setSourceProfileSource] = useState<Source | null>(null)
-  const [sourceProfileTagPickerOpen, setSourceProfileTagPickerOpen] = useState(false)
-  const [sourceProfileTagInput, setSourceProfileTagInput] = useState('')
-  const [pendingDeleteSource, setPendingDeleteSource] = useState<Source | null>(null)
-
-  const readerFeedSources = useMemo(
-    () =>
-      sources
-        .filter((source) => normalizeSourceKind(source.kind) === 'feed' && !source.hidden_in_sidebar)
-        .sort(compareSourcesByClicksDesc),
-    [sources],
-  )
-
-  const readerTrackedSources = useMemo(
-    () =>
-      sources
-        .filter((source) => normalizeSourceKind(source.kind) === 'thread' && !source.hidden_in_sidebar)
-        .sort(compareTrackedSourcesByActivityDesc),
-    [sources],
-  )
-
-  const readerSources = useMemo(() => [...readerFeedSources, ...readerTrackedSources], [readerFeedSources, readerTrackedSources])
-
-  const visibleTrackedSidebarSources = useMemo(
-    () => (showAllTrackedSidebar ? readerTrackedSources : readerTrackedSources.slice(0, trackedSidebarPreviewLimit)),
-    [readerTrackedSources, showAllTrackedSidebar],
-  )
-
-  const hasMoreTrackedSidebarSources = readerTrackedSources.length > trackedSidebarPreviewLimit
 
   const availableTags = useMemo(() => {
     const values = sources.flatMap((source) => sourceTagList(source))
@@ -256,54 +290,6 @@ function App() {
     }
     return map
   }, [sources])
-
-  const sourceGroups = useMemo<SourceGroup[]>(() => {
-    const groupMap = new Map<string, SourceGroup>()
-    for (const source of readerFeedSources) {
-      for (const label of sourceTagList(source)) {
-        const key = label.toLowerCase()
-        const bucket = groupMap.get(key)
-        if (bucket) {
-          bucket.sources.push(source)
-          bucket.clickTotal += sourceClickCount(source)
-        } else {
-          groupMap.set(key, {
-            key,
-            label,
-            clickTotal: sourceClickCount(source),
-            sources: [source],
-          })
-        }
-      }
-    }
-
-    const groups = Array.from(groupMap.values()).map((group) => ({
-      ...group,
-      sources: [...group.sources].sort(compareSourcesByClicksDesc),
-    }))
-    groups.sort((a, b) => {
-      if (a.clickTotal !== b.clickTotal) {
-        return b.clickTotal - a.clickTotal
-      }
-      return a.label.localeCompare(b.label)
-    })
-    return groups
-  }, [readerFeedSources])
-
-  const sidebarTagFilterSet = useMemo(() => new Set(sidebarTagFilters), [sidebarTagFilters])
-
-  const sidebarVisibleFeedSources = useMemo(() => {
-    if (sidebarTagFilterSet.size === 0) {
-      return readerFeedSources
-    }
-    return readerFeedSources.filter((source) => {
-      const tagSet = new Set(sourceTagList(source).map((tag) => tag.toLowerCase()))
-      if (sidebarTagFilterMode === 'and') {
-        return sidebarTagFilters.every((tag) => tagSet.has(tag))
-      }
-      return sidebarTagFilters.some((tag) => tagSet.has(tag))
-    })
-  }, [readerFeedSources, sidebarTagFilterMode, sidebarTagFilterSet, sidebarTagFilters])
 
   const sourceByID = useMemo(() => {
     const map = new Map<number, Source>()
@@ -562,6 +548,10 @@ function App() {
     [summaryTasks],
   )
   const selectedSummaryTask = selectedArticleID ? summaryTaskByArticleID.get(selectedArticleID) ?? null : null
+  const getSummaryTaskStatus = useCallback(
+    (articleID: number) => summaryTaskByArticleID.get(articleID)?.status ?? null,
+    [summaryTaskByArticleID],
+  )
   const feedBriefingPreviewText = useMemo(() => {
     if (feedBriefingError) {
       return `生成失败：${feedBriefingError}`
@@ -647,7 +637,7 @@ function App() {
     if (!selectedSummaryTask) return
     if (!isSummaryTaskPending(selectedSummaryTask.status)) return
     setArticleSummaryMeta(`后台生成中 · ${summaryTaskStatusLabel(selectedSummaryTask.status)} · ${selectedSummaryTask.model}`)
-  }, [selectedSummaryTask])
+  }, [selectedSummaryTask, setArticleSummaryMeta])
 
   const loadCachedSummary = useCallback(async (articleID: number, model: string, requestID?: number) => {
     const activeRequestID = requestID ?? ++summaryRequestSeqRef.current
@@ -667,7 +657,7 @@ function App() {
       }
       setArticleSummaryError(`读取缓存摘要失败: ${toErrorMessage(error)}`)
     }
-  }, [])
+  }, [setArticleSummary, setArticleSummaryError, setArticleSummaryMeta, summaryRequestSeqRef])
 
   const resolveSummaryTaskIdentity = useCallback((articleID?: number) => {
     const resolvedArticleID = typeof articleID === 'number' && articleID > 0 ? articleID : null
@@ -695,12 +685,12 @@ function App() {
 
   const upsertSummaryTask = useCallback((task: SummaryTask) => {
     setSummaryTasks((previous) => upsertSummaryTaskState(previous, task))
-  }, [])
+  }, [setSummaryTasks])
 
   const removeSummaryTask = useCallback((taskKey: string) => {
     setSummaryTasks((previous) => previous.filter((task) => task.key !== taskKey))
     summaryTaskNotifiedRef.current.delete(taskKey)
-  }, [])
+  }, [setSummaryTasks, summaryTaskNotifiedRef])
 
   const clearCompletedSummaryTasks = useCallback(() => {
     setSummaryTasks((previous) => {
@@ -713,336 +703,130 @@ function App() {
       }
       return next
     })
-  }, [])
+  }, [setSummaryTasks, summaryTaskNotifiedRef])
 
-  const cancelSidebarTagFeedReload = useCallback(() => {
-    if (sidebarTagFilterTimerRef.current !== null) {
-      window.clearTimeout(sidebarTagFilterTimerRef.current)
-      sidebarTagFilterTimerRef.current = null
-    }
-  }, [])
+  const {
+    loadSources,
+    loadStatus,
+    refreshStatusIfVisible,
+    loadFeed,
+    cancelSidebarTagFeedReload,
+    scheduleSidebarTagFeedReload,
+    refreshAll,
+    loadMore,
+  } = useReaderDataController({
+    activeTab,
+    tagFilter,
+    sourceFilter,
+    keyword,
+    feedCursor,
+    loadingFeed,
+    sourceByID,
+    feedRequestSeqRef,
+    sidebarTagFilterTimerRef,
+    setLoadingSources,
+    setSourcesError,
+    setSources,
+    setLoadingStatus,
+    setStatusError,
+    setSourceStatus,
+    setLoadingFeed,
+    setFeedError,
+    setFeed,
+    setFeedCursor,
+    setHasMoreFeed,
+    setNotice,
+    parseSourceIDFilter,
+    normalizeSourceKind,
+    toErrorMessage,
+  })
 
-  async function loadSources() {
-    try {
-      setLoadingSources(true)
-      setSourcesError(null)
-      const data = await listSources()
-      setSources(data)
-    } catch (error) {
-      const message = toErrorMessage(error)
-      setSourcesError(message)
-      setNotice({
-        kind: 'error',
-        text: `加载来源失败: ${message}`,
-      })
-    } finally {
-      setLoadingSources(false)
-    }
-  }
+  const { startReaderSession, finalizeReaderSession, closeFloatingReader, openFeedBriefing } = useReaderSessionActions({
+    readerSessionRef,
+    setReadArticleIDs,
+    upsertReadArticleID,
+    readMarkMinScrollProgress,
+    closeDetailMoreMenu,
+    setShowFloatingReader,
+    articleRequestSeqRef,
+    summaryRequestSeqRef,
+    setLoadingArticle,
+    setArticleError,
+    setSelectedArticle,
+    setSelectedArticleID,
+    setSelectedFeedBriefing,
+    setArticleSummary,
+    setArticleSummaryMeta,
+    setArticleSummaryError,
+    setLoadingArticleSummary,
+    setExpandedThreadComments,
+    setThreadCommentsNewestFirst,
+    setReaderView,
+    floatingDetailRef,
+  })
 
-  async function loadStatus() {
-    try {
-      setLoadingStatus(true)
-      setStatusError(null)
-      const response = await listSourceStatus(24)
-      setSourceStatus(response.data)
-    } catch (error) {
-      const message = toErrorMessage(error)
-      setStatusError(message)
-      setNotice({
-        kind: 'error',
-        text: `加载来源状态失败: ${message}`,
-      })
-    } finally {
-      setLoadingStatus(false)
-    }
-  }
+  const {
+    applyFeedBriefingSnapshot,
+    saveFeedBriefingSnapshot,
+    resetFeedBriefingState,
+    onGenerateFeedBriefing,
+  } = useFeedBriefingActions({
+    activeFeedBriefingAnchorArticleIDs,
+    activeFeedBriefingSourceIDs,
+    activeFeedBriefingScopeLabel,
+    activeFeedBriefingTaskKey,
+    activeFeedBriefingKeyword,
+    tagFilter,
+    aiModel,
+    setFeedBriefingTaskKey,
+    setFeedBriefingScopeLabel,
+    setFeedBriefingAnchorArticleIDs,
+    setLoadingFeedBriefing,
+    setFeedBriefingError,
+    setFeedBriefing,
+    setFeedBriefingItems,
+    setFeedBriefingArticleCount,
+    setFeedBriefingGeneratedAt,
+    setFeedBriefingMeta,
+    setSelectedFeedBriefing,
+    setFeedBriefingSnapshots,
+    setNotice,
+    upsertSummaryTask,
+    toErrorMessage,
+  })
 
-  async function refreshStatusIfVisible() {
-    if (activeTab !== 'sources') return
-    await loadStatus()
-  }
-
-  async function loadFeed(
-    append = false,
-    overrides?: Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>,
-  ) {
-    const requestID = ++feedRequestSeqRef.current
-    try {
-      setLoadingFeed(true)
-      setFeedError(null)
-      const activeTag = overrides?.tag ?? tagFilter
-      const activeSourceID = overrides?.sourceID ?? sourceFilter
-      const activeKeyword = (overrides?.keyword ?? keyword).trim()
-      const filteredSourceIDs = parseSourceIDFilter(activeSourceID)
-      const includeHidden = filteredSourceIDs.some((sourceID) => normalizeSourceKind(sourceByID.get(sourceID)?.kind) === 'thread')
-
-      const response = await listFeed({
-        limit: 20,
-        cursor: overrides?.cursor ?? (append ? feedCursor : ''),
-        tag: activeTag,
-        sourceID: activeSourceID,
-        keyword: activeKeyword,
-        includeHidden,
-      })
-      if (requestID !== feedRequestSeqRef.current) {
-        return
-      }
-
-      const scopedItems =
-        filteredSourceIDs.length > 0
-          ? response.data.filter((item) => filteredSourceIDs.includes(item.source_id))
-          : response.data
-      const articleItems: FeedItem[] = scopedItems.map((item) => ({ ...item }))
-
-      if (append) {
-        setFeed((previous) => [...previous, ...articleItems])
-      } else {
-        setFeed(articleItems)
-      }
-
-      setFeedCursor(response.meta.next_cursor || '')
-      setHasMoreFeed(Boolean(response.meta.next_cursor))
-    } catch (error) {
-      if (requestID !== feedRequestSeqRef.current) {
-        return
-      }
-      const message = toErrorMessage(error)
-      setFeedError(message)
-      setNotice({
-        kind: 'error',
-        text: `加载 feed 失败: ${message}`,
-      })
-    } finally {
-      if (requestID === feedRequestSeqRef.current) {
-        setLoadingFeed(false)
-      }
-    }
-  }
-
-  function scheduleSidebarTagFeedReload(sourceID: string) {
-    cancelSidebarTagFeedReload()
-    sidebarTagFilterTimerRef.current = window.setTimeout(() => {
-      sidebarTagFilterTimerRef.current = null
-      void loadFeed(false, { sourceID })
-    }, 180)
-  }
-
-  useEffect(() => {
-    return () => {
-      cancelSidebarTagFeedReload()
-    }
-  }, [cancelSidebarTagFeedReload])
-
-  const markArticleRead = useCallback((articleID: number) => {
-    setReadArticleIDs((previous) => upsertReadArticleID(previous, articleID))
-  }, [])
-
-  const startReaderSession = useCallback((articleID: number, minDwellMs: number) => {
-    readerSessionRef.current = {
-      articleID,
-      openedAt: Date.now(),
-      maxScrollProgress: 0,
-      minDwellMs,
-    }
-  }, [])
-
-  const finalizeReaderSession = useCallback(
-    (reason: 'close' | 'navigate') => {
-      const session = readerSessionRef.current
-      if (!session) return
-      readerSessionRef.current = null
-
-      if (reason === 'navigate') {
-        markArticleRead(session.articleID)
-        return
-      }
-
-      const dwellMs = Date.now() - session.openedAt
-      if (dwellMs >= session.minDwellMs || session.maxScrollProgress >= readMarkMinScrollProgress) {
-        markArticleRead(session.articleID)
-      }
-    },
-    [markArticleRead],
-  )
-
-  const closeFloatingReader = useCallback(() => {
-    finalizeReaderSession('close')
-    setShowFloatingReader(false)
-    closeDetailMoreMenu()
-  }, [closeDetailMoreMenu, finalizeReaderSession])
-
-  const openFeedBriefing = useCallback(() => {
-    finalizeReaderSession('close')
-    ++articleRequestSeqRef.current
-    ++summaryRequestSeqRef.current
-    closeDetailMoreMenu()
-    setLoadingArticle(false)
-    setArticleError(null)
-    setSelectedArticle(null)
-    setSelectedArticleID(null)
-    setSelectedFeedBriefing(true)
-    setArticleSummary('')
-    setArticleSummaryMeta('')
-    setArticleSummaryError(null)
-    setLoadingArticleSummary(false)
-    setExpandedThreadComments(false)
-    setThreadCommentsNewestFirst(false)
-    setReaderView('stream')
-    setShowFloatingReader(true)
-
-    if (floatingDetailRef.current) {
-      floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
-    }
-  }, [closeDetailMoreMenu, finalizeReaderSession])
-
-  const applyFeedBriefingSnapshot = useCallback((snapshot: FeedBriefingSnapshot) => {
-    setFeedBriefing(snapshot.summary)
-    setFeedBriefingMeta(snapshot.meta)
-    setFeedBriefingItems(snapshot.items)
-    setFeedBriefingArticleCount(snapshot.articleCount)
-    setFeedBriefingTaskKey(snapshot.taskKey)
-    setFeedBriefingScopeLabel(snapshot.scopeLabel)
-    setFeedBriefingGeneratedAt(snapshot.generatedAt)
-    setFeedBriefingAnchorArticleIDs(snapshot.anchorArticleIDs)
-    setFeedBriefingError(snapshot.error)
-    setSelectedFeedBriefing(false)
-  }, [])
-
-  const saveFeedBriefingSnapshot = useCallback((snapshot: FeedBriefingSnapshot) => {
-    setFeedBriefingSnapshots((previous) => ({
-      ...previous,
-      [snapshot.taskKey]: snapshot,
-    }))
-  }, [])
-
-  const openArticle = useCallback(async (articleID: number) => {
-    const activeSession = readerSessionRef.current
-    if (activeSession && activeSession.articleID !== articleID) {
-      finalizeReaderSession('navigate')
-    }
-
-    const articleRequestID = ++articleRequestSeqRef.current
-    const summaryRequestID = ++summaryRequestSeqRef.current
-    try {
-      setLoadingArticle(true)
-      closeDetailMoreMenu()
-      setReaderView('stream')
-      setShowFloatingReader(true)
-      setArticleError(null)
-      setSelectedFeedBriefing(false)
-      setSelectedArticleID(articleID)
-      setArticleSummary('')
-      setArticleSummaryMeta('')
-      setArticleSummaryError(null)
-      setLoadingArticleSummary(false)
-      setExpandedThreadComments(false)
-      setThreadCommentsNewestFirst(false)
-
-      if (floatingDetailRef.current) {
-        floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
-      }
-
-      const detail = await getArticle(articleID)
-      if (articleRequestID !== articleRequestSeqRef.current) {
-        return
-      }
-      setSelectedArticle(detail)
-      setExpandedThreadComments(isTrackableForumLink(detail.link))
-      setThreadCommentsNewestFirst(normalizeSourceKind(sourceByID.get(detail.source_id)?.kind) === 'thread')
-      startReaderSession(articleID, resolveReadDwellThresholdMs(detail))
-      void loadCachedSummary(articleID, aiModel, summaryRequestID)
-    } catch (error) {
-      if (articleRequestID !== articleRequestSeqRef.current) {
-        return
-      }
-      const message = toErrorMessage(error)
-      setArticleError(message)
-      setNotice({
-        kind: 'error',
-        text: `加载文章详情失败: ${message}`,
-      })
-    } finally {
-      if (articleRequestID === articleRequestSeqRef.current) {
-        setLoadingArticle(false)
-      }
-    }
-  }, [aiModel, closeDetailMoreMenu, finalizeReaderSession, loadCachedSummary, sourceByID, startReaderSession])
-
-  async function onSummarizeArticle(refresh = false) {
-    if (!selectedArticleID || selectedArticleID <= 0) {
-      setNotice({ kind: 'error', text: '当前文章不支持 AI 摘要。' })
-      return
-    }
-
-    const requestID = ++summaryRequestSeqRef.current
-    const articleID = selectedArticleID
-
-    try {
-      setLoadingArticleSummary(true)
-      setArticleSummaryError(null)
-      const response = await summarizeArticle(articleID, refresh, aiModel)
-      if (requestID !== summaryRequestSeqRef.current) {
-        return
-      }
-      if (isArticleSummaryReadyResponse(response)) {
-        setArticleSummary(response.data.summary)
-        setArticleSummaryMeta(
-          `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model}`,
-        )
-        setNotice({ kind: 'info', text: response.data.cache_hit ? '已加载缓存摘要。' : 'AI 摘要已生成。' })
-        return
-      }
-
-      if (response.data.status === 'failed') {
-        throw new Error(response.data.error || 'AI 摘要生成失败')
-      }
-
-      const taskModel = response.data.model?.trim() || aiModel
-      const taskKey = buildSummaryTaskKey(articleID, taskModel)
-      const identity = resolveSummaryTaskIdentity(articleID)
-      summaryTaskNotifiedRef.current.delete(taskKey)
-      upsertSummaryTask({
-        kind: 'article_summary',
-        key: taskKey,
-        articleID,
-        title: identity.title,
-        sourceName: identity.sourceName,
-        sourceID: identity.sourceID,
-        model: taskModel,
-        status: normalizeSummaryTaskStatus(response.data.status),
-        updatedAt: response.data.updated_at || new Date().toISOString(),
-        error: response.data.error,
-      })
-      setArticleSummaryMeta(`后台生成中 · ${response.data.status} · ${taskModel}`)
-      setNotice({ kind: 'info', text: 'AI 摘要已进入后台任务，正在生成中。' })
-    } catch (error) {
-      if (requestID !== summaryRequestSeqRef.current) {
-        return
-      }
-      const message = toErrorMessage(error)
-      setArticleSummaryError(message)
-      const identity = resolveSummaryTaskIdentity(articleID)
-      const taskKey = buildSummaryTaskKey(articleID, aiModel)
-      upsertSummaryTask({
-        kind: 'article_summary',
-        key: taskKey,
-        articleID,
-        title: identity.title,
-        sourceName: identity.sourceName,
-        sourceID: identity.sourceID,
-        model: aiModel,
-        status: 'failed',
-        updatedAt: new Date().toISOString(),
-        error: message,
-      })
-      setNotice({ kind: 'error', text: `AI 摘要失败: ${message}` })
-    } finally {
-      if (requestID === summaryRequestSeqRef.current) {
-        setLoadingArticleSummary(false)
-      }
-    }
-  }
+  const { openArticle, onSummarizeArticle, onTrackThread } = useReaderArticleActions({
+    aiModel,
+    selectedArticleID,
+    sourceByID,
+    readerSessionRef,
+    articleRequestSeqRef,
+    summaryRequestSeqRef,
+    summaryTaskNotifiedRef,
+    closeDetailMoreMenu,
+    finalizeReaderSession,
+    startReaderSession,
+    loadCachedSummary,
+    resolveSummaryTaskIdentity,
+    upsertSummaryTask,
+    setLoadingArticle,
+    setReaderView,
+    setShowFloatingReader,
+    setArticleError,
+    setSelectedFeedBriefing,
+    setSelectedArticleID,
+    setArticleSummary,
+    setArticleSummaryMeta,
+    setArticleSummaryError,
+    setLoadingArticleSummary,
+    setExpandedThreadComments,
+    setThreadCommentsNewestFirst,
+    setSelectedArticle,
+    floatingDetailRef,
+    setNotice,
+    loadSources,
+    refreshStatusIfVisible,
+  })
 
   function onOpenSummaryTask(task: SummaryTask) {
     if (task.kind === 'feed_briefing') {
@@ -1068,151 +852,6 @@ function App() {
     removeSummaryTask(taskKey)
   }
 
-  async function onTrackThread() {
-    if (!selectedArticleID) {
-      setNotice({ kind: 'error', text: '请先选择文章。' })
-      return
-    }
-    try {
-      const response = await trackArticleThread(selectedArticleID)
-      setNotice({
-        kind: 'info',
-        text: response.created
-          ? `已开始持续跟踪评论：${response.source.name}`
-          : `该帖子已在跟踪中：${response.source.name}`,
-      })
-      await loadSources()
-      await refreshStatusIfVisible()
-    } catch (error) {
-      setNotice({
-        kind: 'error',
-        text: `持续跟踪失败: ${toErrorMessage(error)}`,
-      })
-    }
-  }
-
-  function resetFeedBriefingState() {
-    setFeedBriefing('')
-    setFeedBriefingMeta('')
-    setFeedBriefingItems([])
-    setFeedBriefingArticleCount(0)
-    setFeedBriefingTaskKey('')
-    setFeedBriefingScopeLabel('')
-    setFeedBriefingGeneratedAt('')
-    setFeedBriefingAnchorArticleIDs([])
-    setFeedBriefingError(null)
-    setLoadingFeedBriefing(false)
-    setSelectedFeedBriefing(false)
-  }
-
-  async function onGenerateFeedBriefing(refresh = false) {
-    const articleIDs = activeFeedBriefingAnchorArticleIDs
-    if (articleIDs.length === 0) {
-      setNotice({ kind: 'error', text: '当前没有可用文章，无法生成 AI 速览。' })
-      return
-    }
-    const sourceIDs = activeFeedBriefingSourceIDs
-    const taskScopeLabel = activeFeedBriefingScopeLabel
-    const taskKey = activeFeedBriefingTaskKey
-    setFeedBriefingTaskKey(taskKey)
-    setFeedBriefingScopeLabel(taskScopeLabel)
-    setFeedBriefingAnchorArticleIDs(articleIDs)
-    upsertSummaryTask({
-      kind: 'feed_briefing',
-      key: taskKey,
-      sourceIDs,
-      sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-      title: 'AI 聚合速览',
-      sourceName: taskScopeLabel,
-      model: aiModel,
-      status: 'running',
-      updatedAt: new Date().toISOString(),
-      error: '',
-    })
-
-    try {
-      setLoadingFeedBriefing(true)
-      setFeedBriefingError(null)
-      const response = await createFeedBriefing({
-        limit: Math.min(articleIDs.length, 30),
-        tag: tagFilter || undefined,
-        keyword: activeFeedBriefingKeyword || undefined,
-        model: aiModel,
-        source_ids: sourceIDs.length > 0 ? sourceIDs : undefined,
-        article_ids: articleIDs,
-        refresh,
-      })
-      setFeedBriefing(response.data.summary)
-      setFeedBriefingItems(response.data.input_items ?? [])
-      setFeedBriefingArticleCount(response.data.article_count ?? 0)
-      setFeedBriefingTaskKey(taskKey)
-      setFeedBriefingGeneratedAt(response.data.generated_at || new Date().toISOString())
-      saveFeedBriefingSnapshot({
-        taskKey,
-        summary: response.data.summary,
-        meta: `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model} · ${response.data.article_count} 篇`,
-        items: response.data.input_items ?? [],
-        articleCount: response.data.article_count ?? 0,
-        scopeLabel: taskScopeLabel,
-        generatedAt: response.data.generated_at || new Date().toISOString(),
-        anchorArticleIDs: articleIDs,
-        error: null,
-      })
-      upsertSummaryTask({
-        kind: 'feed_briefing',
-        key: taskKey,
-        sourceIDs,
-        sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-        title: 'AI 聚合速览',
-        sourceName: taskScopeLabel,
-        model: response.data.model || aiModel,
-        status: 'succeeded',
-        updatedAt: response.data.generated_at || new Date().toISOString(),
-        error: '',
-      })
-      setFeedBriefingMeta(
-        `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model} · ${response.data.article_count} 篇`,
-      )
-      setNotice({
-        kind: 'info',
-        text: response.data.cache_hit ? '已加载缓存速览。' : 'AI 聚合速览已生成。',
-      })
-    } catch (error) {
-      const message = toErrorMessage(error)
-      setFeedBriefingTaskKey(taskKey)
-      setFeedBriefingError(message)
-      saveFeedBriefingSnapshot({
-        taskKey,
-        summary: '',
-        meta: '',
-        items: [],
-        articleCount: 0,
-        scopeLabel: taskScopeLabel,
-        generatedAt: new Date().toISOString(),
-        anchorArticleIDs: articleIDs,
-        error: message,
-      })
-      upsertSummaryTask({
-        kind: 'feed_briefing',
-        key: taskKey,
-        sourceIDs,
-        sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-        title: 'AI 聚合速览',
-        sourceName: taskScopeLabel,
-        model: aiModel,
-        status: 'failed',
-        updatedAt: new Date().toISOString(),
-        error: message,
-      })
-      setNotice({
-        kind: 'error',
-        text: `AI 聚合速览失败: ${message}`,
-      })
-    } finally {
-      setLoadingFeedBriefing(false)
-    }
-  }
-
   const onAfterDeleteSourceStateSync = useCallback(
     (source: Source, containsSourceInFilter: boolean) => {
       if (containsSourceInFilter) {
@@ -1230,9 +869,21 @@ function App() {
       if (pendingDeleteSource?.id === source.id) {
         setPendingDeleteSource(null)
       }
-      setSourceContextMenu(null)
+      closeSourceContextMenu()
     },
-    [pendingDeleteSource, selectedArticle, sourceProfileSource],
+    [
+      closeSourceContextMenu,
+      pendingDeleteSource,
+      selectedArticle,
+      setPendingDeleteSource,
+      setSelectedArticle,
+      setSelectedArticleID,
+      setSidebarTagFilters,
+      setSourceFilter,
+      setSourceGroupFilter,
+      setSourceProfileSource,
+      sourceProfileSource,
+    ],
   )
 
   const {
@@ -1286,7 +937,7 @@ function App() {
     setSources,
     setSourceProfileSource,
     setSourceProfileTagInput,
-    clearSourceContextMenu: () => setSourceContextMenu(null),
+    clearSourceContextMenu: closeSourceContextMenu,
     onCancelEdit,
     onAfterDeleteSourceStateSync,
     loadSources,
@@ -1319,95 +970,34 @@ function App() {
     })
   }
 
-  function applyFilters() {
-    cancelSidebarTagFeedReload()
-    resetFeedBriefingState()
-    setSelectedArticle(null)
-    setSelectedArticleID(null)
-    setFeedCursor('')
-    void loadFeed(false)
-  }
+  const { applyFilters, clearFilters, removeFilter, onChangeAIModel, toggleSiteMuted } = useReaderFilterControls({
+    aiModel,
+    setAIModel,
+    selectedArticleID,
+    summaryRequestSeqRef,
+    loadCachedSummary,
+    resetFeedBriefingState,
+    cancelSidebarTagFeedReload,
+    loadFeed,
+    setKeyword,
+    setTagFilter,
+    setSourceFilter,
+    setUnreadOnly,
+    setSourceGroupFilter,
+    setSidebarTagFilters,
+    setSidebarTagFilterMode,
+    setMutedSiteKeys,
+    setSelectedArticle,
+    setSelectedArticleID,
+    setFeedCursor,
+    setShowManageModelPicker,
+    setArticleSummary,
+    setArticleSummaryMeta,
+    setArticleSummaryError,
+    setNotice,
+  })
 
-  function clearFilters() {
-    cancelSidebarTagFeedReload()
-    resetFeedBriefingState()
-    setKeyword('')
-    setTagFilter('')
-    setSourceFilter('')
-    setUnreadOnly(false)
-    setSourceGroupFilter(null)
-    setSidebarTagFilters([])
-    setMutedSiteKeys([])
-    setSelectedArticle(null)
-    setSelectedArticleID(null)
-    setFeedCursor('')
-    void loadFeed(false, {
-      tag: '',
-      sourceID: '',
-      keyword: '',
-      cursor: '',
-    })
-  }
-
-  function removeFilter(type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread') {
-    cancelSidebarTagFeedReload()
-    if (type === 'keyword') {
-      resetFeedBriefingState()
-      setKeyword('')
-      void loadFeed(false, { keyword: '' })
-      return
-    }
-    if (type === 'tag') {
-      resetFeedBriefingState()
-      setTagFilter('')
-      void loadFeed(false, { tag: '' })
-      return
-    }
-    if (type === 'muted_sites') {
-      setMutedSiteKeys([])
-      return
-    }
-    if (type === 'unread') {
-      setUnreadOnly(false)
-      return
-    }
-
-    setSourceFilter('')
-    setSourceGroupFilter(null)
-    setSidebarTagFilters([])
-    resetFeedBriefingState()
-    void loadFeed(false, { sourceID: '' })
-  }
-
-  function onChangeAIModel(nextModel: string) {
-    const model = nextModel.trim()
-    if (!model || model === aiModel) {
-      return
-    }
-    const requestID = ++summaryRequestSeqRef.current
-    setAIModel(model)
-    resetFeedBriefingState()
-    setArticleSummary('')
-    setArticleSummaryMeta('')
-    setArticleSummaryError(null)
-    if (selectedArticleID) {
-      void loadCachedSummary(selectedArticleID, model, requestID)
-    }
-    setShowManageModelPicker(false)
-    setNotice({ kind: 'info', text: `已切换模型：${model}` })
-  }
-
-  function toggleSiteMuted(siteKey: string) {
-    resetFeedBriefingState()
-    setMutedSiteKeys((previous) => {
-      if (previous.includes(siteKey)) {
-        return previous.filter((item) => item !== siteKey)
-      }
-      return [...previous, siteKey]
-    })
-  }
-
-  function applySourceFilterFromSidebar(sourceID: string, options?: { preserveSidebarTags?: boolean }) {
+  const applySourceFilterFromSidebar = useCallback((sourceID: string, options?: { preserveSidebarTags?: boolean }) => {
     cancelSidebarTagFeedReload()
     resetFeedBriefingState()
     const preserveSidebarTags = options?.preserveSidebarTags ?? false
@@ -1423,7 +1013,18 @@ function App() {
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
       setShowSubscriptionSidebar(false)
     }
-  }
+  }, [
+    cancelSidebarTagFeedReload,
+    loadFeed,
+    resetFeedBriefingState,
+    setFeedCursor,
+    setSelectedArticle,
+    setSelectedArticleID,
+    setShowSubscriptionSidebar,
+    setSidebarTagFilters,
+    setSourceFilter,
+    setSourceGroupFilter,
+  ])
 
   const registerSidebarSourceItemRef = useCallback((sourceID: number, node: HTMLDivElement | null) => {
     if (!node) {
@@ -1431,9 +1032,9 @@ function App() {
       return
     }
     sidebarSourceItemRefs.current.set(sourceID, node)
-  }, [])
+  }, [sidebarSourceItemRefs])
 
-  function applySidebarTagFilters(nextKeys: string[], mode: SidebarTagFilterMode = sidebarTagFilterMode) {
+  const applySidebarTagFilters = useCallback((nextKeys: string[], mode: SidebarTagFilterMode = sidebarTagFilterMode) => {
     resetFeedBriefingState()
     const normalized = Array.from(
       new Set(
@@ -1476,17 +1077,28 @@ function App() {
     setSourceFilter(sourceIDValue)
     setFeedCursor('')
     scheduleSidebarTagFeedReload(sourceIDValue)
-  }
+  }, [
+    readerFeedSources,
+    resetFeedBriefingState,
+    scheduleSidebarTagFeedReload,
+    setFeedCursor,
+    setSidebarTagFilterMode,
+    setSidebarTagFilters,
+    setSourceFilter,
+    setSourceGroupFilter,
+    sidebarTagFilterMode,
+    sourceGroups,
+  ])
 
-  function toggleSidebarTagFilter(tagKey: string) {
+  const toggleSidebarTagFilter = useCallback((tagKey: string) => {
     if (sidebarTagFilterSet.has(tagKey)) {
       applySidebarTagFilters(sidebarTagFilters.filter((item) => item !== tagKey))
       return
     }
     applySidebarTagFilters([...sidebarTagFilters, tagKey])
-  }
+  }, [applySidebarTagFilters, sidebarTagFilterSet, sidebarTagFilters])
 
-  function switchSidebarTagFilterMode(mode: SidebarTagFilterMode) {
+  const switchSidebarTagFilterMode = useCallback((mode: SidebarTagFilterMode) => {
     if (mode === sidebarTagFilterMode) {
       return
     }
@@ -1495,54 +1107,18 @@ function App() {
       return
     }
     applySidebarTagFilters(sidebarTagFilters, mode)
-  }
-
-  function openSourceContextMenu(event: ReactMouseEvent<HTMLElement>, source: Source) {
-    event.preventDefault()
-    event.stopPropagation()
-    const margin = 10
-    const x = Math.max(margin, Math.min(event.clientX, window.innerWidth - margin))
-    const y = Math.max(margin, Math.min(event.clientY, window.innerHeight - margin))
-    setSourceContextMenu({
-      source,
-      x,
-      y,
-    })
-  }
-
-  function openSourceContextMenuAt(source: Source, x: number, y: number) {
-    const margin = 10
-    setSourceContextMenu({
-      source,
-      x: Math.max(margin, Math.min(x, window.innerWidth - margin)),
-      y: Math.max(margin, Math.min(y, window.innerHeight - margin)),
-    })
-  }
+  }, [applySidebarTagFilters, setSidebarTagFilterMode, sidebarTagFilterMode, sidebarTagFilters])
 
   function openSourceProfile(source: Source) {
     setSourceProfileSource(source)
     setSourceProfileTagPickerOpen(false)
     setSourceProfileTagInput('')
-    setSourceContextMenu(null)
+    closeSourceContextMenu()
   }
 
   function openDeleteSourceConfirm(source: Source) {
     setPendingDeleteSource(source)
-    setSourceContextMenu(null)
-  }
-
-  async function refreshAll() {
-    const tasks = [loadSources(), loadFeed(false)]
-    if (activeTab === 'sources') {
-      tasks.push(loadStatus())
-    }
-    await Promise.allSettled(tasks)
-    setNotice({ kind: 'info', text: '已刷新最新数据。' })
-  }
-
-  function loadMore() {
-    if (!feedCursor || loadingFeed) return
-    void loadFeed(true)
+    closeSourceContextMenu()
   }
 
   useEffect(() => {
@@ -1565,7 +1141,7 @@ function App() {
       })
     }, 60 * 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [setSummaryTasks, summaryTaskNotifiedRef])
 
   useSummaryTaskPoller({
     aiModel,
@@ -1600,6 +1176,52 @@ function App() {
     feedBriefingCacheAttemptedRef,
   })
 
+  useReaderRuntimeEffects({
+    activeTab,
+    hasMoreFeed,
+    loadingFeed,
+    feedCursor,
+    feedAutoLoadRef,
+    feedAutoLoadCooldownRef,
+    loadMoreFeed: loadMore,
+    setNowTick,
+    readerView,
+    showFloatingReader,
+    floatingDetailRef,
+    closeFloatingReader,
+    selectedArticleID,
+    readerSessionRef,
+  })
+
+  const closeTransientOverlays = useCallback(() => {
+    setSourceProfileSource(null)
+    closeSourceContextMenu()
+    setPendingDeleteSource(null)
+    setShowFeedAIMoreMenu(false)
+    closeDetailMoreMenu()
+  }, [closeDetailMoreMenu, closeSourceContextMenu, setPendingDeleteSource, setShowFeedAIMoreMenu, setSourceProfileSource])
+
+  const openArticleFromKeyboard = useCallback(
+    (articleID: number) => {
+      void openArticle(articleID)
+    },
+    [openArticle],
+  )
+
+  const hasBlockingOverlayOpen = Boolean(
+    sourceProfileSource || sourceContextMenu || pendingDeleteSource || showFeedAIMoreMenu || showDetailMoreMenu,
+  )
+
+  useReaderKeyboardShortcuts({
+    readerStreamItems,
+    selectedFeedIndex,
+    selectedArticleLink: selectedArticle?.link,
+    onOpenArticle: openArticleFromKeyboard,
+    onOpenFeedBriefing: openFeedBriefing,
+    isBlockingOverlayOpen: hasBlockingOverlayOpen,
+    onCloseOverlays: closeTransientOverlays,
+  })
+
   useEffect(() => {
     if (activeTab === 'sources' && sourceStatus.length === 0 && !loadingStatus) {
       void loadStatus()
@@ -1610,7 +1232,7 @@ function App() {
   useEffect(() => {
     const validSiteKeys = new Set(sourceSiteKeyMap.values())
     setMutedSiteKeys((previous) => previous.filter((siteKey) => validSiteKeys.has(siteKey)))
-  }, [sourceSiteKeyMap])
+  }, [setMutedSiteKeys, sourceSiteKeyMap])
 
   useEffect(() => {
     const validTagKeys = new Set(sourceGroups.map((group) => group.key))
@@ -1621,28 +1243,6 @@ function App() {
     applySidebarTagFilters(nextTagFilters, sidebarTagFilterMode)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceGroups, sidebarTagFilters, sidebarTagFilterMode])
-
-  useEffect(() => {
-    if (sourceGroups.length <= sidebarTagCollapseCount) {
-      setShowAllSidebarTags(false)
-    }
-  }, [sourceGroups.length])
-
-  useEffect(() => {
-    if (sidebarTagFilters.length > 0) {
-      setShowAllSidebarTags(true)
-    }
-  }, [sidebarTagFilters.length])
-
-  useEffect(() => {
-    if (showTrackedSidebar) return
-    setShowAllTrackedSidebar(false)
-  }, [showTrackedSidebar])
-
-  useEffect(() => {
-    if (readerTrackedSources.length > trackedSidebarPreviewLimit) return
-    setShowAllTrackedSidebar(false)
-  }, [readerTrackedSources])
 
   useEffect(() => {
     if (!sourceGroupFilter) return
@@ -1672,38 +1272,7 @@ function App() {
     const input = sourceSelectAllRef.current
     if (!input) return
     input.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected
-  }, [allVisibleSelected, selectedVisibleCount])
-
-  useEffect(() => {
-    if (!sourceContextMenu) return
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as HTMLElement | null
-      if (target?.closest('.source-context-menu')) {
-        return
-      }
-      setSourceContextMenu(null)
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setSourceContextMenu(null)
-      }
-    }
-
-    function handleScroll() {
-      setSourceContextMenu(null)
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    window.addEventListener('scroll', handleScroll, true)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('scroll', handleScroll, true)
-    }
-  }, [sourceContextMenu])
+  }, [allVisibleSelected, selectedVisibleCount, sourceSelectAllRef])
 
   useEffect(() => {
     if (!showFeedAIMoreMenu) return
@@ -1734,13 +1303,13 @@ function App() {
       window.removeEventListener('keydown', handleEscape)
       window.removeEventListener('scroll', handleScroll, true)
     }
-  }, [showFeedAIMoreMenu])
+  }, [feedAIMoreRef, setShowFeedAIMoreMenu, showFeedAIMoreMenu])
 
   useEffect(() => {
     if (activeTab !== 'reader' && showFeedAIMoreMenu) {
       setShowFeedAIMoreMenu(false)
     }
-  }, [activeTab, showFeedAIMoreMenu])
+  }, [activeTab, setShowFeedAIMoreMenu, showFeedAIMoreMenu])
 
   useLayoutEffect(() => {
     if (activeTab !== 'reader' || !showSubscriptionSidebar) {
@@ -1792,48 +1361,26 @@ function App() {
 
     previousSidebarSourceItemRectsRef.current = nextRects
     previousSidebarSourceIDsRef.current = nextIDs
-  }, [activeTab, showSubscriptionSidebar, sidebarVisibleFeedSources])
-
-  useEffect(() => {
-    if (!sourceContextMenu) return
-    const activeMenu = sourceContextMenu
-
-    function adjustSourceContextMenuPosition() {
-      const menu = sourceContextMenuRef.current
-      if (!menu) return
-      const rect = menu.getBoundingClientRect()
-      const next = clampContextMenuPosition(activeMenu.x, activeMenu.y, rect.width, rect.height)
-      if (next.x === activeMenu.x && next.y === activeMenu.y) {
-        return
-      }
-      setSourceContextMenu((previous) => {
-        if (!previous) return previous
-        if (previous.x === next.x && previous.y === next.y) {
-          return previous
-        }
-        return { ...previous, x: next.x, y: next.y }
-      })
-    }
-
-    const frame = window.requestAnimationFrame(adjustSourceContextMenuPosition)
-    window.addEventListener('resize', adjustSourceContextMenuPosition)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      window.removeEventListener('resize', adjustSourceContextMenuPosition)
-    }
-  }, [sourceContextMenu])
+  }, [
+    activeTab,
+    previousSidebarSourceIDsRef,
+    previousSidebarSourceItemRectsRef,
+    sidebarSourceItemRefs,
+    showSubscriptionSidebar,
+    sidebarVisibleFeedSources,
+  ])
 
   useEffect(() => {
     if (activeTab === 'reader' && showSubscriptionSidebar) return
-    setSourceContextMenu(null)
+    closeSourceContextMenu()
     setPendingDeleteSource(null)
-  }, [activeTab, showSubscriptionSidebar])
+  }, [activeTab, closeSourceContextMenu, setPendingDeleteSource, showSubscriptionSidebar])
 
   useEffect(() => {
     if (activeTab !== 'sources') {
       setShowManageModelPicker(false)
     }
-  }, [activeTab])
+  }, [activeTab, setShowManageModelPicker])
 
   useEffect(() => {
     if (!showManageModelPicker) return
@@ -1858,7 +1405,7 @@ function App() {
       document.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [showManageModelPicker])
+  }, [setShowManageModelPicker, showManageModelPicker])
 
   useEffect(() => {
     if (!sourceProfileSource) return
@@ -1870,13 +1417,13 @@ function App() {
     if (latest !== sourceProfileSource) {
       setSourceProfileSource(latest)
     }
-  }, [sourceByID, sourceProfileSource])
+  }, [setSourceProfileSource, sourceByID, sourceProfileSource])
 
   useEffect(() => {
     if (sourceProfileSource) return
     setSourceProfileTagPickerOpen(false)
     setSourceProfileTagInput('')
-  }, [sourceProfileSource])
+  }, [setSourceProfileTagInput, setSourceProfileTagPickerOpen, sourceProfileSource])
 
   useEffect(() => {
     if (!pendingDeleteSource) return
@@ -1888,188 +1435,7 @@ function App() {
     if (latest !== pendingDeleteSource) {
       setPendingDeleteSource(latest)
     }
-  }, [sourceByID, pendingDeleteSource])
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return
-      }
-
-      if (sourceProfileSource || sourceContextMenu || pendingDeleteSource || showFeedAIMoreMenu || showDetailMoreMenu) {
-        if (event.key === 'Escape') {
-          setSourceProfileSource(null)
-          setSourceContextMenu(null)
-          setPendingDeleteSource(null)
-          setShowFeedAIMoreMenu(false)
-          closeDetailMoreMenu()
-        }
-        return
-      }
-
-      if (event.key === 'j' || event.key === 'k') {
-        if (readerStreamItems.length === 0) return
-        event.preventDefault()
-
-        const direction = event.key === 'j' ? 1 : -1
-        const baseIndex = selectedFeedIndex >= 0 ? selectedFeedIndex : event.key === 'j' ? -1 : 0
-        const nextIndex = Math.min(Math.max(baseIndex + direction, 0), readerStreamItems.length - 1)
-        const nextItem = readerStreamItems[nextIndex]
-        if (nextItem?.kind === 'briefing') {
-          openFeedBriefing()
-          return
-        }
-        if (nextItem?.kind === 'article') {
-          void openArticle(nextItem.articleID)
-        }
-        return
-      }
-
-      if (event.key === 'o') {
-        if (selectedArticle?.link) {
-          event.preventDefault()
-          window.open(selectedArticle.link, '_blank', 'noopener,noreferrer')
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    readerStreamItems,
-    selectedFeedIndex,
-    selectedArticle,
-    openArticle,
-    openFeedBriefing,
-    sourceProfileSource,
-    sourceContextMenu,
-    pendingDeleteSource,
-    showFeedAIMoreMenu,
-    showDetailMoreMenu,
-    closeDetailMoreMenu,
-  ])
-
-  useEffect(() => {
-    const target = feedAutoLoadRef.current
-    if (!target) return
-    if (activeTab !== 'reader' || !hasMoreFeed) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (!entry?.isIntersecting) return
-        if (loadingFeed) return
-        const now = Date.now()
-        if (now - feedAutoLoadCooldownRef.current < 900) {
-          return
-        }
-        feedAutoLoadCooldownRef.current = now
-        void loadFeed(true)
-      },
-      {
-        root: null,
-        rootMargin: '0px 0px 420px 0px',
-        threshold: 0,
-      },
-    )
-
-    observer.observe(target)
-    return () => observer.disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, hasMoreFeed, loadingFeed, feedCursor])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowTick(Date.now()), 60 * 1000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    if (activeTab !== 'reader' || readerView !== 'stream' || !showFloatingReader) {
-      return
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const panel = floatingDetailRef.current
-      if (!panel) return
-
-      const target = event.target as Node | null
-      if (target && panel.contains(target)) {
-        return
-      }
-      closeFloatingReader()
-    }
-
-    function handleEscKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        closeFloatingReader()
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleEscKey)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscKey)
-    }
-  }, [activeTab, readerView, showFloatingReader, closeFloatingReader])
-
-  useEffect(() => {
-    if (!selectedArticleID) {
-      return
-    }
-    if (activeTab !== 'reader') {
-      return
-    }
-    if (!showFloatingReader && readerView !== 'detail') {
-      return
-    }
-    const panel = floatingDetailRef.current
-    if (!panel) {
-      return
-    }
-    const panelElement = panel
-
-    function updateReaderSessionProgress() {
-      const session = readerSessionRef.current
-      if (!session || session.articleID !== selectedArticleID) {
-        return
-      }
-      const scrollable = panelElement.scrollHeight - panelElement.clientHeight
-      if (scrollable <= 0) {
-        return
-      }
-      const progress = panelElement.scrollTop / scrollable
-      if (progress > session.maxScrollProgress) {
-        session.maxScrollProgress = progress
-      }
-    }
-
-    updateReaderSessionProgress()
-    panelElement.addEventListener('scroll', updateReaderSessionProgress, { passive: true })
-    window.addEventListener('resize', updateReaderSessionProgress)
-    return () => {
-      panelElement.removeEventListener('scroll', updateReaderSessionProgress)
-      window.removeEventListener('resize', updateReaderSessionProgress)
-    }
-  }, [activeTab, selectedArticleID, readerView, showFloatingReader])
-
-  useEffect(() => {
-    if (activeTab !== 'reader' || readerView !== 'detail') {
-      return
-    }
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [activeTab, readerView])
+  }, [pendingDeleteSource, setPendingDeleteSource, sourceByID])
 
   const sourceManagementController: SourceManagementPanelController = {
     aiModel,
@@ -2192,16 +1558,20 @@ function App() {
 
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
 
-      <SummaryTaskStrip
-        tasks={visibleSummaryTasks}
-        stats={summaryTaskStats}
-        onClearCompleted={clearCompletedSummaryTasks}
-        onOpenTask={onOpenSummaryTask}
-        onDismissTask={onDismissSummaryTask}
-        summaryTaskKindLabel={summaryTaskKindLabel}
-        summaryTaskStatusLabel={summaryTaskStatusLabel}
-        formatTimeAgo={formatTimeAgo}
-      />
+      {visibleSummaryTasks.length > 0 && (
+        <Suspense fallback={null}>
+          <SummaryTaskStripPanel
+            tasks={visibleSummaryTasks}
+            stats={summaryTaskStats}
+            onClearCompleted={clearCompletedSummaryTasks}
+            onOpenTask={onOpenSummaryTask}
+            onDismissTask={onDismissSummaryTask}
+            summaryTaskKindLabel={summaryTaskKindLabel}
+            summaryTaskStatusLabel={summaryTaskStatusLabel}
+            formatTimeAgo={formatTimeAgo}
+          />
+        </Suspense>
+      )}
 
       {activeTab === 'reader' && (
         <>
@@ -2332,67 +1702,79 @@ function App() {
                 buildCompactTitleParts={buildCompactTitleParts}
                 plainText={plainText}
                 truncate={truncate}
-                getSummaryTaskStatus={(articleID) => summaryTaskByArticleID.get(articleID)?.status ?? null}
+                getSummaryTaskStatus={getSummaryTaskStatus}
                 summaryTaskStatusLabel={summaryTaskStatusLabel}
               />
             </div>
           </main>
 
-          <ReaderDetailPanel
-            floatingDetailRef={floatingDetailRef}
-            showFloatingReader={showFloatingReader}
-            readerView={readerView}
-            selectedArticle={selectedArticle}
-            selectedFeedBriefing={selectedFeedBriefing}
-            loadingArticle={loadingArticle}
-            articleError={articleError}
-            selectedArticleID={selectedArticleID}
-            openArticle={openArticle}
-            feedBriefingScopeLabel={feedBriefingScopeLabel}
-            feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
-            returnToReaderStream={returnToReaderStream}
-            closeFloatingReader={closeFloatingReader}
-            openImmersiveReader={openImmersiveReader}
-            aiModel={aiModel}
-            onGenerateFeedBriefing={onGenerateFeedBriefing}
-            loadingFeedBriefing={loadingFeedBriefing}
-            feedBriefingMeta={feedBriefingMeta}
-            feedBriefingNewArticleCount={feedBriefingNewArticleCount}
-            feedBriefingError={feedBriefingError}
-            feedBriefing={feedBriefing}
-            feedBriefingItems={feedBriefingItems}
-            feedBriefingArticleCount={feedBriefingArticleCount}
-            formatTimeAgo={formatTimeAgo}
-            MarkdownBlock={MarkdownBlock}
-            selectedArticleReplyCountLabel={selectedArticleReplyCountLabel}
-            selectedArticleImageURL={selectedArticleImageURL}
-            closeDetailMoreMenu={closeDetailMoreMenu}
-            onSummarizeArticle={onSummarizeArticle}
-            loadingArticleSummary={loadingArticleSummary}
-            hasDetailMoreActions={hasDetailMoreActions}
-            detailMoreMenuRef={detailMoreMenuRef}
-            showDetailMoreMenu={showDetailMoreMenu}
-            toggleDetailMoreMenu={toggleDetailMoreMenu}
-            canTrackThread={canTrackThread}
-            onTrackThread={onTrackThread}
-            canForceRecalcSummary={canForceRecalcSummary}
-            articleSummaryError={articleSummaryError}
-            articleSummary={articleSummary}
-            articleSummaryMeta={articleSummaryMeta}
-            selectedSummaryTask={selectedSummaryTask}
-            isThreadArticle={isThreadArticle}
-            threadPrimaryBody={threadPrimaryBody}
-            plainTextBlock={plainTextBlock}
-            SafeHTMLBlock={SafeHTMLBlock}
-            visibleThreadComments={visibleThreadComments}
-            threadComments={threadComments}
-            threadCommentsNewestFirst={threadCommentsNewestFirst}
-            onToggleThreadCommentsNewestFirst={() => setThreadCommentsNewestFirst((value) => !value)}
-            threadPreviewCommentLimit={threadPreviewCommentLimit}
-            expandedThreadComments={expandedThreadComments}
-            onToggleExpandedThreadComments={() => setExpandedThreadComments((value) => !value)}
-            hasHiddenThreadComments={hasHiddenThreadComments}
-          />
+          {(showFloatingReader || readerView === 'detail') && (
+            <Suspense
+              fallback={
+                <section className={`panel detail reader-panel ${readerView === 'detail' ? 'detail-page' : 'detail-floating'}`}>
+                  <div className="detail-content">
+                    <div className="skeleton skeleton-title" />
+                    <div className="skeleton skeleton-line" />
+                    <div className="skeleton skeleton-line short" />
+                  </div>
+                </section>
+              }
+            >
+              <ReaderDetailPanel
+                floatingDetailRef={floatingDetailRef}
+                showFloatingReader={showFloatingReader}
+                readerView={readerView}
+                selectedArticle={selectedArticle}
+                selectedFeedBriefing={selectedFeedBriefing}
+                loadingArticle={loadingArticle}
+                articleError={articleError}
+                selectedArticleID={selectedArticleID}
+                openArticle={openArticle}
+                feedBriefingScopeLabel={feedBriefingScopeLabel}
+                feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+                returnToReaderStream={returnToReaderStream}
+                closeFloatingReader={closeFloatingReader}
+                openImmersiveReader={openImmersiveReader}
+                aiModel={aiModel}
+                onGenerateFeedBriefing={onGenerateFeedBriefing}
+                loadingFeedBriefing={loadingFeedBriefing}
+                feedBriefingMeta={feedBriefingMeta}
+                feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+                feedBriefingError={feedBriefingError}
+                feedBriefing={feedBriefing}
+                feedBriefingItems={feedBriefingItems}
+                feedBriefingArticleCount={feedBriefingArticleCount}
+                formatTimeAgo={formatTimeAgo}
+                selectedArticleReplyCountLabel={selectedArticleReplyCountLabel}
+                selectedArticleImageURL={selectedArticleImageURL}
+                closeDetailMoreMenu={closeDetailMoreMenu}
+                onSummarizeArticle={onSummarizeArticle}
+                loadingArticleSummary={loadingArticleSummary}
+                hasDetailMoreActions={hasDetailMoreActions}
+                detailMoreMenuRef={detailMoreMenuRef}
+                showDetailMoreMenu={showDetailMoreMenu}
+                toggleDetailMoreMenu={toggleDetailMoreMenu}
+                canTrackThread={canTrackThread}
+                onTrackThread={onTrackThread}
+                canForceRecalcSummary={canForceRecalcSummary}
+                articleSummaryError={articleSummaryError}
+                articleSummary={articleSummary}
+                articleSummaryMeta={articleSummaryMeta}
+                selectedSummaryTask={selectedSummaryTask}
+                isThreadArticle={isThreadArticle}
+                threadPrimaryBody={threadPrimaryBody}
+                plainTextBlock={plainTextBlock}
+                visibleThreadComments={visibleThreadComments}
+                threadComments={threadComments}
+                threadCommentsNewestFirst={threadCommentsNewestFirst}
+                onToggleThreadCommentsNewestFirst={() => setThreadCommentsNewestFirst((value) => !value)}
+                threadPreviewCommentLimit={threadPreviewCommentLimit}
+                expandedThreadComments={expandedThreadComments}
+                onToggleExpandedThreadComments={() => setExpandedThreadComments((value) => !value)}
+                hasHiddenThreadComments={hasHiddenThreadComments}
+              />
+            </Suspense>
+          )}
         </>
       )}
 
@@ -2410,47 +1792,59 @@ function App() {
         </Suspense>
       )}
 
-      <SourceContextMenuOverlay
-        contextMenuRef={sourceContextMenuRef}
-        sourceContextMenu={sourceContextMenu}
-        busySourceID={busySourceID}
-        onQuickSetSourceEnabled={onQuickSetSourceEnabled}
-        onOpenSourceProfile={openSourceProfile}
-        onOpenDeleteConfirm={openDeleteSourceConfirm}
-      />
+      {sourceContextMenu && (
+        <Suspense fallback={null}>
+          <SourceContextMenuOverlay
+            contextMenuRef={sourceContextMenuRef}
+            sourceContextMenu={sourceContextMenu}
+            busySourceID={busySourceID}
+            onQuickSetSourceEnabled={onQuickSetSourceEnabled}
+            onOpenSourceProfile={openSourceProfile}
+            onOpenDeleteConfirm={openDeleteSourceConfirm}
+          />
+        </Suspense>
+      )}
 
-      <SourceProfileDialog
-        sourceProfileSource={sourceProfileSource}
-        sourceProfileStatus={sourceProfileStatus}
-        sourceProfileHealth={sourceProfileHealth}
-        sourceProfileTags={sourceProfileTags}
-        sourceProfileTagPickerOpen={sourceProfileTagPickerOpen}
-        onToggleSourceProfileTagPicker={() => setSourceProfileTagPickerOpen((value) => !value)}
-        sourceProfileTagInput={sourceProfileTagInput}
-        onSetSourceProfileTagInput={setSourceProfileTagInput}
-        sourceProfileTagDrafts={sourceProfileTagDrafts}
-        sourceProfileTagCandidates={sourceProfileTagCandidates}
-        busySourceID={busySourceID}
-        onRemoveSourceProfileTag={onRemoveSourceProfileTag}
-        onAddSourceProfileTags={onAddSourceProfileTags}
-        onQuickSetSourceEnabled={onQuickSetSourceEnabled}
-        onOpenDeleteConfirm={openDeleteSourceConfirm}
-        onCloseSourceProfile={() => setSourceProfileSource(null)}
-        normalizeSourceKind={normalizeSourceKind}
-        resolveSourceSiteKey={resolveSourceSiteKey}
-        formatDateTime={formatDateTime}
-        healthToneClass={healthToneClass}
-        healthLabel={healthLabel}
-        formatTimeAgo={formatTimeAgo}
-        sourceClickCount={sourceClickCount}
-      />
+      {sourceProfileSource && (
+        <Suspense fallback={null}>
+          <SourceProfileDialog
+            sourceProfileSource={sourceProfileSource}
+            sourceProfileStatus={sourceProfileStatus}
+            sourceProfileHealth={sourceProfileHealth}
+            sourceProfileTags={sourceProfileTags}
+            sourceProfileTagPickerOpen={sourceProfileTagPickerOpen}
+            onToggleSourceProfileTagPicker={() => setSourceProfileTagPickerOpen((value) => !value)}
+            sourceProfileTagInput={sourceProfileTagInput}
+            onSetSourceProfileTagInput={setSourceProfileTagInput}
+            sourceProfileTagDrafts={sourceProfileTagDrafts}
+            sourceProfileTagCandidates={sourceProfileTagCandidates}
+            busySourceID={busySourceID}
+            onRemoveSourceProfileTag={onRemoveSourceProfileTag}
+            onAddSourceProfileTags={onAddSourceProfileTags}
+            onQuickSetSourceEnabled={onQuickSetSourceEnabled}
+            onOpenDeleteConfirm={openDeleteSourceConfirm}
+            onCloseSourceProfile={() => setSourceProfileSource(null)}
+            normalizeSourceKind={normalizeSourceKind}
+            resolveSourceSiteKey={resolveSourceSiteKey}
+            formatDateTime={formatDateTime}
+            healthToneClass={healthToneClass}
+            healthLabel={healthLabel}
+            formatTimeAgo={formatTimeAgo}
+            sourceClickCount={sourceClickCount}
+          />
+        </Suspense>
+      )}
 
-      <SourceDeleteConfirmDialog
-        pendingDeleteSource={pendingDeleteSource}
-        busySourceID={busySourceID}
-        onCloseDeleteConfirm={() => setPendingDeleteSource(null)}
-        onConfirmDeleteSource={onConfirmDeleteSource}
-      />
+      {pendingDeleteSource && (
+        <Suspense fallback={null}>
+          <SourceDeleteConfirmDialog
+            pendingDeleteSource={pendingDeleteSource}
+            busySourceID={busySourceID}
+            onCloseDeleteConfirm={() => setPendingDeleteSource(null)}
+            onConfirmDeleteSource={onConfirmDeleteSource}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
