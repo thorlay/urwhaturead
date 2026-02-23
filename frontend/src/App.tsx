@@ -113,6 +113,7 @@ const SourceDeleteConfirmDialog = lazy(async () => {
 })
 
 function App() {
+  const [adminAuthEnabled, setAdminAuthEnabled] = useState(true)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const {
     floatingDetailRef,
@@ -1128,11 +1129,15 @@ function App() {
   const refreshAdminSession = useCallback(async () => {
     try {
       const response = await getAdminSession()
+      setAdminAuthEnabled(Boolean(response.data.enabled))
       setAdminAuthenticated(Boolean(response.data.authenticated))
     } catch {
+      setAdminAuthEnabled(true)
       setAdminAuthenticated(false)
     }
   }, [])
+
+  const canAccessManagement = !adminAuthEnabled || adminAuthenticated
 
   const onAdminLogin = useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -1172,6 +1177,29 @@ function App() {
     setAdminAuthenticated(false)
     setNotice({ kind: 'info', text: '已退出管理权限。' })
   }, [setNotice])
+
+  useEffect(() => {
+    if (canAccessManagement || activeTab !== 'sources') {
+      return
+    }
+    setActiveTab('reader')
+    setReaderView('stream')
+    setShowFloatingReader(false)
+  }, [activeTab, canAccessManagement, setActiveTab, setReaderView, setShowFloatingReader])
+
+  useEffect(() => {
+    function handleAdminLoginShortcut(event: KeyboardEvent) {
+      // Hidden entry: Ctrl/Cmd + Shift + L opens admin login prompt.
+      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.code !== 'KeyL') {
+        return
+      }
+      event.preventDefault()
+      void onAdminLogin()
+    }
+
+    window.addEventListener('keydown', handleAdminLoginShortcut)
+    return () => window.removeEventListener('keydown', handleAdminLoginShortcut)
+  }, [onAdminLogin])
 
   useEffect(() => {
     void loadSources()
@@ -1592,7 +1620,8 @@ function App() {
         sourcesCount={sources.length}
         loadingSources={loadingSources}
         loadingFeed={loadingFeed}
-        adminAuthenticated={adminAuthenticated}
+        canAccessManagement={canAccessManagement}
+        showAdminLogout={adminAuthEnabled && adminAuthenticated}
         onOpenReaderTab={() => {
           finalizeReaderSession('close')
           setActiveTab('reader')
@@ -1600,6 +1629,9 @@ function App() {
           setShowFloatingReader(false)
         }}
         onOpenSourcesTab={() => {
+          if (!canAccessManagement) {
+            return
+          }
           finalizeReaderSession('close')
           setShowFloatingReader(false)
           setReaderView('stream')
@@ -1607,9 +1639,6 @@ function App() {
         }}
         onRefreshAll={() => {
           void refreshAll()
-        }}
-        onAdminLogin={() => {
-          void onAdminLogin()
         }}
         onAdminLogout={() => {
           void onAdminLogout()
@@ -1838,7 +1867,7 @@ function App() {
         </>
       )}
 
-      {activeTab === 'sources' && (
+      {activeTab === 'sources' && canAccessManagement && (
         <Suspense
           fallback={
             <main className="source-management-page">

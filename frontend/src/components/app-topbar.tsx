@@ -6,11 +6,11 @@ type AppTopbarProps = {
   sourcesCount: number
   loadingSources: boolean
   loadingFeed: boolean
-  adminAuthenticated: boolean
+  canAccessManagement: boolean
+  showAdminLogout: boolean
   onOpenReaderTab: () => void
   onOpenSourcesTab: () => void
   onRefreshAll: () => void
-  onAdminLogin: () => void
   onAdminLogout: () => void
 }
 
@@ -20,11 +20,11 @@ export function AppTopbar(props: AppTopbarProps) {
     sourcesCount,
     loadingSources,
     loadingFeed,
-    adminAuthenticated,
+    canAccessManagement,
+    showAdminLogout,
     onOpenReaderTab,
     onOpenSourcesTab,
     onRefreshAll,
-    onAdminLogin,
     onAdminLogout,
   } = props
 
@@ -45,26 +45,24 @@ export function AppTopbar(props: AppTopbarProps) {
           >
             阅读流
           </Button>
-          <Button
-            type="button"
-            variant={activeTab === 'sources' ? 'default' : 'ghost'}
-            size="sm"
-            className={cn('view-tab', activeTab === 'sources' && 'active')}
-            onClick={onOpenSourcesTab}
-          >
-            管理 ({sourcesCount})
-          </Button>
+          {canAccessManagement && (
+            <Button
+              type="button"
+              variant={activeTab === 'sources' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn('view-tab', activeTab === 'sources' && 'active')}
+              onClick={onOpenSourcesTab}
+            >
+              管理 ({sourcesCount})
+            </Button>
+          )}
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onRefreshAll} disabled={loadingSources || loadingFeed}>
           刷新全部
         </Button>
-        {adminAuthenticated ? (
+        {showAdminLogout && (
           <Button type="button" variant="outline" size="sm" onClick={onAdminLogout}>
             退出管理
-          </Button>
-        ) : (
-          <Button type="button" variant="outline" size="sm" onClick={onAdminLogin}>
-            管理员登录
           </Button>
         )}
       </div>
