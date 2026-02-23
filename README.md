@@ -20,6 +20,8 @@ Architecture quickstart for agents:
 - `deploy/quick-api.service`
 - `deploy/.env.prod.example`
 - `deploy/.env.prod.urwhaturead.example`
+- `deploy/quick-auto-update.service`
+- `deploy/quick-auto-update.timer`
 
 `docker-compose.yml` uses `pgvector/pgvector:pg16` so vector similarity dedupe works out of the box.
 
@@ -62,6 +64,7 @@ On first startup, SQL files in `sql/init/` run automatically:
 ./scripts/dev-up.sh --detach  # start DB + API in background
 ./scripts/dev-down.sh  # stop API + DB
 ./scripts/cluster-backfill.sh  # backfill event clusters for historical articles
+./scripts/auto-update.sh  # pull/build/restart when origin has new commits
 ```
 
 ## Environment Variables

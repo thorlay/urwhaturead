@@ -348,3 +348,51 @@ sudo journalctl -u caddy -n 200 --no-pager
 3. AI 摘要失败：`AI_SUMMARY_BASE_URL/API_STYLE/HEADER/PREFIX` 不匹配
 4. RSS 拉取失败：目标站限流或超时，先 `sources/:id/test` 验证
 5. 端口占用：检查旧进程或旧服务未停
+
+---
+
+## 13. 自动更新（达到最小更新就部署）
+
+目标：当远端 `main` 有新提交（默认阈值 `>=1`）时，自动执行更新部署。
+
+仓库已提供：
+
+- `/opt/quick/scripts/auto-update.sh`
+- `/opt/quick/deploy/quick-auto-update.service`
+- `/opt/quick/deploy/quick-auto-update.timer`
+
+安装步骤：
+
+```bash
+cd /opt/quick
+sudo cp deploy/quick-auto-update.service /etc/systemd/system/quick-auto-update.service
+sudo cp deploy/quick-auto-update.timer /etc/systemd/system/quick-auto-update.timer
+```
+
+默认模板使用 `User=root`（最省心）。如果你要改成非 root 用户，再自行调整 sudoers/systemd 权限策略。
+
+启用 timer：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now quick-auto-update.timer
+sudo systemctl status quick-auto-update.timer --no-pager
+```
+
+手动触发一次（用于验收）：
+
+```bash
+sudo systemctl start quick-auto-update.service
+sudo journalctl -u quick-auto-update.service -n 120 --no-pager
+```
+
+可调参数（在 `quick-auto-update.service` 里改）：
+
+- `AUTO_UPDATE_BRANCH`：默认 `main`
+- `AUTO_UPDATE_MIN_COMMITS`：默认 `1`（即“最小更新”）
+- `API_SERVICE_NAME`：默认 `quick-api`
+
+说明：
+
+- 脚本会在工作区有本地未提交改动时自动跳过，避免覆盖人工修改。
+- 有更新时会执行：`git pull --ff-only` -> 后端 build -> 重启 API -> 前端 build -> reload Caddy。

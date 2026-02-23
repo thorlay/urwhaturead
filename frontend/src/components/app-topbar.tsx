@@ -31,8 +31,8 @@ export function AppTopbar(props: AppTopbarProps) {
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">Quick News Aggregator</p>
-        <h1>新闻聚合后台演示</h1>
+        <p className="eyebrow">ur what u read</p>
+        <h1>摸摸又鱼鱼</h1>
       </div>
       <div className="topbar-actions">
         <div className="view-tabs" role="tablist" aria-label="页面">

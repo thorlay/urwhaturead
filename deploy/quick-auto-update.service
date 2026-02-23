@@ -1,0 +1,15 @@
+[Unit]
+Description=Quick Auto Update (pull/build/restart if new commits)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Default to root for minimal friction on restarting system services.
+# You can change this to a non-root deploy user if sudoers/systemd policy is configured.
+User=root
+WorkingDirectory=/opt/quick
+Environment=AUTO_UPDATE_BRANCH=main
+Environment=AUTO_UPDATE_MIN_COMMITS=1
+Environment=API_SERVICE_NAME=quick-api
+ExecStart=/opt/quick/scripts/auto-update.sh

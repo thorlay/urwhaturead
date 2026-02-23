@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Quick Auto Update periodically
+
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=2m
+AccuracySec=30s
+Unit=quick-auto-update.service
+
+[Install]
+WantedBy=timers.target
+
