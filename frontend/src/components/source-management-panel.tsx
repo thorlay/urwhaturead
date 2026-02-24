@@ -1,4 +1,4 @@
-import type { FormEvent, RefObject } from 'react'
+import { useMemo, type FormEvent, type RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -208,6 +208,39 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     onAddDiscoveredSource,
   } = controller
 
+  const failingSourceHighlights = useMemo(() => {
+    const highlights: Array<{
+      sourceID: number
+      name: string
+      httpStatus?: number
+      reason: string
+    }> = []
+
+    for (const source of sources) {
+      const status = sourceStatusMap.get(source.id)
+      if (!status || !source.enabled) {
+        continue
+      }
+      const health = resolveSourceHealth(source, sourceStatusMap)
+      if (health !== 'error' && health !== 'warn' && health !== 'stale') {
+        continue
+      }
+
+      const rawReason = (status.last_error ?? '').trim()
+      const reason = rawReason.length > 120 ? `${rawReason.slice(0, 120)}...` : rawReason
+      if (reason || typeof status.latest_http_status === 'number') {
+        highlights.push({
+          sourceID: source.id,
+          name: source.name,
+          httpStatus: status.latest_http_status,
+          reason: reason || '抓取状态异常',
+        })
+      }
+    }
+
+    return highlights.slice(0, 4)
+  }, [resolveSourceHealth, sourceStatusMap, sources])
+
   return (
     <main className="source-management-page">
       <section className="panel sources source-manage-panel">
@@ -407,6 +440,25 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </div>
         )}
 
+        {failingSourceHighlights.length > 0 && (
+          <div className="source-failure-banner" role="status" aria-live="polite">
+            <div className="source-failure-banner-main">
+              <p className="source-failure-title">抓取异常：{unhealthySourceCount} 个来源需要关注</p>
+              <p className="source-failure-list">
+                {failingSourceHighlights.map((item) => (
+                  <span key={item.sourceID}>
+                    {item.name}
+                    {typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}：{item.reason}
+                  </span>
+                ))}
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
+              {loadingStatus ? '刷新中...' : '立即复查'}
+            </Button>
+          </div>
+        )}
+
         <div className="source-table-wrap">
           {!loadingSources && sources.length === 0 && <p className="hint">暂无来源</p>}
           {!loadingSources && sources.length > 0 && filteredSources.length === 0 && <p className="hint">当前筛选下没有来源</p>}
@@ -439,8 +491,20 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                   const siteKey = sourceSiteKeyMap.get(source.id) ?? resolveSourceSiteKey(source)
                   const rowBusy = busySourceID === source.id || bulkSourceAction !== null
                   const isEditing = editingSourceID === source.id
+                  const hasFetchError =
+                    health === 'error' ||
+                    (typeof status?.latest_http_status === 'number' && status.latest_http_status >= 400) ||
+                    Boolean(status?.last_error)
+                  const hasFetchWarning = !hasFetchError && (health === 'warn' || health === 'stale')
                   return (
-                    <tr key={source.id} className={cn(selectedSourceIDSet.has(source.id) && 'selected')}>
+                    <tr
+                      key={source.id}
+                      className={cn(
+                        selectedSourceIDSet.has(source.id) && 'selected',
+                        hasFetchError && 'source-row-error',
+                        hasFetchWarning && 'source-row-warning',
+                      )}
+                    >
                       <td className="source-checkbox-col">
                         <input
                           type="checkbox"
@@ -495,6 +559,13 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                           <p className="source-cell-meta">
                             最近抓取 {status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '-'}
                           </p>
+                          {hasFetchError && (
+                            <p className="source-cell-error">
+                              拉取失败
+                              {typeof status?.latest_http_status === 'number' ? ` · HTTP ${status.latest_http_status}` : ''}
+                              {status?.last_error ? ` · ${status.last_error}` : ''}
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -505,6 +576,9 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                             <p className="source-cell-meta">间隔 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</p>
                             <p className="source-cell-meta">连续失败 {status?.consecutive_failures ?? 0}</p>
                             <p className="source-cell-meta">最近状态 {status?.latest_status ?? '-'}</p>
+                            <p className={cn('source-cell-meta', hasFetchError && 'source-cell-error')}>
+                              最近错误 {status?.last_error_at ? formatTimeAgo(status.last_error_at) : '-'}
+                            </p>
                           </div>
                         )}
                       </td>
