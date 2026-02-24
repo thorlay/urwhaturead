@@ -1,0 +1,52 @@
+services:
+  rsshub:
+    image: diygod/rsshub:chromium-bundled
+    container_name: quick-rsshub
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.scope=quick-rsshub"
+    ports:
+      - "127.0.0.1:1200:1200"
+    environment:
+      NODE_ENV: production
+      CACHE_TYPE: redis
+      REDIS_URL: redis://redis:6379/
+      PUPPETEER_WS_ENDPOINT: ws://browserless:3000
+    env_file:
+      - ./rsshub.env
+    depends_on:
+      - redis
+      - browserless
+
+  browserless:
+    image: browserless/chrome:latest
+    container_name: quick-rsshub-browserless
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.scope=quick-rsshub"
+
+  redis:
+    image: redis:alpine
+    container_name: quick-rsshub-redis
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.scope=quick-rsshub"
+    volumes:
+      - ./data/rsshub-redis:/data
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: quick-rsshub-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - --interval
+      - "21600"
+      - --cleanup
+      - --label-enable
+      - --scope
+      - quick-rsshub

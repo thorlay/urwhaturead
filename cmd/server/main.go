@@ -62,6 +62,9 @@ func main() {
 		RequestRetries:   cfg.WorkerRequestRetries,
 		RetryBaseSec:     cfg.WorkerRetryBaseSec,
 		BackoffMaxFactor: cfg.WorkerBackoffMaxFactor,
+		UserAgent:        cfg.WorkerUserAgent,
+		DebugHTTP:        cfg.WorkerDebugHTTP,
+		DebugHosts:       cfg.WorkerDebugHosts,
 	})
 	go rssWorker.Start(ctx)
 

@@ -94,6 +94,9 @@ Main vars:
 - `WORKER_REQUEST_RETRIES`
 - `WORKER_RETRY_BASE_SEC`
 - `WORKER_BACKOFF_MAX_FACTOR`
+- `WORKER_USER_AGENT`
+- `WORKER_DEBUG_HTTP`
+- `WORKER_DEBUG_HOSTS`
 - `CLUSTER_VECTOR_ENABLED`
 - `CLUSTER_VECTOR_MAX_DISTANCE`
 - `CLUSTER_VECTOR_MIN_TOKENS`
@@ -251,6 +254,8 @@ Background worker:
 - Respects per-source `poll_interval_sec`.
 - Retries transient request failures with exponential backoff (`WORKER_REQUEST_RETRIES`, `WORKER_RETRY_BASE_SEC`).
 - Increases effective source poll interval after consecutive failures (capped by `WORKER_BACKOFF_MAX_FACTOR`).
+- Uses configurable outbound `User-Agent` (`WORKER_USER_AGENT`).
+- Optional debug logs for outbound worker fetch (`WORKER_DEBUG_HTTP`, `WORKER_DEBUG_HOSTS`).
 - Uses `ETag` and `Last-Modified` for conditional fetch.
 - Writes deduplicated items into `articles`.
 - Writes fetch results into `source_fetch_logs`.

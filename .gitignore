@@ -5,9 +5,11 @@ oauth_creds.json
 .run/
 data/postgres/
 data/pgadmin/
+data/rsshub-redis/
 
 # Go
 bin/
 *.test
 coverage.out
 .token
+deploy/rsshub.env

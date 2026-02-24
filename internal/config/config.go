@@ -16,6 +16,9 @@ type Config struct {
 	WorkerRequestRetries           int
 	WorkerRetryBaseSec             int
 	WorkerBackoffMaxFactor         int
+	WorkerUserAgent                string
+	WorkerDebugHTTP                bool
+	WorkerDebugHosts               []string
 	ClusterVectorEnabled           bool
 	ClusterVectorMaxDistance       float64
 	ClusterVectorMinTokens         int
@@ -59,6 +62,9 @@ func Load() Config {
 		WorkerRequestRetries:           envOrDefaultInt("WORKER_REQUEST_RETRIES", 2),
 		WorkerRetryBaseSec:             envOrDefaultInt("WORKER_RETRY_BASE_SEC", 2),
 		WorkerBackoffMaxFactor:         envOrDefaultInt("WORKER_BACKOFF_MAX_FACTOR", 16),
+		WorkerUserAgent:                envOrDefault("WORKER_USER_AGENT", "Mozilla/5.0 (compatible; QuickRSS/0.1; +https://urwhaturead.com/contact)"),
+		WorkerDebugHTTP:                envOrDefaultBool("WORKER_DEBUG_HTTP", false),
+		WorkerDebugHosts:               envOrDefaultCSV("WORKER_DEBUG_HOSTS", ""),
 		ClusterVectorEnabled:           envOrDefaultBool("CLUSTER_VECTOR_ENABLED", true),
 		ClusterVectorMaxDistance:       envOrDefaultFloat("CLUSTER_VECTOR_MAX_DISTANCE", 0.20),
 		ClusterVectorMinTokens:         envOrDefaultInt("CLUSTER_VECTOR_MIN_TOKENS", 3),
