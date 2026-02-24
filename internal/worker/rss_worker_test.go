@@ -165,6 +165,22 @@ func TestNewRSSWorker_CustomUserAgent(t *testing.T) {
 	}
 }
 
+func TestNewRSSWorker_RedditClientDisablesHTTP2(t *testing.T) {
+	worker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{
+		TickSec: 30,
+	})
+	transport, ok := worker.redditHTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("reddit transport type=%T, want *http.Transport", worker.redditHTTPClient.Transport)
+	}
+	if transport.ForceAttemptHTTP2 {
+		t.Fatalf("expected reddit transport ForceAttemptHTTP2=false")
+	}
+	if transport.TLSNextProto == nil {
+		t.Fatalf("expected reddit transport TLSNextProto to disable http/2")
+	}
+}
+
 func TestNormalizeDebugHosts(t *testing.T) {
 	got := normalizeDebugHosts([]string{" reddit.com ", "REDDIT.com", "  ", "old.reddit.com"})
 	if len(got) != 2 {

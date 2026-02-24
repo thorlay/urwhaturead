@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -50,6 +51,7 @@ type RSSWorker struct {
 	db               *gorm.DB
 	tick             time.Duration
 	httpClient       *http.Client
+	redditHTTPClient *http.Client
 	parser           *gofeed.Parser
 	inflight         sync.Map
 	requestRetries   int
@@ -106,11 +108,29 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 		userAgent:        strings.TrimSpace(options.UserAgent),
 		debugHTTP:        options.DebugHTTP,
 		debugHosts:       normalizeDebugHosts(options.DebugHosts),
-		httpClient: &http.Client{
-			Timeout: 12 * time.Second,
-		},
-		parser: gofeed.NewParser(),
+		httpClient:       newHTTPClient(false),
+		redditHTTPClient: newHTTPClient(true),
+		parser:           gofeed.NewParser(),
 	}
+}
+
+func newHTTPClient(disableHTTP2 bool) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if disableHTTP2 {
+		transport.ForceAttemptHTTP2 = false
+		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	}
+	return &http.Client{
+		Timeout:   12 * time.Second,
+		Transport: transport,
+	}
+}
+
+func (w *RSSWorker) clientForURL(rawURL string) *http.Client {
+	if isRedditRSSURL(rawURL) && w.redditHTTPClient != nil {
+		return w.redditHTTPClient
+	}
+	return w.httpClient
 }
 
 func (w *RSSWorker) Start(ctx context.Context) {
@@ -342,7 +362,7 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 		)
 	}
 
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.clientForURL(source.RSSURL).Do(req)
 	if err != nil {
 		return nil, fetchError{
 			Message:   fmt.Sprintf("request failed: %v", err),
@@ -450,7 +470,7 @@ func (w *RSSWorker) fetchRedditFallbackOnce(ctx context.Context, fallbackURL str
 		)
 	}
 
-	resp, err := w.httpClient.Do(req)
+	resp, err := w.clientForURL(fallbackURL).Do(req)
 	if err != nil {
 		return nil, fetchError{Message: fmt.Sprintf("fallback request failed: %v", err), Retryable: false}
 	}
