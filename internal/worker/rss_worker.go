@@ -11,9 +11,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"quick/internal/clustering"
 	"quick/internal/feedextract"
@@ -39,6 +41,9 @@ type RSSWorkerOptions struct {
 	RequestRetries   int
 	RetryBaseSec     int
 	BackoffMaxFactor int
+	UserAgent        string
+	DebugHTTP        bool
+	DebugHosts       []string
 }
 
 type RSSWorker struct {
@@ -50,6 +55,9 @@ type RSSWorker struct {
 	requestRetries   int
 	retryBaseDelay   time.Duration
 	backoffMaxFactor int
+	userAgent        string
+	debugHTTP        bool
+	debugHosts       []string
 }
 
 type fetchResult struct {
@@ -85,6 +93,9 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 	if options.BackoffMaxFactor < 1 {
 		options.BackoffMaxFactor = 16
 	}
+	if strings.TrimSpace(options.UserAgent) == "" {
+		options.UserAgent = "quick-rss-worker/0.1"
+	}
 
 	return &RSSWorker{
 		db:               db,
@@ -92,6 +103,9 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 		requestRetries:   options.RequestRetries,
 		retryBaseDelay:   time.Duration(options.RetryBaseSec) * time.Second,
 		backoffMaxFactor: options.BackoffMaxFactor,
+		userAgent:        strings.TrimSpace(options.UserAgent),
+		debugHTTP:        options.DebugHTTP,
+		debugHosts:       normalizeDebugHosts(options.DebugHosts),
 		httpClient: &http.Client{
 			Timeout: 12 * time.Second,
 		},
@@ -262,7 +276,7 @@ func cleanHeader(value string) *string {
 }
 
 func (w *RSSWorker) fetchWithRetry(ctx context.Context, source models.Source) (*fetchResult, error) {
-	attempts := w.requestRetries + 1
+	attempts := retryAttemptsForSource(w.requestRetries, source.RSSURL)
 	var lastErr error
 
 	for attempt := 1; attempt <= attempts; attempt++ {
@@ -304,13 +318,28 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 			Retryable: false,
 		}
 	}
-	req.Header.Set("User-Agent", "quick-rss-worker/0.1")
+	req.Header.Set("User-Agent", w.userAgent)
+	if isRedditRSSURL(source.RSSURL) {
+		req.Header.Set("Accept", "application/atom+xml,application/rss+xml,text/xml;q=0.9,*/*;q=0.8")
+	}
 
 	if source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
 		req.Header.Set("If-None-Match", *source.ETag)
 	}
 	if source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
 		req.Header.Set("If-Modified-Since", *source.LastModified)
+	}
+	if w.shouldDebugURL(source.RSSURL) {
+		log.Printf(
+			"worker debug request source=%d url=%s ua=%q accept=%q referer=%q if_none_match=%q if_modified_since=%q",
+			source.ID,
+			source.RSSURL,
+			req.Header.Get("User-Agent"),
+			req.Header.Get("Accept"),
+			req.Header.Get("Referer"),
+			req.Header.Get("If-None-Match"),
+			req.Header.Get("If-Modified-Since"),
+		)
 	}
 
 	resp, err := w.httpClient.Do(req)
@@ -324,6 +353,21 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 
 	etag := cleanHeader(resp.Header.Get("ETag"))
 	lastModified := cleanHeader(resp.Header.Get("Last-Modified"))
+	if w.shouldDebugURL(source.RSSURL) {
+		log.Printf(
+			"worker debug response source=%d url=%s status=%d retry_after=%q ratelimit_used=%q ratelimit_remaining=%q cache_control=%q content_type=%q etag=%q last_modified=%q",
+			source.ID,
+			source.RSSURL,
+			resp.StatusCode,
+			resp.Header.Get("Retry-After"),
+			resp.Header.Get("X-Ratelimit-Used"),
+			resp.Header.Get("X-Ratelimit-Remaining"),
+			resp.Header.Get("Cache-Control"),
+			resp.Header.Get("Content-Type"),
+			resp.Header.Get("ETag"),
+			resp.Header.Get("Last-Modified"),
+		)
+	}
 
 	if resp.StatusCode == http.StatusNotModified {
 		return &fetchResult{
@@ -353,11 +397,100 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 			Retryable:    true,
 		}
 	}
+	if ok, reason := validateFeedResponse(resp.Header.Get("Content-Type"), body); !ok {
+		if w.shouldDebugURL(source.RSSURL) {
+			log.Printf(
+				"worker debug non-feed response source=%d url=%s status=%d reason=%q body_snippet=%q",
+				source.ID,
+				source.RSSURL,
+				resp.StatusCode,
+				reason,
+				bodySnippet(body, 2000),
+			)
+		}
+		return nil, fetchError{
+			Message:      "blocked or non-feed response: " + reason,
+			StatusCode:   resp.StatusCode,
+			ETag:         etag,
+			LastModified: lastModified,
+			Retryable:    false,
+		}
+	}
 
 	return &fetchResult{
 		HTTPStatus:   resp.StatusCode,
 		ETag:         etag,
 		LastModified: lastModified,
+		Body:         body,
+	}, nil
+}
+
+func (w *RSSWorker) fetchRedditFallbackOnce(ctx context.Context, fallbackURL string, source models.Source) (*fetchResult, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fallbackURL, nil)
+	if err != nil {
+		return nil, fetchError{Message: fmt.Sprintf("build fallback request failed: %v", err), Retryable: false}
+	}
+	req.Header.Set("User-Agent", w.userAgent)
+	req.Header.Set("Accept", "application/atom+xml,application/rss+xml,text/xml;q=0.9,*/*;q=0.8")
+	if source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
+		req.Header.Set("If-None-Match", *source.ETag)
+	}
+	if source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
+		req.Header.Set("If-Modified-Since", *source.LastModified)
+	}
+	if w.shouldDebugURL(fallbackURL) {
+		log.Printf(
+			"worker debug fallback request url=%s ua=%q accept=%q referer=%q if_none_match=%q if_modified_since=%q",
+			fallbackURL,
+			req.Header.Get("User-Agent"),
+			req.Header.Get("Accept"),
+			req.Header.Get("Referer"),
+			req.Header.Get("If-None-Match"),
+			req.Header.Get("If-Modified-Since"),
+		)
+	}
+
+	resp, err := w.httpClient.Do(req)
+	if err != nil {
+		return nil, fetchError{Message: fmt.Sprintf("fallback request failed: %v", err), Retryable: false}
+	}
+	defer resp.Body.Close()
+	if w.shouldDebugURL(fallbackURL) {
+		log.Printf(
+			"worker debug fallback response url=%s status=%d retry_after=%q ratelimit_used=%q ratelimit_remaining=%q cache_control=%q content_type=%q etag=%q last_modified=%q",
+			fallbackURL,
+			resp.StatusCode,
+			resp.Header.Get("Retry-After"),
+			resp.Header.Get("X-Ratelimit-Used"),
+			resp.Header.Get("X-Ratelimit-Remaining"),
+			resp.Header.Get("Cache-Control"),
+			resp.Header.Get("Content-Type"),
+			resp.Header.Get("ETag"),
+			resp.Header.Get("Last-Modified"),
+		)
+	}
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fetchError{
+			Message:    fmt.Sprintf("fallback unexpected status code: %d", resp.StatusCode),
+			StatusCode: resp.StatusCode,
+			Retryable:  false,
+		}
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fetchError{
+			Message:    fmt.Sprintf("fallback read response failed: %v", err),
+			StatusCode: resp.StatusCode,
+			Retryable:  false,
+		}
+	}
+
+	return &fetchResult{
+		HTTPStatus:   resp.StatusCode,
+		ETag:         cleanHeader(resp.Header.Get("ETag")),
+		LastModified: cleanHeader(resp.Header.Get("Last-Modified")),
 		Body:         body,
 	}, nil
 }
@@ -387,6 +520,166 @@ func effectiveBackoffFactor(consecutiveFailures int, maxFactor int) int {
 		}
 	}
 	return factor
+}
+
+func retryAttemptsForSource(defaultRetries int, rssURL string) int {
+	attempts := defaultRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+	// Reddit applies aggressive bot/rate limiting; avoid burst retries that often amplify 429s.
+	if isRedditRSSURL(rssURL) {
+		return 1
+	}
+	return attempts
+}
+
+func normalizeDebugHosts(rawHosts []string) []string {
+	if len(rawHosts) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(rawHosts))
+	seen := make(map[string]struct{}, len(rawHosts))
+	for _, raw := range rawHosts {
+		host := strings.TrimSpace(strings.ToLower(raw))
+		if host == "" {
+			continue
+		}
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		out = append(out, host)
+	}
+	return out
+}
+
+func (w *RSSWorker) shouldDebugURL(rawURL string) bool {
+	if !w.debugHTTP {
+		return false
+	}
+	if len(w.debugHosts) == 0 {
+		return true
+	}
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSpace(strings.ToLower(parsed.Hostname()))
+	if host == "" {
+		return false
+	}
+	for _, rule := range w.debugHosts {
+		if host == rule || strings.HasSuffix(host, "."+rule) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRedditRSSURL(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSpace(strings.ToLower(parsed.Hostname()))
+	switch host {
+	case "www.reddit.com", "reddit.com", "old.reddit.com":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateFeedResponse(contentType string, body []byte) (bool, string) {
+	if looksLikeFeedBody(body) {
+		return true, ""
+	}
+
+	if isLikelyFeedContentType(contentType) {
+		return false, "content-type looks like feed but body is not rss/atom/xml"
+	}
+	if looksLikeHTMLBody(body) {
+		return false, "html response (likely blocked/challenge page)"
+	}
+
+	ct := strings.TrimSpace(contentType)
+	if ct == "" {
+		return false, "missing content-type and body is not rss/atom/xml"
+	}
+	return false, "unexpected content-type " + ct
+}
+
+func isLikelyFeedContentType(contentType string) bool {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if ct == "" {
+		return false
+	}
+	if idx := strings.Index(ct, ";"); idx >= 0 {
+		ct = strings.TrimSpace(ct[:idx])
+	}
+
+	switch ct {
+	case "application/rss+xml", "application/atom+xml", "application/xml", "text/xml", "application/rdf+xml":
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikeFeedBody(body []byte) bool {
+	head := normalizedPrefix(body, 256)
+	return strings.HasPrefix(head, "<?xml") ||
+		strings.HasPrefix(head, "<rss") ||
+		strings.HasPrefix(head, "<feed") ||
+		strings.HasPrefix(head, "<rdf:rdf")
+}
+
+func looksLikeHTMLBody(body []byte) bool {
+	head := normalizedPrefix(body, 256)
+	return strings.HasPrefix(head, "<!doctype html") || strings.HasPrefix(head, "<html")
+}
+
+func normalizedPrefix(body []byte, max int) string {
+	if max <= 0 {
+		max = 256
+	}
+	if len(body) > max {
+		body = body[:max]
+	}
+	text := strings.TrimSpace(string(body))
+	text = strings.TrimLeftFunc(text, unicode.IsSpace)
+	text = strings.TrimPrefix(text, "\ufeff")
+	return strings.ToLower(text)
+}
+
+func bodySnippet(body []byte, max int) string {
+	if max <= 0 {
+		max = 2000
+	}
+	text := string(body)
+	if len(text) > max {
+		text = text[:max]
+	}
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.ReplaceAll(text, "\r", " ")
+	text = strings.TrimSpace(text)
+	return text
+}
+
+func redditFallbackURL(rawURL string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "", false
+	}
+	host := strings.TrimSpace(strings.ToLower(parsed.Hostname()))
+	switch host {
+	case "www.reddit.com", "reddit.com":
+		parsed.Host = strings.Replace(parsed.Host, parsed.Hostname(), "old.reddit.com", 1)
+		return parsed.String(), true
+	default:
+		return "", false
+	}
 }
 
 func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, bool) {
