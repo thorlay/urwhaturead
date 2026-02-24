@@ -76,8 +76,9 @@ type forumThreadTarget struct {
 }
 
 type ArticleContentService struct {
-	httpClient *http.Client
-	parser     *gofeed.Parser
+	httpClient       *http.Client
+	redditHTTPClient *http.Client
+	parser           *gofeed.Parser
 
 	cacheMu sync.RWMutex
 	cache   map[string]cachedThread
@@ -127,9 +128,8 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 	}
 
 	return &ArticleContentService{
-		httpClient: &http.Client{
-			Timeout: 12 * time.Second,
-		},
+		httpClient:           newHandlerHTTPClient(12*time.Second, false),
+		redditHTTPClient:     newHandlerHTTPClient(12*time.Second, true),
 		parser:               gofeed.NewParser(),
 		cache:                make(map[string]cachedThread),
 		externalCache:        make(map[string]cachedExternalArticle),
@@ -142,6 +142,10 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 		externalDailyReqMax:  dailyReqMax,
 		externalDailyByteMax: dailyByteMax,
 	}
+}
+
+func (s *ArticleContentService) clientForURL(rawURL string) *http.Client {
+	return pickHTTPClientForURL(rawURL, s.httpClient, s.redditHTTPClient)
 }
 
 func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLink string) (*articleThread, bool) {
@@ -462,7 +466,7 @@ func (s *ArticleContentService) fetchThreadFromFeedURL(ctx context.Context, targ
 	}
 	req.Header.Set("User-Agent", "quick-thread-fetcher/0.1")
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.clientForURL(feedURL).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +648,7 @@ func (s *ArticleContentService) fetchExternalArticle(ctx context.Context, articl
 	}
 	req.Header.Set("User-Agent", "quick-external-fetcher/0.1")
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.clientForURL(normalizedURL).Do(req)
 	if err != nil {
 		s.setExternalFailure(normalizedURL, time.Now().UTC())
 		return nil, false

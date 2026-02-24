@@ -26,19 +26,23 @@ import (
 )
 
 type SourceHandler struct {
-	db         *gorm.DB
-	httpClient *http.Client
-	refresher  worker.Refresher
+	db               *gorm.DB
+	httpClient       *http.Client
+	redditHTTPClient *http.Client
+	refresher        worker.Refresher
 }
 
 func NewSourceHandler(db *gorm.DB, refresher worker.Refresher) *SourceHandler {
 	return &SourceHandler{
-		db: db,
-		httpClient: &http.Client{
-			Timeout: 8 * time.Second,
-		},
-		refresher: refresher,
+		db:               db,
+		httpClient:       newHandlerHTTPClient(8*time.Second, false),
+		redditHTTPClient: newHandlerHTTPClient(8*time.Second, true),
+		refresher:        refresher,
 	}
+}
+
+func (h *SourceHandler) clientForURL(rawURL string) *http.Client {
+	return pickHTTPClientForURL(rawURL, h.httpClient, h.redditHTTPClient)
 }
 
 func (h *SourceHandler) RegisterRoutes(group *gin.RouterGroup) {
@@ -849,7 +853,7 @@ func (h *SourceHandler) probeFeedWithContext(ctx context.Context, feedURL string
 	}
 	req.Header.Set("User-Agent", "quick-news-aggregator/0.1")
 
-	resp, err := h.httpClient.Do(req)
+	resp, err := h.clientForURL(feedURL).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -1019,7 +1023,7 @@ func (h *SourceHandler) fetchBody(
 		req.Header.Set("Accept", accept)
 	}
 
-	resp, err := h.httpClient.Do(req)
+	resp, err := h.clientForURL(rawURL).Do(req)
 	if err != nil {
 		return nil, "", "", err
 	}
