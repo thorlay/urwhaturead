@@ -11,7 +11,7 @@ const ReaderFeedFilters = lazy(async () => {
 
 type FeedSummaryTaskStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
 
-type ReaderFeedPanelProps = {
+export type ReaderFeedPanelProps = {
   showFloatingReader: boolean
   readerView: 'stream' | 'detail'
   feedTitleOnlyMode: boolean

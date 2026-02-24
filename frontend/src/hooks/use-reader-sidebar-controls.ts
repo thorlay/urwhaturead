@@ -1,0 +1,198 @@
+import { useCallback } from 'react'
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
+import type { SidebarTagFilterMode } from '../lib/app-domain'
+import type { ArticleDetail, Source } from '../types'
+
+type AppliedSourceGroupFilter = {
+  key: string
+  label: string
+}
+
+type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
+
+type UseReaderSidebarControlsParams = {
+  cancelSidebarTagFeedReload: () => void
+  resetFeedBriefingState: () => void
+  setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
+  setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
+  setSourceFilter: Dispatch<SetStateAction<string>>
+  setSelectedArticle: Dispatch<SetStateAction<ArticleDetail | null>>
+  setSelectedArticleID: Dispatch<SetStateAction<number | null>>
+  setFeedCursor: Dispatch<SetStateAction<string>>
+  loadFeed: (append?: boolean, overrides?: FeedLoadOverrides) => Promise<void>
+  setShowSubscriptionSidebar: Dispatch<SetStateAction<boolean>>
+  sidebarSourceItemRefs: MutableRefObject<Map<number, HTMLDivElement>>
+  sidebarTagFilterMode: SidebarTagFilterMode
+  setSidebarTagFilterMode: Dispatch<SetStateAction<SidebarTagFilterMode>>
+  readerFeedSources: Source[]
+  sourceTagList: (source: Pick<Source, 'tags'>) => string[]
+  sourceGroups: Array<{ key: string; label: string }>
+  sidebarTagFilters: string[]
+  sidebarTagFilterSet: Set<string>
+  closeSourceContextMenu: () => void
+  setSourceProfileSource: Dispatch<SetStateAction<Source | null>>
+  setSourceProfileTagPickerOpen: Dispatch<SetStateAction<boolean>>
+  setSourceProfileTagInput: Dispatch<SetStateAction<string>>
+  setPendingDeleteSource: Dispatch<SetStateAction<Source | null>>
+}
+
+export function useReaderSidebarControls({
+  cancelSidebarTagFeedReload,
+  resetFeedBriefingState,
+  setSourceGroupFilter,
+  setSidebarTagFilters,
+  setSourceFilter,
+  setSelectedArticle,
+  setSelectedArticleID,
+  setFeedCursor,
+  loadFeed,
+  setShowSubscriptionSidebar,
+  sidebarSourceItemRefs,
+  sidebarTagFilterMode,
+  setSidebarTagFilterMode,
+  readerFeedSources,
+  sourceTagList,
+  sourceGroups,
+  sidebarTagFilters,
+  sidebarTagFilterSet,
+  closeSourceContextMenu,
+  setSourceProfileSource,
+  setSourceProfileTagPickerOpen,
+  setSourceProfileTagInput,
+  setPendingDeleteSource,
+}: UseReaderSidebarControlsParams) {
+  const applySourceFilterFromSidebar = useCallback((sourceID: string, options?: { preserveSidebarTags?: boolean }) => {
+    cancelSidebarTagFeedReload()
+    resetFeedBriefingState()
+    const preserveSidebarTags = options?.preserveSidebarTags ?? false
+    setSourceGroupFilter(null)
+    if (!preserveSidebarTags) {
+      setSidebarTagFilters([])
+    }
+    setSourceFilter(sourceID)
+    setSelectedArticle(null)
+    setSelectedArticleID(null)
+    setFeedCursor('')
+    void loadFeed(false, { sourceID })
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
+      setShowSubscriptionSidebar(false)
+    }
+  }, [
+    cancelSidebarTagFeedReload,
+    loadFeed,
+    resetFeedBriefingState,
+    setFeedCursor,
+    setSelectedArticle,
+    setSelectedArticleID,
+    setShowSubscriptionSidebar,
+    setSidebarTagFilters,
+    setSourceFilter,
+    setSourceGroupFilter,
+  ])
+
+  const registerSidebarSourceItemRef = useCallback((sourceID: number, node: HTMLDivElement | null) => {
+    if (!node) {
+      sidebarSourceItemRefs.current.delete(sourceID)
+      return
+    }
+    sidebarSourceItemRefs.current.set(sourceID, node)
+  }, [sidebarSourceItemRefs])
+
+  const applySidebarTagFilters = useCallback((nextKeys: string[], mode: SidebarTagFilterMode = sidebarTagFilterMode) => {
+    resetFeedBriefingState()
+    const normalized = Array.from(
+      new Set(
+        nextKeys
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ).sort()
+
+    setSidebarTagFilters(normalized)
+    setSidebarTagFilterMode(mode)
+
+    if (normalized.length === 0) {
+      setSourceGroupFilter(null)
+      setSourceFilter('')
+      setFeedCursor('')
+      void loadFeed(false, { sourceID: '' })
+      return
+    }
+
+    const sourceIDs = readerFeedSources
+      .filter((source) => {
+        const tagSet = new Set(sourceTagList(source).map((tag) => tag.toLowerCase()))
+        if (mode === 'and') {
+          return normalized.every((tag) => tagSet.has(tag))
+        }
+        return normalized.some((tag) => tagSet.has(tag))
+      })
+      .map((source) => source.id)
+      .sort((left, right) => left - right)
+    const sourceIDValue = sourceIDs.length > 0 ? sourceIDs.join(',') : '0'
+    const labels = normalized.map((key) => sourceGroups.find((group) => group.key === key)?.label ?? key)
+    const modeLabel = mode === 'and' ? 'AND' : 'OR'
+    const label = labels.length === 1 ? `${labels[0]} (${modeLabel})` : `${modeLabel}: ${labels[0]} +${labels.length - 1}`
+
+    setSourceGroupFilter({
+      key: `tags:${mode}:${normalized.join(',')}`,
+      label,
+    })
+    setSourceFilter(sourceIDValue)
+    setFeedCursor('')
+    void loadFeed(false, { sourceID: sourceIDValue, cursor: '' })
+  }, [
+    readerFeedSources,
+    resetFeedBriefingState,
+    loadFeed,
+    setFeedCursor,
+    setSidebarTagFilterMode,
+    setSidebarTagFilters,
+    setSourceFilter,
+    setSourceGroupFilter,
+    sidebarTagFilterMode,
+    sourceGroups,
+    sourceTagList,
+  ])
+
+  const toggleSidebarTagFilter = useCallback((tagKey: string) => {
+    if (sidebarTagFilterSet.has(tagKey)) {
+      applySidebarTagFilters(sidebarTagFilters.filter((item) => item !== tagKey))
+      return
+    }
+    applySidebarTagFilters([...sidebarTagFilters, tagKey])
+  }, [applySidebarTagFilters, sidebarTagFilterSet, sidebarTagFilters])
+
+  const switchSidebarTagFilterMode = useCallback((mode: SidebarTagFilterMode) => {
+    if (mode === sidebarTagFilterMode) {
+      return
+    }
+    if (sidebarTagFilters.length === 0) {
+      setSidebarTagFilterMode(mode)
+      return
+    }
+    applySidebarTagFilters(sidebarTagFilters, mode)
+  }, [applySidebarTagFilters, setSidebarTagFilterMode, sidebarTagFilterMode, sidebarTagFilters])
+
+  const openSourceProfile = useCallback((source: Source) => {
+    setSourceProfileSource(source)
+    setSourceProfileTagPickerOpen(false)
+    setSourceProfileTagInput('')
+    closeSourceContextMenu()
+  }, [closeSourceContextMenu, setSourceProfileSource, setSourceProfileTagInput, setSourceProfileTagPickerOpen])
+
+  const openDeleteSourceConfirm = useCallback((source: Source) => {
+    setPendingDeleteSource(source)
+    closeSourceContextMenu()
+  }, [closeSourceContextMenu, setPendingDeleteSource])
+
+  return {
+    applySourceFilterFromSidebar,
+    registerSidebarSourceItemRef,
+    applySidebarTagFilters,
+    toggleSidebarTagFilter,
+    switchSidebarTagFilterMode,
+    openSourceProfile,
+    openDeleteSourceConfirm,
+  }
+}

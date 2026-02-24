@@ -11,7 +11,7 @@ type SourceContextMenuState = {
   y: number
 }
 
-type SourceContextMenuOverlayProps = {
+export type SourceContextMenuOverlayProps = {
   contextMenuRef: RefObject<HTMLDivElement | null>
   sourceContextMenu: SourceContextMenuState | null
   busySourceID: number | null
@@ -55,7 +55,7 @@ export function SourceContextMenuOverlay(props: SourceContextMenuOverlayProps) {
   )
 }
 
-type SourceProfileDialogProps = {
+export type SourceProfileDialogProps = {
   sourceProfileSource: Source | null
   sourceProfileStatus: SourceStatus | null
   sourceProfileHealth: SourceStatus['health'] | null
@@ -129,6 +129,10 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
 
         <dl className="source-profile-grid">
           <div className="source-profile-section">基础信息</div>
+          <div>
+            <dt>ID</dt>
+            <dd className="mono">#{sourceProfileSource.id}</dd>
+          </div>
           <div>
             <dt>名称</dt>
             <dd>{sourceProfileSource.name}</dd>
@@ -281,7 +285,7 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
   )
 }
 
-type SourceDeleteConfirmDialogProps = {
+export type SourceDeleteConfirmDialogProps = {
   pendingDeleteSource: Source | null
   busySourceID: number | null
   onCloseDeleteConfirm: () => void

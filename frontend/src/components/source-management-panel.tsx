@@ -475,6 +475,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                       aria-label="全选当前筛选来源"
                     />
                   </th>
+                  <th>ID</th>
                   <th>来源</th>
                   <th>标签</th>
                   <th>点击</th>
@@ -514,13 +515,16 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                         />
                       </td>
                       <td>
+                        <span className="source-id-cell">#{source.id}</span>
+                      </td>
+                      <td>
                         {isEditing ? (
                           <Input value={editSourceName} onChange={(event) => onSetEditSourceName(event.target.value)} />
                         ) : (
                           <div className="source-cell-main">
                             <p className="source-title">{source.name}</p>
                             <p className="source-cell-meta">
-                              #{source.id} · {siteKey} · {source.enabled ? '启用' : '停用'} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}
+                              {siteKey} · {source.enabled ? '启用' : '停用'} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}
                             </p>
                           </div>
                         )}

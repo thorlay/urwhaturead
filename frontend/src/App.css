@@ -394,6 +394,14 @@
   width: 250px;
 }
 
+.source-id-cell {
+  display: inline-block;
+  min-width: 3.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 .source-cell-main {
   display: grid;
   gap: 0.22rem;

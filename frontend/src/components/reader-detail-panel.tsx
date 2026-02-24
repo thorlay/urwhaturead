@@ -15,7 +15,7 @@ type ReaderSummaryTask = {
   error?: string
 } | null
 
-type ReaderDetailPanelProps = {
+export type ReaderDetailPanelProps = {
   floatingDetailRef: RefObject<HTMLElement | null>
   showFloatingReader: boolean
   readerView: 'stream' | 'detail'

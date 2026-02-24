@@ -11,7 +11,7 @@ type SidebarSourceGroup = {
   sources: Source[]
 }
 
-type ReaderSubscriptionSidebarProps = {
+export type ReaderSubscriptionSidebarProps = {
   showSubscriptionSidebar: boolean
   sourceFilter: string
   readerSources: Source[]
