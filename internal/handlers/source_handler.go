@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -686,6 +687,14 @@ func (h *SourceHandler) Update(c *gin.Context) {
 		rssURL := strings.TrimSpace(*req.RSSURL)
 		updates["rss_url"] = rssURL
 		updates["site_key"] = normalizeSiteKey(rssURL)
+		if shouldResetSourceFetchState(source.RSSURL, rssURL) {
+			updates["etag"] = nil
+			updates["last_modified"] = nil
+			updates["last_fetched_at"] = nil
+			updates["consecutive_failures"] = 0
+			updates["last_error_at"] = nil
+			updates["last_error_message"] = nil
+		}
 	}
 	if req.Tags != nil {
 		updates["tags"] = mergeSourceTags(*req.Tags)
@@ -1342,12 +1351,42 @@ func compactFeedText(raw string) string {
 	return text
 }
 
+func shouldResetSourceFetchState(previousRSSURL string, nextRSSURL string) bool {
+	return canonicalizeURL(previousRSSURL) != canonicalizeURL(nextRSSURL)
+}
+
 func normalizeSourceForResponse(source *models.Source) {
 	if source == nil {
 		return
 	}
+	source.Name = normalizeDisplaySourceName(source.Name, source.RSSURL)
 	source.SiteKey = normalizeSiteKey(source.RSSURL)
 	source.Tags = mergeSourceTags(source.Tags)
+}
+
+func normalizeDisplaySourceName(currentName string, rssURL string) string {
+	name := strings.TrimSpace(currentName)
+	if name == "" {
+		return fallbackSourceNameFromURL(rssURL)
+	}
+
+	u, err := url.Parse(strings.TrimSpace(rssURL))
+	if err != nil || !isRSSHubProviderURL(u) {
+		return name
+	}
+
+	host := strings.TrimSpace(u.Hostname())
+	if host == "" {
+		return name
+	}
+	if !strings.EqualFold(name, host) {
+		return name
+	}
+
+	if segment := firstPathSegment(u.Path); segment != "" {
+		return segment
+	}
+	return name
 }
 
 func mergeSourceTags(rawTags []string) models.StringArray {
@@ -1447,7 +1486,7 @@ func inferSourceTagByRule(rssURL string) (string, bool) {
 		return "sports", true
 	case strings.Contains(host, "nature.com") || strings.Contains(host, "science.org"):
 		return "science", true
-	case isRSSHubHost(host):
+	case isRSSHubProviderURL(parsed):
 		segment := firstPathSegment(path)
 		switch segment {
 		case "v2ex", "hackernews", "github":
@@ -1577,6 +1616,11 @@ func uniqueUint64(values []uint64) []uint64 {
 func fallbackSourceNameFromURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err == nil {
+		if isRSSHubProviderURL(u) {
+			if segment := firstPathSegment(u.Path); segment != "" {
+				return segment
+			}
+		}
 		host := strings.TrimSpace(u.Hostname())
 		if host != "" {
 			return host
@@ -1594,7 +1638,7 @@ func normalizeSiteKey(rawURL string) string {
 	if host == "" {
 		return "unknown-site"
 	}
-	if isRSSHubHost(host) {
+	if isRSSHubProviderURL(u) {
 		firstSegment := firstPathSegment(u.Path)
 		if firstSegment != "" {
 			return firstSegment
@@ -1629,4 +1673,49 @@ func isRSSHubHost(host string) bool {
 	default:
 		return false
 	}
+}
+
+func isRSSHubProviderURL(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	host := strings.TrimSpace(strings.ToLower(u.Hostname()))
+	if host == "" {
+		return false
+	}
+	if isRSSHubHost(host) {
+		return true
+	}
+	if !isLocalOrPrivateHost(host) {
+		return false
+	}
+	return looksLikeRSSHubPath(u.Path)
+}
+
+func looksLikeRSSHubPath(pathValue string) bool {
+	trimmed := strings.Trim(pathValue, "/")
+	if trimmed == "" {
+		return false
+	}
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 2 {
+		return false
+	}
+	first := strings.TrimSpace(strings.ToLower(parts[0]))
+	if first == "" || strings.Contains(first, ".") {
+		return false
+	}
+	return true
+}
+
+func isLocalOrPrivateHost(host string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(host))
+	if normalized == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(normalized)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }

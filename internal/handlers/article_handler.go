@@ -16,7 +16,6 @@ import (
 	"quick/internal/textclean"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/publicsuffix"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -686,28 +685,7 @@ func buildThreadTrackingSourceName(articleTitle string, fallback string) string 
 }
 
 func normalizeSiteKeyFromURL(rawURL string) string {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return "unknown-site"
-	}
-	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-	if host == "" {
-		return "unknown-site"
-	}
-	if isRSSHubHost(host) {
-		segment := strings.TrimSpace(strings.ToLower(firstNonEmpty(strings.Split(strings.Trim(parsed.Path, "/"), "/")...)))
-		if segment != "" {
-			return segment
-		}
-	}
-	if host == "localhost" {
-		return host
-	}
-	eTLD1, err := publicsuffix.EffectiveTLDPlusOne(host)
-	if err == nil && strings.TrimSpace(eTLD1) != "" {
-		return strings.ToLower(eTLD1)
-	}
-	return host
+	return normalizeSiteKey(rawURL)
 }
 
 func shouldFetchExternalArticle(sourceName string, sourceRSSURL string, link string) bool {

@@ -278,6 +278,11 @@ func TestNormalizeSiteKeyFromURL(t *testing.T) {
 			input: "https://www.v2ex.com/index.xml",
 			want:  "v2ex.com",
 		},
+		{
+			name:  "loopback rsshub uses first segment",
+			input: "http://127.0.0.1:1200/v2ex/topics/hot",
+			want:  "v2ex",
+		},
 	}
 
 	for _, tt := range tests {

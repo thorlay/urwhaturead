@@ -37,6 +37,16 @@ func TestNormalizeSiteKey(t *testing.T) {
 			want:  "localhost",
 		},
 		{
+			name:  "loopback rsshub should use first path segment",
+			input: "http://127.0.0.1:1200/v2ex/topics/hot",
+			want:  "v2ex",
+		},
+		{
+			name:  "private ip rsshub should use first path segment",
+			input: "http://10.0.0.12:1200/dapenti/tugua",
+			want:  "dapenti",
+		},
+		{
 			name:  "invalid url",
 			input: "not-a-url",
 			want:  "unknown-site",
@@ -48,6 +58,71 @@ func TestNormalizeSiteKey(t *testing.T) {
 			got := normalizeSiteKey(tt.input)
 			if got != tt.want {
 				t.Fatalf("normalizeSiteKey(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFallbackSourceNameFromURL(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "loopback rsshub should use first path segment",
+			input: "http://127.0.0.1:1200/dapenti/tugua",
+			want:  "dapenti",
+		},
+		{
+			name:  "regular host should fallback to hostname",
+			input: "https://feeds.bbci.co.uk/news/rss.xml",
+			want:  "feeds.bbci.co.uk",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fallbackSourceNameFromURL(tt.input)
+			if got != tt.want {
+				t.Fatalf("fallbackSourceNameFromURL(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeDisplaySourceName(t *testing.T) {
+	tests := []struct {
+		name        string
+		currentName string
+		rssURL      string
+		want        string
+	}{
+		{
+			name:        "local rsshub hostname should map to first segment",
+			currentName: "127.0.0.1",
+			rssURL:      "http://127.0.0.1:1200/dapenti/tugua",
+			want:        "dapenti",
+		},
+		{
+			name:        "explicit custom name should be kept",
+			currentName: "我的论坛源",
+			rssURL:      "http://127.0.0.1:1200/v2ex/topics/hot",
+			want:        "我的论坛源",
+		},
+		{
+			name:        "empty name should use fallback",
+			currentName: "",
+			rssURL:      "http://127.0.0.1:1200/v2ex/topics/hot",
+			want:        "v2ex",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeDisplaySourceName(tt.currentName, tt.rssURL)
+			if got != tt.want {
+				t.Fatalf("normalizeDisplaySourceName(%q, %q) = %q, want %q", tt.currentName, tt.rssURL, got, tt.want)
 			}
 		})
 	}
@@ -270,6 +345,37 @@ func TestMergeSourceTags(t *testing.T) {
 				if got[idx] != tt.want[idx] {
 					t.Fatalf("mergeSourceTags()[%d]=%q want=%q", idx, got[idx], tt.want[idx])
 				}
+			}
+		})
+	}
+}
+
+func TestShouldResetSourceFetchState(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous string
+		next     string
+		want     bool
+	}{
+		{
+			name:     "same canonical url should not reset",
+			previous: "https://www.reddit.com/r/technology/top.rss/",
+			next:     "https://www.reddit.com/r/technology/top.rss",
+			want:     false,
+		},
+		{
+			name:     "query change should reset",
+			previous: "https://www.reddit.com/r/technology/top.rss",
+			next:     "https://www.reddit.com/r/technology/top.rss?t=day",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldResetSourceFetchState(tt.previous, tt.next)
+			if got != tt.want {
+				t.Fatalf("shouldResetSourceFetchState(%q, %q)=%v, want %v", tt.previous, tt.next, got, tt.want)
 			}
 		})
 	}
