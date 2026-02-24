@@ -30,4 +30,7 @@ func TestNewHandlerHTTPClient_DisablesHTTP2WhenRequested(t *testing.T) {
 	if transport.TLSNextProto == nil {
 		t.Fatalf("expected TLSNextProto to be set when disabling http2")
 	}
+	if transport.TLSClientConfig == nil || len(transport.TLSClientConfig.NextProtos) != 1 || transport.TLSClientConfig.NextProtos[0] != "http/1.1" {
+		t.Fatalf("expected TLSClientConfig.NextProtos=[http/1.1], got=%v", transport.TLSClientConfig)
+	}
 }

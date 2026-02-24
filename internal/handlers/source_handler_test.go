@@ -1,9 +1,24 @@
 package handlers
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
 )
+
+func TestNewSourceHandler_RedditClientDisablesHTTP2(t *testing.T) {
+	handler := NewSourceHandler(nil, nil)
+	transport, ok := handler.redditHTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("reddit transport type=%T, want *http.Transport", handler.redditHTTPClient.Transport)
+	}
+	if transport.ForceAttemptHTTP2 {
+		t.Fatalf("expected reddit transport ForceAttemptHTTP2=false")
+	}
+	if transport.TLSNextProto == nil {
+		t.Fatalf("expected reddit transport TLSNextProto to disable http/2")
+	}
+}
 
 func TestNormalizeSiteKey(t *testing.T) {
 	tests := []struct {

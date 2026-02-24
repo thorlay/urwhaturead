@@ -179,6 +179,9 @@ func TestNewRSSWorker_RedditClientDisablesHTTP2(t *testing.T) {
 	if transport.TLSNextProto == nil {
 		t.Fatalf("expected reddit transport TLSNextProto to disable http/2")
 	}
+	if transport.TLSClientConfig == nil || len(transport.TLSClientConfig.NextProtos) != 1 || transport.TLSClientConfig.NextProtos[0] != "http/1.1" {
+		t.Fatalf("expected TLSClientConfig.NextProtos=[http/1.1], got=%v", transport.TLSClientConfig)
+	}
 }
 
 func TestNormalizeDebugHosts(t *testing.T) {

@@ -119,6 +119,15 @@ func newHTTPClient(disableHTTP2 bool) *http.Client {
 	if disableHTTP2 {
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		tlsConfig := transport.TLSClientConfig
+		if tlsConfig != nil {
+			tlsConfig = tlsConfig.Clone()
+		} else {
+			tlsConfig = &tls.Config{}
+		}
+		// Force ALPN to HTTP/1.1 so upstream cannot negotiate h2.
+		tlsConfig.NextProtos = []string{"http/1.1"}
+		transport.TLSClientConfig = tlsConfig
 	}
 	return &http.Client{
 		Timeout:   12 * time.Second,
