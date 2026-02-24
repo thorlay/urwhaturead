@@ -467,6 +467,7 @@ func (s *ArticleContentService) fetchThreadFromFeedURL(ctx context.Context, targ
 	req.Header.Set("User-Agent", "quick-thread-fetcher/0.1")
 
 	resp, err := s.clientForURL(feedURL).Do(req)
+	logRedditHTTPResult("article.fetchThreadFeed", feedURL, resp, err)
 	if err != nil {
 		return nil, err
 	}
@@ -649,6 +650,7 @@ func (s *ArticleContentService) fetchExternalArticle(ctx context.Context, articl
 	req.Header.Set("User-Agent", "quick-external-fetcher/0.1")
 
 	resp, err := s.clientForURL(normalizedURL).Do(req)
+	logRedditHTTPResult("article.fetchExternal", normalizedURL, resp, err)
 	if err != nil {
 		s.setExternalFailure(normalizedURL, time.Now().UTC())
 		return nil, false

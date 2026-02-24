@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,4 +49,35 @@ func isRedditURL(rawURL string) bool {
 	default:
 		return false
 	}
+}
+
+func logRedditHTTPResult(scope string, rawURL string, resp *http.Response, err error) {
+	if !isRedditURL(rawURL) {
+		return
+	}
+	if err != nil {
+		log.Printf("%s reddit request failed url=%s err=%v", scope, rawURL, err)
+		return
+	}
+	if resp == nil {
+		log.Printf("%s reddit response is nil url=%s", scope, rawURL)
+		return
+	}
+	alpn := ""
+	if resp.TLS != nil {
+		alpn = strings.TrimSpace(resp.TLS.NegotiatedProtocol)
+	}
+	finalURL := rawURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+	log.Printf(
+		"%s reddit response url=%s final_url=%s status=%d proto=%s alpn=%q",
+		scope,
+		rawURL,
+		finalURL,
+		resp.StatusCode,
+		resp.Proto,
+		alpn,
+	)
 }

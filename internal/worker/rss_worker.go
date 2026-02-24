@@ -372,6 +372,7 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 	}
 
 	resp, err := w.clientForURL(source.RSSURL).Do(req)
+	w.logRedditHTTPResult("worker.fetchOnce", source.RSSURL, resp, err)
 	if err != nil {
 		return nil, fetchError{
 			Message:   fmt.Sprintf("request failed: %v", err),
@@ -480,6 +481,7 @@ func (w *RSSWorker) fetchRedditFallbackOnce(ctx context.Context, fallbackURL str
 	}
 
 	resp, err := w.clientForURL(fallbackURL).Do(req)
+	w.logRedditHTTPResult("worker.fetchFallback", fallbackURL, resp, err)
 	if err != nil {
 		return nil, fetchError{Message: fmt.Sprintf("fallback request failed: %v", err), Retryable: false}
 	}
@@ -604,6 +606,37 @@ func (w *RSSWorker) shouldDebugURL(rawURL string) bool {
 		}
 	}
 	return false
+}
+
+func (w *RSSWorker) logRedditHTTPResult(scope string, rawURL string, resp *http.Response, err error) {
+	if !isRedditRSSURL(rawURL) {
+		return
+	}
+	if err != nil {
+		log.Printf("%s reddit request failed url=%s err=%v", scope, rawURL, err)
+		return
+	}
+	if resp == nil {
+		log.Printf("%s reddit response is nil url=%s", scope, rawURL)
+		return
+	}
+	alpn := ""
+	if resp.TLS != nil {
+		alpn = strings.TrimSpace(resp.TLS.NegotiatedProtocol)
+	}
+	finalURL := rawURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
+	log.Printf(
+		"%s reddit response url=%s final_url=%s status=%d proto=%s alpn=%q",
+		scope,
+		rawURL,
+		finalURL,
+		resp.StatusCode,
+		resp.Proto,
+		alpn,
+	)
 }
 
 func isRedditRSSURL(rawURL string) bool {

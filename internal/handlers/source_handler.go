@@ -854,6 +854,7 @@ func (h *SourceHandler) probeFeedWithContext(ctx context.Context, feedURL string
 	req.Header.Set("User-Agent", "quick-news-aggregator/0.1")
 
 	resp, err := h.clientForURL(feedURL).Do(req)
+	logRedditHTTPResult("source.probeFeed", feedURL, resp, err)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -1024,6 +1025,7 @@ func (h *SourceHandler) fetchBody(
 	}
 
 	resp, err := h.clientForURL(rawURL).Do(req)
+	logRedditHTTPResult("source.fetchBody", rawURL, resp, err)
 	if err != nil {
 		return nil, "", "", err
 	}
