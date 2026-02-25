@@ -137,7 +137,7 @@ export function useReaderSidebarControls({
       .sort((left, right) => left - right)
     const sourceIDValue = sourceIDs.length > 0 ? sourceIDs.join(',') : '0'
     const labels = normalized.map((key) => sourceGroups.find((group) => group.key === key)?.label ?? key)
-    const modeLabel = mode === 'and' ? 'AND' : 'OR'
+    const modeLabel = mode === 'and' ? '全部' : '任一'
     const label = labels.length === 1 ? `${labels[0]} (${modeLabel})` : `${modeLabel}: ${labels[0]} +${labels.length - 1}`
 
     setSourceGroupFilter({

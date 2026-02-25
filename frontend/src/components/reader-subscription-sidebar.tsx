@@ -179,26 +179,6 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
               <div className="subscription-tag-controls">
                 <span className="hint">标签匹配</span>
                 <div className="subscription-tag-controls-actions">
-                  <div className="subscription-tag-mode" role="group" aria-label="标签匹配模式">
-                    <Button
-                      type="button"
-                      variant={sidebarTagFilterMode === 'or' ? 'default' : 'outline'}
-                      size="sm"
-                      className="subscription-tag-mode-btn"
-                      onClick={() => onSwitchSidebarTagFilterMode('or')}
-                    >
-                      OR
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={sidebarTagFilterMode === 'and' ? 'default' : 'outline'}
-                      size="sm"
-                      className="subscription-tag-mode-btn"
-                      onClick={() => onSwitchSidebarTagFilterMode('and')}
-                    >
-                      AND
-                    </Button>
-                  </div>
                   <Button
                     type="button"
                     variant="ghost"
@@ -210,6 +190,28 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                   >
                     清空标签
                   </Button>
+                  <div className="subscription-tag-mode" role="group" aria-label="标签匹配模式">
+                    <Button
+                      type="button"
+                      variant={sidebarTagFilterMode === 'or' ? 'default' : 'outline'}
+                      size="sm"
+                      className="subscription-tag-mode-btn"
+                      title="命中任意一个已选标签"
+                      onClick={() => onSwitchSidebarTagFilterMode('or')}
+                    >
+                      任一
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={sidebarTagFilterMode === 'and' ? 'default' : 'outline'}
+                      size="sm"
+                      className="subscription-tag-mode-btn"
+                      title="必须命中所有已选标签"
+                      onClick={() => onSwitchSidebarTagFilterMode('and')}
+                    >
+                      全部
+                    </Button>
+                  </div>
                   {sourceGroups.length > sidebarTagCollapseCount && (
                     <Button
                       type="button"

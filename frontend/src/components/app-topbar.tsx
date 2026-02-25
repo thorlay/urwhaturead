@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -35,62 +36,78 @@ export function AppTopbar(props: AppTopbarProps) {
   } = props
 
   return (
-    <header className="topbar">
-      <div>
-        <p className="eyebrow">ur what u read</p>
-        <h1>摸摸又鱼鱼</h1>
-      </div>
-      <div className="topbar-actions">
-        <div className="view-tabs" role="tablist" aria-label="页面">
-          <Button
-            type="button"
-            variant={activeTab === 'reader' ? 'default' : 'ghost'}
-            size="sm"
-            className={cn('view-tab', activeTab === 'reader' && 'active')}
-            onClick={onOpenReaderTab}
-          >
-            阅读流
-          </Button>
-          {canAccessManagement && (
+    <Fragment>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">ur what u read</p>
+          <h1>摸摸又鱼鱼</h1>
+        </div>
+        <div className="topbar-actions">
+          <div className="view-tabs" role="tablist" aria-label="页面">
             <Button
               type="button"
-              variant={activeTab === 'sources' ? 'default' : 'ghost'}
+              variant={activeTab === 'reader' ? 'default' : 'ghost'}
               size="sm"
-              className={cn('view-tab', activeTab === 'sources' && 'active')}
-              onClick={onOpenSourcesTab}
+              className={cn('view-tab', activeTab === 'reader' && 'active')}
+              onClick={onOpenReaderTab}
             >
-              管理 ({sourcesCount})
+              阅读流
             </Button>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          title="只更新当前页面数据，不触发来源强制抓取"
-          onClick={onRefreshAll}
-          disabled={loadingSources || loadingFeed}
-        >
-          更新视图
-        </Button>
-        {activeTab === 'reader' && (
-          <div className="topbar-feed-update">
-            <span className="topbar-feed-status">
-              {pendingFeedCount > 0 ? `新消息 ${pendingFeedCount} 条` : checkingFeedUpdates ? '检查新消息中...' : '已是最新'}
-            </span>
-            {pendingFeedCount > 0 && (
-              <Button type="button" variant="secondary" size="sm" onClick={onApplyPendingFeedUpdates} disabled={loadingFeed}>
-                查看新消息
+            {canAccessManagement && (
+              <Button
+                type="button"
+                variant={activeTab === 'sources' ? 'default' : 'ghost'}
+                size="sm"
+                className={cn('view-tab', activeTab === 'sources' && 'active')}
+                onClick={onOpenSourcesTab}
+              >
+                管理 ({sourcesCount})
               </Button>
             )}
           </div>
-        )}
-        {showAdminLogout && (
-          <Button type="button" variant="outline" size="sm" onClick={onAdminLogout}>
-            退出管理
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="topbar-refresh-btn"
+            title="只更新当前页面数据，不触发来源强制抓取"
+            onClick={onRefreshAll}
+            disabled={loadingSources || loadingFeed}
+          >
+            更新视图
           </Button>
-        )}
-      </div>
-    </header>
+          {activeTab === 'reader' && (
+            <div className="topbar-feed-update">
+              <span className="topbar-feed-status">
+                {pendingFeedCount > 0 ? `新消息 ${pendingFeedCount} 条` : checkingFeedUpdates ? '检查新消息中...' : '已是最新'}
+              </span>
+              {pendingFeedCount > 0 && (
+                <Button type="button" variant="secondary" size="sm" onClick={onApplyPendingFeedUpdates} disabled={loadingFeed}>
+                  查看新消息
+                </Button>
+              )}
+            </div>
+          )}
+          {showAdminLogout && (
+            <Button type="button" variant="outline" size="sm" onClick={onAdminLogout}>
+              退出管理
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {activeTab === 'reader' && pendingFeedCount > 0 && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="mobile-feed-update-fab"
+          onClick={onApplyPendingFeedUpdates}
+          disabled={loadingFeed}
+        >
+          更新({pendingFeedCount})
+        </Button>
+      )}
+    </Fragment>
   )
 }

@@ -221,6 +221,8 @@ const FeedArticleListItem = memo(
       [formatTimeAgoCompact, item.created_at, item.published_at],
     )
     const replyCountText = useMemo(() => formatReplyCount(item.reply_count), [formatReplyCount, item.reply_count])
+    const plainSummaryText = useMemo(() => plainText(item.summary), [item.summary, plainText])
+    const isShortSummary = plainSummaryText.length > 0 && plainSummaryText.length <= 72
     const compactTitleParts = useMemo(
       () => buildCompactTitleParts(item.title, item.summary),
       [buildCompactTitleParts, item.summary, item.title],
@@ -301,7 +303,9 @@ const FeedArticleListItem = memo(
                   )}
                 </div>
                 <h3 className="feed-item-title">{item.title}</h3>
-                <p className="feed-item-summary">{truncate(plainText(item.summary), 175)}</p>
+                <p className={cn('feed-item-summary', isShortSummary && 'short')}>
+                  {isShortSummary ? plainSummaryText : truncate(plainSummaryText, 175)}
+                </p>
               </>
             )}
           </div>
