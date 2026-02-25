@@ -107,6 +107,8 @@ func main() {
 		cfg.AdminToken,
 		cfg.AdminUsername,
 		cfg.AdminPassword,
+		cfg.FeedBriefingRateLimitPerHour,
+		cfg.FeedBriefingCooldownSec,
 	)
 	server := &http.Server{
 		Addr:              ":" + cfg.ServerPort,

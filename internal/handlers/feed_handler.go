@@ -38,16 +38,27 @@ type FeedHandler struct {
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
 	AdminToken       string
+	RateLimitPerHour int
+	CooldownSec      int
 }
 
 func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandlerOptions) *FeedHandler {
+	rateLimit := options.RateLimitPerHour
+	if rateLimit <= 0 {
+		rateLimit = 10
+	}
+	cooldown := time.Duration(options.CooldownSec) * time.Second
+	if cooldown <= 0 {
+		cooldown = 10 * time.Minute
+	}
+
 	return &FeedHandler{
 		db:               db,
 		summarizer:       summarizer,
 		adminAuthEnabled: options.AdminAuthEnabled,
 		adminToken:       strings.TrimSpace(options.AdminToken),
-		briefingLimiter:  newBriefingRateLimiter(10, time.Hour),
-		briefingCooldown: newBriefingCooldownStore(10 * time.Minute),
+		briefingLimiter:  newBriefingRateLimiter(rateLimit, time.Hour),
+		briefingCooldown: newBriefingCooldownStore(cooldown),
 	}
 }
 

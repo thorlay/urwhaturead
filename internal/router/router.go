@@ -21,6 +21,8 @@ func New(
 	adminToken string,
 	adminUsername string,
 	adminPassword string,
+	feedBriefingRateLimitPerHour int,
+	feedBriefingCooldownSec int,
 ) *gin.Engine {
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
@@ -33,6 +35,8 @@ func New(
 	feedHandler := handlers.NewFeedHandler(db, summaryClient, handlers.FeedHandlerOptions{
 		AdminAuthEnabled: adminAuthEnabled,
 		AdminToken:       adminToken,
+		RateLimitPerHour: feedBriefingRateLimitPerHour,
+		CooldownSec:      feedBriefingCooldownSec,
 	})
 	feedHandler.RegisterReadRoutes(api.Group("/feed"))
 

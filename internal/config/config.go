@@ -33,6 +33,8 @@ type Config struct {
 	AISummaryAPIStyle              string
 	AISummaryAPIKeyHeader          string
 	AISummaryAPIKeyPrefix          string
+	FeedBriefingRateLimitPerHour   int
+	FeedBriefingCooldownSec        int
 	ExternalFetchEnabled           bool
 	ExternalFetchAllowedHosts      []string
 	ExternalFetchDailyRequestLimit int
@@ -79,6 +81,8 @@ func Load() Config {
 		AISummaryAPIStyle:              envOrDefault("AI_SUMMARY_API_STYLE", "auto"),
 		AISummaryAPIKeyHeader:          envOrDefault("AI_SUMMARY_API_KEY_HEADER", ""),
 		AISummaryAPIKeyPrefix:          envOrDefault("AI_SUMMARY_API_KEY_PREFIX", ""),
+		FeedBriefingRateLimitPerHour:   envOrDefaultInt("FEED_BRIEFING_RATE_LIMIT_PER_HOUR", 10),
+		FeedBriefingCooldownSec:        envOrDefaultInt("FEED_BRIEFING_COOLDOWN_SEC", 600),
 		ExternalFetchEnabled:           envOrDefaultBool("EXTERNAL_FETCH_ENABLED", true),
 		ExternalFetchAllowedHosts:      envOrDefaultCSV("EXTERNAL_FETCH_ALLOWED_HOSTS", ""),
 		ExternalFetchDailyRequestLimit: envOrDefaultInt("EXTERNAL_FETCH_DAILY_REQUEST_LIMIT", 500),

@@ -111,6 +111,8 @@ Main vars:
 - `AI_SUMMARY_API_STYLE` (`auto` / `openai_chat` / `messages`)
 - `AI_SUMMARY_API_KEY_HEADER`
 - `AI_SUMMARY_API_KEY_PREFIX`
+- `FEED_BRIEFING_RATE_LIMIT_PER_HOUR` (default `10` for non-admin requests)
+- `FEED_BRIEFING_COOLDOWN_SEC` (default `600`; same digest cooldown for non-admin requests)
 - `PGADMIN_PORT`
 - `PGADMIN_DEFAULT_EMAIL`
 - `PGADMIN_DEFAULT_PASSWORD`
