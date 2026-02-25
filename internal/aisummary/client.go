@@ -141,7 +141,18 @@ func (c *Client) SummarizeWithModel(ctx context.Context, title string, content s
 	}
 
 	prompt := buildPrompt(strings.TrimSpace(title), input)
-	return c.complete(ctx, defaultSummarySystemPrompt, prompt, len(input), truncated, c.pickModel(modelOverride))
+	model := c.pickModel(modelOverride)
+	result, err := c.complete(ctx, defaultSummarySystemPrompt, prompt, len(input), truncated, model)
+	if err == nil {
+		return result, nil
+	}
+	if !shouldRetryForMaxTokens(err) {
+		return Result{}, err
+	}
+
+	retryInput, retryTruncated := compactSummaryInput(input, truncated, c.maxInputChars)
+	retryPrompt := buildCompactPrompt(strings.TrimSpace(title), retryInput)
+	return c.complete(ctx, defaultSummarySystemPrompt, retryPrompt, len(retryInput), retryTruncated, model)
 }
 
 func (c *Client) Complete(ctx context.Context, systemPrompt string, userPrompt string) (Result, error) {
@@ -475,6 +486,28 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func shouldRetryForMaxTokens(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(msg, "stop_reason=max_tokens")
+}
+
+func compactSummaryInput(input string, truncated bool, configuredMax int) (string, bool) {
+	limit := configuredMax / 2
+	if limit <= 0 {
+		limit = 4000
+	}
+	if limit > 4000 {
+		limit = 4000
+	}
+	if len(input) <= limit {
+		return input, truncated
+	}
+	return input[:limit], true
+}
+
 func buildPrompt(title string, content string) string {
 	var builder strings.Builder
 	if title != "" {
@@ -493,6 +526,23 @@ func buildPrompt(title string, content string) string {
 	builder.WriteString("- 忠于原文，不编造事实；不确定信息请明确标注“原文未说明”。\n")
 	builder.WriteString("- 除非原文极短，整体长度控制在380-650字。\n")
 	builder.WriteString("- 每条尽量精炼，避免过长段落，便于快速扫描。\n\n")
+	builder.WriteString("正文：\n")
+	builder.WriteString(content)
+	return builder.String()
+}
+
+func buildCompactPrompt(title string, content string) string {
+	var builder strings.Builder
+	if title != "" {
+		builder.WriteString("标题：")
+		builder.WriteString(title)
+		builder.WriteString("\n\n")
+	}
+	builder.WriteString("请输出紧凑摘要，格式严格为：\n")
+	builder.WriteString("1) 三句话总结\n")
+	builder.WriteString("2) 关键要点（3条）\n")
+	builder.WriteString("3) 一句话结论\n\n")
+	builder.WriteString("要求：忠于原文，不编造；总字数控制在180-320字。\n\n")
 	builder.WriteString("正文：\n")
 	builder.WriteString(content)
 	return builder.String()

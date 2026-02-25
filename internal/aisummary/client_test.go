@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -174,5 +175,61 @@ func TestSummarizeWithModel_Override(t *testing.T) {
 	}
 	if result.Model != "gemini-3.1-pro-preview" {
 		t.Fatalf("unexpected model fallback: %q", result.Model)
+	}
+}
+
+func TestSummarize_RetryOnMaxTokensEmpty(t *testing.T) {
+	var calls int32
+	var secondCallUserContent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := atomic.AddInt32(&calls, 1)
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		if call == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"model":"gemini-2.5-flash","content":[],"stop_reason":"max_tokens"}`))
+			return
+		}
+
+		rawMessages, _ := payload["messages"].([]any)
+		if len(rawMessages) < 2 {
+			t.Fatalf("expected openai chat messages payload with system+user")
+		}
+		userMessage, _ := rawMessages[1].(map[string]any)
+		secondCallUserContent, _ = userMessage["content"].(string)
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"gemini-2.5-flash","choices":[{"message":{"content":"retry summary ok"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{
+		BaseURL:         server.URL + "/v1/chat/completions",
+		APIKey:          "secret",
+		Model:           "gemini-2.5-flash",
+		Timeout:         2 * time.Second,
+		MaxInputChars:   8000,
+		MaxOutputTokens: 1200,
+		APIStyle:        "openai_chat",
+	})
+	if client == nil {
+		t.Fatalf("client should not be nil")
+	}
+
+	result, err := client.Summarize(context.Background(), "title", strings.Repeat("x", 9000))
+	if err != nil {
+		t.Fatalf("summarize failed: %v", err)
+	}
+	if result.Summary != "retry summary ok" {
+		t.Fatalf("unexpected summary: %q", result.Summary)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Fatalf("calls=%d, want=2", got)
+	}
+	if !strings.Contains(secondCallUserContent, "紧凑摘要") {
+		t.Fatalf("expected compact retry prompt, got=%q", secondCallUserContent)
 	}
 }
