@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
 )
 
@@ -94,5 +96,54 @@ func TestBuildFeedBriefingInputItems(t *testing.T) {
 	}
 	if got[1].Title != "文章 #102" {
 		t.Fatalf("got[1].Title=%q, want %q", got[1].Title, "文章 #102")
+	}
+}
+
+func TestBriefingRateLimiter_AllowAndBlock(t *testing.T) {
+	limiter := newBriefingRateLimiter(2, 10*time.Minute)
+	now := time.Now().UTC()
+
+	if _, ok := limiter.Allow("key", now); !ok {
+		t.Fatalf("first request should pass")
+	}
+	if _, ok := limiter.Allow("key", now.Add(1*time.Second)); !ok {
+		t.Fatalf("second request should pass")
+	}
+	retry, ok := limiter.Allow("key", now.Add(2*time.Second))
+	if ok {
+		t.Fatalf("third request should be blocked")
+	}
+	if retry <= 0 {
+		t.Fatalf("retry should be positive, got=%s", retry)
+	}
+}
+
+func TestBriefingCooldownStore(t *testing.T) {
+	store := newBriefingCooldownStore(5 * time.Minute)
+	now := time.Now().UTC()
+	store.Touch("digest", now)
+
+	if _, ok := store.Allow("digest", now.Add(2*time.Minute)); ok {
+		t.Fatalf("cooldown should block within window")
+	}
+	if _, ok := store.Allow("digest", now.Add(6*time.Minute)); !ok {
+		t.Fatalf("cooldown should allow after window")
+	}
+}
+
+func TestFeedHandler_IsAdminRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := &FeedHandler{
+		adminAuthEnabled: true,
+		adminToken:       "abc123",
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/api/v1/feed/briefing", nil)
+	c.Request.Header.Set("Authorization", "Bearer abc123")
+
+	if !handler.isAdminRequest(c) {
+		t.Fatalf("expected admin request to pass")
 	}
 }

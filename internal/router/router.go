@@ -30,7 +30,10 @@ func New(
 	})
 
 	api := engine.Group("/api/v1")
-	feedHandler := handlers.NewFeedHandler(db, summaryClient)
+	feedHandler := handlers.NewFeedHandler(db, summaryClient, handlers.FeedHandlerOptions{
+		AdminAuthEnabled: adminAuthEnabled,
+		AdminToken:       adminToken,
+	})
 	feedHandler.RegisterReadRoutes(api.Group("/feed"))
 
 	articleHandler := handlers.NewArticleHandlerWithOptions(db, summaryClient, articleOptions)

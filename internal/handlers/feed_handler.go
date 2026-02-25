@@ -3,14 +3,17 @@ package handlers
 import (
 	"context"
 	"crypto/sha1"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"quick/internal/aisummary"
@@ -24,14 +27,27 @@ import (
 )
 
 type FeedHandler struct {
-	db         *gorm.DB
-	summarizer *aisummary.Client
+	db               *gorm.DB
+	summarizer       *aisummary.Client
+	adminAuthEnabled bool
+	adminToken       string
+	briefingLimiter  *briefingRateLimiter
+	briefingCooldown *briefingCooldownStore
 }
 
-func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client) *FeedHandler {
+type FeedHandlerOptions struct {
+	AdminAuthEnabled bool
+	AdminToken       string
+}
+
+func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandlerOptions) *FeedHandler {
 	return &FeedHandler{
-		db:         db,
-		summarizer: summarizer,
+		db:               db,
+		summarizer:       summarizer,
+		adminAuthEnabled: options.AdminAuthEnabled,
+		adminToken:       strings.TrimSpace(options.AdminToken),
+		briefingLimiter:  newBriefingRateLimiter(10, time.Hour),
+		briefingCooldown: newBriefingCooldownStore(10 * time.Minute),
 	}
 }
 
@@ -42,11 +58,10 @@ func (h *FeedHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *FeedHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("", h.List)
-}
-
-func (h *FeedHandler) RegisterWriteRoutes(group *gin.RouterGroup) {
 	group.POST("/briefing", h.Briefing)
 }
+
+func (h *FeedHandler) RegisterWriteRoutes(group *gin.RouterGroup) {}
 
 type feedItem struct {
 	ID             uint64         `json:"id"`
@@ -311,6 +326,13 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		badRequest(c, "cache_only and refresh cannot both be true")
 		return
 	}
+	isAdmin := h.isAdminRequest(c)
+	if req.Refresh && !isAdmin {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "admin authentication required",
+		})
+		return
+	}
 
 	tag := normalizeSourceTag(req.Tag)
 	keyword := strings.TrimSpace(req.Keyword)
@@ -361,6 +383,24 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		}
 	}
 
+	if !isAdmin {
+		now := time.Now().UTC()
+		if retryAfter, ok := h.briefingLimiter.Allow(h.requesterKey(c), now); !ok {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":           "briefing rate limit exceeded",
+				"retry_after_sec": int(math.Ceil(retryAfter.Seconds())),
+			})
+			return
+		}
+		if retryAfter, ok := h.briefingCooldown.Allow(digestKey, now); !ok {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":           "briefing cooldown is active",
+				"retry_after_sec": int(math.Ceil(retryAfter.Seconds())),
+			})
+			return
+		}
+	}
+
 	prompt := buildFeedBriefingPrompt(rows)
 	result, err := h.summarizer.CompleteWithModel(
 		c.Request.Context(),
@@ -395,6 +435,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		internalServerError(c, "save feed briefing cache failed", err)
 		return
 	}
+	h.briefingCooldown.Touch(digestKey, result.GeneratedAt)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": feedBriefingPayload{
@@ -410,6 +451,144 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 			InputItems:   inputItems,
 		},
 	})
+}
+
+func (h *FeedHandler) isAdminRequest(c *gin.Context) bool {
+	if !h.adminAuthEnabled {
+		return true
+	}
+	token := strings.TrimSpace(h.adminToken)
+	if token == "" {
+		return false
+	}
+	candidate := strings.TrimSpace(c.GetHeader("X-Admin-Token"))
+	if candidate == "" {
+		candidate = parseBearerTokenFromHeader(c.GetHeader("Authorization"))
+	}
+	if candidate == "" {
+		candidate, _ = c.Cookie(adminCookieName)
+		candidate = strings.TrimSpace(candidate)
+	}
+	if candidate == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) == 1
+}
+
+func (h *FeedHandler) requesterKey(c *gin.Context) string {
+	ip := strings.TrimSpace(c.ClientIP())
+	if ip == "" {
+		ip = "unknown"
+	}
+	session := strings.TrimSpace(c.GetHeader("X-Client-Session"))
+	if session == "" {
+		session, _ = c.Cookie("quick_client_id")
+		session = strings.TrimSpace(session)
+	}
+	if session != "" {
+		return ip + "|sid:" + session
+	}
+	ua := strings.TrimSpace(c.GetHeader("User-Agent"))
+	if len(ua) > 120 {
+		ua = ua[:120]
+	}
+	if ua != "" {
+		return ip + "|ua:" + ua
+	}
+	return ip
+}
+
+type briefingRateLimiter struct {
+	limit  int
+	window time.Duration
+	mu     sync.Mutex
+	state  map[string]briefingRateState
+}
+
+type briefingRateState struct {
+	resetAt time.Time
+	count   int
+}
+
+func newBriefingRateLimiter(limit int, window time.Duration) *briefingRateLimiter {
+	if limit <= 0 {
+		limit = 10
+	}
+	if window <= 0 {
+		window = time.Hour
+	}
+	return &briefingRateLimiter{
+		limit:  limit,
+		window: window,
+		state:  make(map[string]briefingRateState),
+	}
+}
+
+func (l *briefingRateLimiter) Allow(key string, now time.Time) (time.Duration, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if strings.TrimSpace(key) == "" {
+		key = "unknown"
+	}
+	current, exists := l.state[key]
+	if !exists || now.After(current.resetAt) {
+		l.state[key] = briefingRateState{
+			resetAt: now.Add(l.window),
+			count:   1,
+		}
+		return 0, true
+	}
+	if current.count >= l.limit {
+		return current.resetAt.Sub(now), false
+	}
+	current.count++
+	l.state[key] = current
+	return 0, true
+}
+
+type briefingCooldownStore struct {
+	cooldown time.Duration
+	mu       sync.Mutex
+	lastAt   map[string]time.Time
+}
+
+func newBriefingCooldownStore(cooldown time.Duration) *briefingCooldownStore {
+	if cooldown <= 0 {
+		cooldown = 10 * time.Minute
+	}
+	return &briefingCooldownStore{
+		cooldown: cooldown,
+		lastAt:   make(map[string]time.Time),
+	}
+}
+
+func (s *briefingCooldownStore) Allow(key string, now time.Time) (time.Duration, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(key) == "" {
+		return 0, true
+	}
+	last, ok := s.lastAt[key]
+	if !ok {
+		return 0, true
+	}
+	next := last.Add(s.cooldown)
+	if now.Before(next) {
+		return next.Sub(now), false
+	}
+	return 0, true
+}
+
+func (s *briefingCooldownStore) Touch(key string, at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	s.lastAt[key] = at
 }
 
 func (h *FeedHandler) queryBriefingFeedRows(
