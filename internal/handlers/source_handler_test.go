@@ -228,6 +228,103 @@ func TestNormalizeCandidateURL(t *testing.T) {
 	}
 }
 
+func TestExpandRSSHubAliasURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		rawURL  string
+		baseURL string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "expand basic rsshub alias",
+			rawURL:  "rsshub://douban/list/EC645NBAI",
+			baseURL: "http://127.0.0.1:1200",
+			want:    "http://127.0.0.1:1200/douban/list/EC645NBAI",
+		},
+		{
+			name:    "preserve query string",
+			rawURL:  "rsshub://reddit/r/golang/hot?limit=50",
+			baseURL: "http://127.0.0.1:1200",
+			want:    "http://127.0.0.1:1200/reddit/r/golang/hot?limit=50",
+		},
+		{
+			name:    "support base path prefix",
+			rawURL:  "rsshub://v2ex/topics/hot",
+			baseURL: "https://rss.example.com/rss",
+			want:    "https://rss.example.com/rss/v2ex/topics/hot",
+		},
+		{
+			name:    "non rsshub url unchanged",
+			rawURL:  "https://hnrss.org/best",
+			baseURL: "http://127.0.0.1:1200",
+			want:    "https://hnrss.org/best",
+		},
+		{
+			name:    "invalid alias route",
+			rawURL:  "rsshub://",
+			baseURL: "http://127.0.0.1:1200",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := expandRSSHubAliasURL(tt.rawURL, tt.baseURL)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil (%q)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expandRSSHubAliasURL(%q, %q)=%q, want=%q", tt.rawURL, tt.baseURL, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeRSSHubBaseURL(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "default when empty",
+			input: "",
+			want:  "http://127.0.0.1:1200",
+		},
+		{
+			name:  "keep valid input",
+			input: "https://rss.local:1200/",
+			want:  "https://rss.local:1200/",
+		},
+		{
+			name:  "fallback when invalid",
+			input: "://bad",
+			want:  "http://127.0.0.1:1200",
+		},
+		{
+			name:  "fallback when unsupported scheme",
+			input: "ftp://rss.local:1200",
+			want:  "http://127.0.0.1:1200",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeRSSHubBaseURL(tt.input)
+			if got != tt.want {
+				t.Fatalf("normalizeRSSHubBaseURL(%q)=%q, want=%q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveSourceTag(t *testing.T) {
 	tests := []struct {
 		name      string

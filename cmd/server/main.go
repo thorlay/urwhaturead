@@ -101,6 +101,7 @@ func main() {
 		db,
 		rssWorker,
 		cfg.WorkerBackoffMaxFactor,
+		cfg.RSSHubBaseURL,
 		summaryClient,
 		articleOptions,
 		cfg.AdminAuthEnabled,

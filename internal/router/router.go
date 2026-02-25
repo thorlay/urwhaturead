@@ -15,6 +15,7 @@ func New(
 	db *gorm.DB,
 	refresher worker.Refresher,
 	backoffMaxFactor int,
+	rsshubBaseURL string,
 	summaryClient *aisummary.Client,
 	articleOptions handlers.ArticleHandlerOptions,
 	adminAuthEnabled bool,
@@ -43,7 +44,9 @@ func New(
 	articleHandler := handlers.NewArticleHandlerWithOptions(db, summaryClient, articleOptions)
 	articleHandler.RegisterReadRoutes(api.Group("/articles"))
 
-	sourceHandler := handlers.NewSourceHandler(db, refresher)
+	sourceHandler := handlers.NewSourceHandlerWithOptions(db, refresher, handlers.SourceHandlerOptions{
+		RSSHubBaseURL: rsshubBaseURL,
+	})
 	sourceHandler.RegisterReadRoutes(api.Group("/sources"))
 
 	adminAuthHandler := handlers.NewAdminAuthHandler(handlers.AdminAuthOptions{

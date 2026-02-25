@@ -86,6 +86,7 @@ Main vars:
 - `DB_SSL_MODE`
 - `DB_TIMEZONE`
 - `SERVER_PORT`
+- `RSSHUB_BASE_URL` (default `http://127.0.0.1:1200`; used to expand `rsshub://...`)
 - `ADMIN_AUTH_ENABLED`
 - `ADMIN_TOKEN` (or `ADMIN_API_KEY`)
 - `ADMIN_USERNAME`
@@ -292,6 +293,14 @@ curl -X POST http://localhost:8080/api/v1/sources \
   -d '{
     "rss_url": "https://hnrss.org/best",
     "tags": ["tech"]
+  }'
+
+# RSSHub alias：后端会自动展开为 RSSHUB_BASE_URL + route
+curl -X POST http://localhost:8080/api/v1/sources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rss_url": "rsshub://douban/list/EC645NBAI",
+    "tags": ["forum"]
   }'
 
 curl "http://localhost:8080/api/v1/feed?limit=20&tag=world&q=economy"

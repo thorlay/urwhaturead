@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	ServerPort                     string
+	RSSHubBaseURL                  string
 	AdminAuthEnabled               bool
 	AdminToken                     string
 	AdminUsername                  string
@@ -56,6 +57,7 @@ func Load() Config {
 
 	return Config{
 		ServerPort:                     envOrDefault("SERVER_PORT", "8080"),
+		RSSHubBaseURL:                  envOrDefault("RSSHUB_BASE_URL", "http://127.0.0.1:1200"),
 		AdminAuthEnabled:               envOrDefaultBool("ADMIN_AUTH_ENABLED", strings.TrimSpace(adminToken) != ""),
 		AdminToken:                     adminToken,
 		AdminUsername:                  envOrDefault("ADMIN_USERNAME", "admin"),

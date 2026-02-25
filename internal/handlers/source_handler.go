@@ -30,14 +30,24 @@ type SourceHandler struct {
 	httpClient       *http.Client
 	redditHTTPClient *http.Client
 	refresher        worker.Refresher
+	rsshubBaseURL    string
+}
+
+type SourceHandlerOptions struct {
+	RSSHubBaseURL string
 }
 
 func NewSourceHandler(db *gorm.DB, refresher worker.Refresher) *SourceHandler {
+	return NewSourceHandlerWithOptions(db, refresher, SourceHandlerOptions{})
+}
+
+func NewSourceHandlerWithOptions(db *gorm.DB, refresher worker.Refresher, options SourceHandlerOptions) *SourceHandler {
 	return &SourceHandler{
 		db:               db,
 		httpClient:       newHandlerHTTPClient(8*time.Second, false),
 		redditHTTPClient: newHandlerHTTPClient(8*time.Second, true),
 		refresher:        refresher,
+		rsshubBaseURL:    normalizeRSSHubBaseURL(options.RSSHubBaseURL),
 	}
 }
 
@@ -301,7 +311,11 @@ func (h *SourceHandler) Create(c *gin.Context) {
 	}
 
 	name := strings.TrimSpace(req.Name)
-	rssURL := strings.TrimSpace(req.RSSURL)
+	rssURL, err := h.resolveSourceRSSURL(strings.TrimSpace(req.RSSURL))
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
 	tags := normalizeSourceTags(req.Tags)
 	shouldInferTag := shouldInferFromProvidedTags(tags)
 
@@ -688,7 +702,11 @@ func (h *SourceHandler) Update(c *gin.Context) {
 		updates["name"] = name
 	}
 	if req.RSSURL != nil {
-		rssURL := strings.TrimSpace(*req.RSSURL)
+		rssURL, err := h.resolveSourceRSSURL(strings.TrimSpace(*req.RSSURL))
+		if err != nil {
+			badRequest(c, err.Error())
+			return
+		}
 		updates["rss_url"] = rssURL
 		updates["site_key"] = normalizeSiteKey(rssURL)
 		if shouldResetSourceFetchState(source.RSSURL, rssURL) {
@@ -1107,6 +1125,85 @@ func canonicalizeURL(raw string) string {
 		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
 	}
 	return parsed.String()
+}
+
+const defaultRSSHubBaseURL = "http://127.0.0.1:1200"
+
+func normalizeRSSHubBaseURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return defaultRSSHubBaseURL
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return defaultRSSHubBaseURL
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return defaultRSSHubBaseURL
+	}
+	if strings.TrimSpace(parsed.Hostname()) == "" {
+		return defaultRSSHubBaseURL
+	}
+	parsed.Scheme = scheme
+	parsed.Host = strings.ToLower(strings.TrimSpace(parsed.Host))
+	if parsed.Path != "/" {
+		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	}
+	return parsed.String()
+}
+
+func (h *SourceHandler) resolveSourceRSSURL(rawURL string) (string, error) {
+	value := strings.TrimSpace(rawURL)
+	if value == "" {
+		return "", errors.New("rss_url cannot be empty")
+	}
+	expanded, err := expandRSSHubAliasURL(value, h.rsshubBaseURL)
+	if err != nil {
+		return "", err
+	}
+	return expanded, nil
+}
+
+func expandRSSHubAliasURL(rawURL string, baseURL string) (string, error) {
+	value := strings.TrimSpace(rawURL)
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", fmt.Errorf("invalid rss_url: %w", err)
+	}
+	if strings.ToLower(strings.TrimSpace(parsed.Scheme)) != "rsshub" {
+		return value, nil
+	}
+
+	base, err := url.Parse(normalizeRSSHubBaseURL(baseURL))
+	if err != nil {
+		return "", fmt.Errorf("invalid rsshub base url: %w", err)
+	}
+
+	routeParts := make([]string, 0, 8)
+	if hostSegment := strings.TrimSpace(parsed.Hostname()); hostSegment != "" {
+		routeParts = append(routeParts, hostSegment)
+	}
+	for _, part := range strings.Split(strings.Trim(parsed.Path, "/"), "/") {
+		normalized := strings.TrimSpace(part)
+		if normalized == "" {
+			continue
+		}
+		routeParts = append(routeParts, normalized)
+	}
+	if len(routeParts) == 0 {
+		return "", errors.New("rsshub url must include route path")
+	}
+
+	pathParts := make([]string, 0, len(routeParts)+1)
+	if basePath := strings.Trim(base.Path, "/"); basePath != "" {
+		pathParts = append(pathParts, strings.Split(basePath, "/")...)
+	}
+	pathParts = append(pathParts, routeParts...)
+	base.Path = "/" + strings.Join(pathParts, "/")
+	base.RawQuery = parsed.RawQuery
+	base.Fragment = ""
+	return base.String(), nil
 }
 
 func addCommonFeedPaths(add func(string, string, int), root *url.URL) {
