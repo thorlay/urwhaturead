@@ -346,8 +346,9 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	}
 
 	tag := normalizeSourceTag(req.Tag)
-	keyword := strings.TrimSpace(req.Keyword)
+	keyword := normalizeBriefingKeyword(req.Keyword)
 	requestedModel := strings.TrimSpace(req.Model)
+	digestModel := resolveBriefingDigestModel(requestedModel, h.summarizer)
 
 	rows, err := h.queryBriefingFeedRows(c.Request.Context(), limit, tag, keyword, req.SourceIDs, req.ArticleIDs)
 	if err != nil {
@@ -359,7 +360,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		return
 	}
 
-	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, requestedModel, req.SourceIDs, rows)
+	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, digestModel, req.SourceIDs, rows)
 	inputItems := buildFeedBriefingInputItems(rows, maxBriefingInputItems)
 
 	if !req.Refresh {
@@ -676,13 +677,28 @@ func buildFeedBriefingDigest(
 		"v1",
 		fmt.Sprintf("limit=%d", limit),
 		"tag=" + strings.TrimSpace(tag),
-		"keyword=" + strings.TrimSpace(keyword),
+		"keyword=" + normalizeBriefingKeyword(keyword),
 		"model=" + strings.TrimSpace(model),
 		"source_ids=" + joinUint64(uniqueSources),
 		"article_ids=" + joinUint64(articleIDs),
 	}, "|")
 	sum := sha1.Sum([]byte(payload))
 	return hex.EncodeToString(sum[:]), articleIDs
+}
+
+func resolveBriefingDigestModel(requestedModel string, summarizer *aisummary.Client) string {
+	model := strings.TrimSpace(requestedModel)
+	if model != "" {
+		return model
+	}
+	if summarizer == nil {
+		return ""
+	}
+	return strings.TrimSpace(summarizer.DefaultModel())
+}
+
+func normalizeBriefingKeyword(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {

@@ -60,6 +60,13 @@ type Client struct {
 	maxOutputTokens int
 }
 
+func (c *Client) DefaultModel() string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.model)
+}
+
 const defaultSummarySystemPrompt = "你是一个新闻/论坛内容摘要助手。输出中文，准确、完整、结构化，优先保留事实、证据与可执行信息。"
 
 func NewClient(options Options) *Client {

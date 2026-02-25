@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"quick/internal/aisummary"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
 )
@@ -145,5 +147,32 @@ func TestFeedHandler_IsAdminRequest(t *testing.T) {
 
 	if !handler.isAdminRequest(c) {
 		t.Fatalf("expected admin request to pass")
+	}
+}
+
+func TestBuildFeedBriefingDigest_KeywordCaseInsensitive(t *testing.T) {
+	rows := []feedItem{
+		{ID: 11, SourceID: 1, Title: "A"},
+		{ID: 12, SourceID: 2, Title: "B"},
+	}
+	keyA, _ := buildFeedBriefingDigest(20, "tech", "AI", "gemini-2.5-flash", []uint64{2, 1}, rows)
+	keyB, _ := buildFeedBriefingDigest(20, "tech", "ai", "gemini-2.5-flash", []uint64{1, 2}, rows)
+	if keyA != keyB {
+		t.Fatalf("digest should be case-insensitive for keyword: %s != %s", keyA, keyB)
+	}
+}
+
+func TestResolveBriefingDigestModel_DefaultFallback(t *testing.T) {
+	summarizer := aisummary.NewClient(aisummary.Options{
+		BaseURL: "http://example.com/v1/messages",
+		APIKey:  "secret",
+		Model:   "gemini-2.5-flash",
+	})
+	if summarizer == nil {
+		t.Fatalf("summarizer should not be nil")
+	}
+	got := resolveBriefingDigestModel("", summarizer)
+	if got != "gemini-2.5-flash" {
+		t.Fatalf("resolveBriefingDigestModel fallback=%q, want %q", got, "gemini-2.5-flash")
 	}
 }
