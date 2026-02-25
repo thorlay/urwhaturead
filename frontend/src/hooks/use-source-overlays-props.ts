@@ -5,6 +5,7 @@ import type { Source, SourceStatus } from '../types'
 type UseSourceOverlaysPropsParams = {
   contextMenuRef: SourceOverlaysStackProps['contextMenuProps']['contextMenuRef']
   sourceContextMenu: SourceOverlaysStackProps['contextMenuProps']['sourceContextMenu']
+  canManageSources: boolean
   busySourceID: number | null
   onQuickSetSourceEnabled: (source: Source, enabled: boolean) => Promise<void>
   onOpenSourceProfile: (source: Source) => void
@@ -37,6 +38,7 @@ type UseSourceOverlaysPropsParams = {
 export function useSourceOverlaysProps({
   contextMenuRef,
   sourceContextMenu,
+  canManageSources,
   busySourceID,
   onQuickSetSourceEnabled,
   onOpenSourceProfile,
@@ -69,6 +71,7 @@ export function useSourceOverlaysProps({
     contextMenuProps: {
       contextMenuRef,
       sourceContextMenu,
+      canManageSources,
       busySourceID,
       onQuickSetSourceEnabled,
       onOpenSourceProfile,
@@ -78,6 +81,7 @@ export function useSourceOverlaysProps({
       sourceProfileSource,
       sourceProfileStatus,
       sourceProfileHealth,
+      canManageSources,
       sourceProfileTags,
       sourceProfileTagPickerOpen,
       onToggleSourceProfileTagPicker: () => setSourceProfileTagPickerOpen((value) => !value),

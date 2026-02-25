@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 type AppTopbarProps = {
   activeTab: 'reader' | 'sources'
   sourcesCount: number
+  aiModel: string
   loadingSources: boolean
   loadingFeed: boolean
   pendingFeedCount: number
@@ -22,6 +23,7 @@ export function AppTopbar(props: AppTopbarProps) {
   const {
     activeTab,
     sourcesCount,
+    aiModel,
     loadingSources,
     loadingFeed,
     pendingFeedCount,
@@ -43,7 +45,7 @@ export function AppTopbar(props: AppTopbarProps) {
           <h1>摸摸又鱼鱼</h1>
         </div>
         <div className="topbar-actions">
-          <div className="view-tabs" role="tablist" aria-label="页面">
+        <div className="view-tabs" role="tablist" aria-label="页面">
             <Button
               type="button"
               variant={activeTab === 'reader' ? 'default' : 'ghost'}
@@ -65,6 +67,10 @@ export function AppTopbar(props: AppTopbarProps) {
               </Button>
             )}
           </div>
+          <span className="topbar-model-chip" title={aiModel}>
+            <span className="topbar-model-label">模型</span>
+            <span className="topbar-model-value">{aiModel || '-'}</span>
+          </span>
           <Button
             type="button"
             variant="outline"

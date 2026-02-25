@@ -64,6 +64,33 @@
   gap: 0.45rem;
 }
 
+.topbar-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  max-width: min(46vw, 26rem);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+  background: var(--surface-muted);
+}
+
+.topbar-model-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.topbar-model-value {
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .topbar-feed-status {
   font-size: 0.78rem;
   color: var(--muted);

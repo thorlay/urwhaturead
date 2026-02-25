@@ -162,7 +162,7 @@ func TestBuildFeedBriefingDigest_KeywordCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestResolveBriefingDigestModel_DefaultFallback(t *testing.T) {
+func TestResolveFeedBriefingModel_DefaultFallback(t *testing.T) {
 	summarizer := aisummary.NewClient(aisummary.Options{
 		BaseURL: "http://example.com/v1/messages",
 		APIKey:  "secret",
@@ -171,8 +171,23 @@ func TestResolveBriefingDigestModel_DefaultFallback(t *testing.T) {
 	if summarizer == nil {
 		t.Fatalf("summarizer should not be nil")
 	}
-	got := resolveBriefingDigestModel("", summarizer)
+	got := resolveFeedBriefingModel("", summarizer, true)
 	if got != "gemini-2.5-flash" {
-		t.Fatalf("resolveBriefingDigestModel fallback=%q, want %q", got, "gemini-2.5-flash")
+		t.Fatalf("resolveFeedBriefingModel fallback=%q, want %q", got, "gemini-2.5-flash")
+	}
+}
+
+func TestResolveFeedBriefingModel_NonAdminLocked(t *testing.T) {
+	summarizer := aisummary.NewClient(aisummary.Options{
+		BaseURL: "http://example.com/v1/messages",
+		APIKey:  "secret",
+		Model:   "gemini-2.5-pro",
+	})
+	if summarizer == nil {
+		t.Fatalf("summarizer should not be nil")
+	}
+	got := resolveFeedBriefingModel("gemini-2.5-flash", summarizer, false)
+	if got != nonAdminBriefingModel {
+		t.Fatalf("resolveFeedBriefingModel non-admin=%q, want %q", got, nonAdminBriefingModel)
 	}
 }

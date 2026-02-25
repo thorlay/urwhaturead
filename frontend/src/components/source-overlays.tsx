@@ -14,6 +14,7 @@ type SourceContextMenuState = {
 export type SourceContextMenuOverlayProps = {
   contextMenuRef: RefObject<HTMLDivElement | null>
   sourceContextMenu: SourceContextMenuState | null
+  canManageSources: boolean
   busySourceID: number | null
   onQuickSetSourceEnabled: (source: Source, enabled: boolean) => Promise<void>
   onOpenSourceProfile: (source: Source) => void
@@ -21,21 +22,23 @@ export type SourceContextMenuOverlayProps = {
 }
 
 export function SourceContextMenuOverlay(props: SourceContextMenuOverlayProps) {
-  const { contextMenuRef, sourceContextMenu, busySourceID, onQuickSetSourceEnabled, onOpenSourceProfile, onOpenDeleteConfirm } = props
+  const { contextMenuRef, sourceContextMenu, canManageSources, busySourceID, onQuickSetSourceEnabled, onOpenSourceProfile, onOpenDeleteConfirm } = props
   if (!sourceContextMenu) {
     return null
   }
 
   return (
     <div ref={contextMenuRef} className="source-context-menu" style={{ top: sourceContextMenu.y, left: sourceContextMenu.x }} role="menu">
-      <button
-        type="button"
-        className="source-context-menu-item"
-        onClick={() => void onQuickSetSourceEnabled(sourceContextMenu.source, false)}
-        disabled={!sourceContextMenu.source.enabled || busySourceID === sourceContextMenu.source.id}
-      >
-        {sourceContextMenu.source.enabled ? '快速取消订阅（停用）' : '订阅已停用'}
-      </button>
+      {canManageSources && (
+        <button
+          type="button"
+          className="source-context-menu-item"
+          onClick={() => void onQuickSetSourceEnabled(sourceContextMenu.source, false)}
+          disabled={!sourceContextMenu.source.enabled || busySourceID === sourceContextMenu.source.id}
+        >
+          {sourceContextMenu.source.enabled ? '快速取消订阅（停用）' : '订阅已停用'}
+        </button>
+      )}
       <button
         type="button"
         className="source-context-menu-item"
@@ -43,14 +46,16 @@ export function SourceContextMenuOverlay(props: SourceContextMenuOverlayProps) {
       >
         查看订阅源属性
       </button>
-      <button
-        type="button"
-        className="source-context-menu-item danger"
-        onClick={() => onOpenDeleteConfirm(sourceContextMenu.source)}
-        disabled={busySourceID === sourceContextMenu.source.id}
-      >
-        永久删除订阅源
-      </button>
+      {canManageSources && (
+        <button
+          type="button"
+          className="source-context-menu-item danger"
+          onClick={() => onOpenDeleteConfirm(sourceContextMenu.source)}
+          disabled={busySourceID === sourceContextMenu.source.id}
+        >
+          永久删除订阅源
+        </button>
+      )}
     </div>
   )
 }
@@ -59,6 +64,7 @@ export type SourceProfileDialogProps = {
   sourceProfileSource: Source | null
   sourceProfileStatus: SourceStatus | null
   sourceProfileHealth: SourceStatus['health'] | null
+  canManageSources: boolean
   sourceProfileTags: string[]
   sourceProfileTagPickerOpen: boolean
   onToggleSourceProfileTagPicker: () => void
@@ -86,6 +92,7 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
     sourceProfileSource,
     sourceProfileStatus,
     sourceProfileHealth,
+    canManageSources,
     sourceProfileTags,
     sourceProfileTagPickerOpen,
     onToggleSourceProfileTagPicker,
@@ -157,29 +164,33 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
                   {sourceProfileTags.map((tag) => (
                     <span key={`profile-tag-${sourceProfileSource.id}-${tag}`} className="source-profile-tag-chip">
                       {tag}
-                      <button
-                        type="button"
-                        className="source-profile-tag-remove"
-                        onClick={() => void onRemoveSourceProfileTag(tag)}
-                        disabled={busySourceID === sourceProfileSource.id}
-                        aria-label={`删除标签 ${tag}`}
-                      >
-                        ×
-                      </button>
+                      {canManageSources && (
+                        <button
+                          type="button"
+                          className="source-profile-tag-remove"
+                          onClick={() => void onRemoveSourceProfileTag(tag)}
+                          disabled={busySourceID === sourceProfileSource.id}
+                          aria-label={`删除标签 ${tag}`}
+                        >
+                          ×
+                        </button>
+                      )}
                     </span>
                   ))}
-                  <button
-                    type="button"
-                    className="source-profile-tag-add"
-                    onClick={onToggleSourceProfileTagPicker}
-                    aria-expanded={sourceProfileTagPickerOpen}
-                    aria-label="添加标签"
-                    disabled={busySourceID === sourceProfileSource.id}
-                  >
-                    +
-                  </button>
+                  {canManageSources && (
+                    <button
+                      type="button"
+                      className="source-profile-tag-add"
+                      onClick={onToggleSourceProfileTagPicker}
+                      aria-expanded={sourceProfileTagPickerOpen}
+                      aria-label="添加标签"
+                      disabled={busySourceID === sourceProfileSource.id}
+                    >
+                      +
+                    </button>
+                  )}
                 </div>
-                {sourceProfileTagPickerOpen && (
+                {canManageSources && sourceProfileTagPickerOpen && (
                   <div className="source-profile-tag-picker">
                     <div className="source-profile-tag-picker-head">
                       <Input
@@ -260,26 +271,28 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
           </div>
         </dl>
 
-        <div className="source-profile-actions">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void onQuickSetSourceEnabled(sourceProfileSource, !sourceProfileSource.enabled)}
-            disabled={busySourceID === sourceProfileSource.id}
-          >
-            {sourceProfileSource.enabled ? '停用订阅' : '启用订阅'}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={() => onOpenDeleteConfirm(sourceProfileSource)}
-            disabled={busySourceID === sourceProfileSource.id}
-          >
-            永久删除
-          </Button>
-        </div>
+        {canManageSources && (
+          <div className="source-profile-actions">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onQuickSetSourceEnabled(sourceProfileSource, !sourceProfileSource.enabled)}
+              disabled={busySourceID === sourceProfileSource.id}
+            >
+              {sourceProfileSource.enabled ? '停用订阅' : '启用订阅'}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => onOpenDeleteConfirm(sourceProfileSource)}
+              disabled={busySourceID === sourceProfileSource.id}
+            >
+              永久删除
+            </Button>
+          </div>
+        )}
       </section>
     </div>
   )

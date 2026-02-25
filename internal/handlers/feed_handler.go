@@ -35,6 +35,8 @@ type FeedHandler struct {
 	briefingCooldown *briefingCooldownStore
 }
 
+const nonAdminBriefingModel = "gemini-3-flash-preview"
+
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
 	AdminToken       string
@@ -348,7 +350,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	tag := normalizeSourceTag(req.Tag)
 	keyword := normalizeBriefingKeyword(req.Keyword)
 	requestedModel := strings.TrimSpace(req.Model)
-	digestModel := resolveBriefingDigestModel(requestedModel, h.summarizer)
+	effectiveModel := resolveFeedBriefingModel(requestedModel, h.summarizer, isAdmin)
 
 	rows, err := h.queryBriefingFeedRows(c.Request.Context(), limit, tag, keyword, req.SourceIDs, req.ArticleIDs)
 	if err != nil {
@@ -360,7 +362,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		return
 	}
 
-	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, digestModel, req.SourceIDs, rows)
+	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, effectiveModel, req.SourceIDs, rows)
 	inputItems := buildFeedBriefingInputItems(rows, maxBriefingInputItems)
 
 	if !req.Refresh {
@@ -418,7 +420,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		c.Request.Context(),
 		"你是一个新闻编辑台 AI，输出中文，每段都要有信息密度和可执行性。",
 		prompt,
-		requestedModel,
+		effectiveModel,
 	)
 	if err != nil {
 		badGateway(c, err.Error())
@@ -686,7 +688,10 @@ func buildFeedBriefingDigest(
 	return hex.EncodeToString(sum[:]), articleIDs
 }
 
-func resolveBriefingDigestModel(requestedModel string, summarizer *aisummary.Client) string {
+func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {
+	if !isAdmin {
+		return nonAdminBriefingModel
+	}
 	model := strings.TrimSpace(requestedModel)
 	if model != "" {
 		return model

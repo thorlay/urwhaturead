@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { AppTopbar } from '@/components/app-topbar'
 import { NoticeBanner } from '@/components/notice-banner'
 import { ReaderWorkspace } from '@/components/reader-workspace'
@@ -41,6 +41,7 @@ import { useSummaryArticleState } from './hooks/use-summary-article-state'
 import {
   aiModelOptions,
   aiModelStorageKey,
+  nonAdminLockedAIModel,
   readArticleStorageKey,
   readMarkMinScrollProgress,
   sidebarTagCollapseCount,
@@ -701,6 +702,7 @@ function App() {
   const {
     adminAuthEnabled,
     adminAuthenticated,
+    adminSessionReady,
     canAccessManagement,
     refreshAdminSession,
     onAdminLogout,
@@ -717,6 +719,16 @@ function App() {
     loadFeed,
     refreshAdminSession,
   })
+
+  useEffect(() => {
+    if (!adminSessionReady || canAccessManagement) {
+      return
+    }
+    if (aiModel === nonAdminLockedAIModel) {
+      return
+    }
+    setAIModel(nonAdminLockedAIModel)
+  }, [adminSessionReady, aiModel, canAccessManagement, setAIModel])
 
   useSummaryTaskPruner({
     setSummaryTasks,
@@ -1005,6 +1017,7 @@ function App() {
   const sourceOverlaysProps = useSourceOverlaysProps({
     contextMenuRef: sourceContextMenuRef,
     sourceContextMenu,
+    canManageSources: canAccessManagement,
     busySourceID: sourceManagementState.busySourceID,
     onQuickSetSourceEnabled: sourceManagementActions.onQuickSetSourceEnabled,
     onOpenSourceProfile: openSourceProfile,
@@ -1039,6 +1052,7 @@ function App() {
       <AppTopbar
         activeTab={activeTab}
         sourcesCount={sources.length}
+        aiModel={aiModel}
         loadingSources={loadingSources}
         loadingFeed={loadingFeed}
         pendingFeedCount={pendingFeedCount}

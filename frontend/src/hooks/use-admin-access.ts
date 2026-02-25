@@ -20,6 +20,7 @@ export function useAdminAccess({
 }: UseAdminAccessParams) {
   const [adminAuthEnabled, setAdminAuthEnabled] = useState(true)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
+  const [adminSessionReady, setAdminSessionReady] = useState(false)
 
   const refreshAdminSession = useCallback(async () => {
     try {
@@ -29,6 +30,8 @@ export function useAdminAccess({
     } catch {
       setAdminAuthEnabled(true)
       setAdminAuthenticated(false)
+    } finally {
+      setAdminSessionReady(true)
     }
   }, [])
 
@@ -99,6 +102,7 @@ export function useAdminAccess({
   return {
     adminAuthEnabled,
     adminAuthenticated,
+    adminSessionReady,
     canAccessManagement,
     refreshAdminSession,
     onAdminLogin,
