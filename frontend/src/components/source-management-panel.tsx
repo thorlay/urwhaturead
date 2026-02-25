@@ -293,7 +293,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               )}
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
-              {loadingStatus ? '刷新状态中...' : '刷新状态'}
+              {loadingStatus ? '更新状态中...' : '更新状态'}
             </Button>
             <Button
               type="button"
@@ -340,7 +340,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
             清空筛选
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => void onLoadSources()} disabled={loadingSources}>
-            {loadingSources ? '刷新来源中...' : '刷新来源'}
+            {loadingSources ? '更新列表中...' : '更新来源列表'}
           </Button>
         </div>
 
@@ -399,7 +399,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               onClick={() => void onRunBulkSourceAction('refresh')}
               disabled={!hasSelectedSources || bulkSourceAction !== null}
             >
-              {bulkSourceAction === 'refresh' ? '批量刷新中...' : '批量刷新'}
+              {bulkSourceAction === 'refresh' ? '批量强制刷新中...' : '批量强制刷新'}
             </Button>
             <Button
               type="button"
@@ -609,7 +609,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                               测试
                             </Button>
                             <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshSource(source.id)} disabled={rowBusy}>
-                              刷新
+                              强制刷新
                             </Button>
                             <Button type="button" variant="ghost" size="sm" onClick={() => onStartEdit(source)} disabled={rowBusy}>
                               编辑

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { listFeed, listSources, listSourceStatus } from '../api'
 import type { Notice, AppTab } from '../lib/app-domain'
@@ -8,6 +8,7 @@ type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: strin
 
 type UseReaderDataControllerParams = {
   activeTab: AppTab
+  feed: FeedItem[]
   tagFilter: string
   sourceFilter: string
   keyword: string
@@ -35,6 +36,7 @@ type UseReaderDataControllerParams = {
 
 export function useReaderDataController({
   activeTab,
+  feed,
   tagFilter,
   sourceFilter,
   keyword,
@@ -59,6 +61,27 @@ export function useReaderDataController({
   normalizeSourceKind,
   toErrorMessage,
 }: UseReaderDataControllerParams) {
+  const [pendingFeedCount, setPendingFeedCount] = useState(0)
+  const [checkingFeedUpdates, setCheckingFeedUpdates] = useState(false)
+
+  const resolveFeedScope = useCallback((overrides?: FeedLoadOverrides) => {
+    const activeTag = overrides?.tag ?? tagFilter
+    const activeSourceID = overrides?.sourceID ?? sourceFilter
+    const activeKeyword = (overrides?.keyword ?? keyword).trim()
+    const filteredSourceIDs = parseSourceIDFilter(activeSourceID)
+    const includeHidden = filteredSourceIDs.some(
+      (sourceID) => normalizeSourceKind(sourceByID.get(sourceID)?.kind) === 'thread',
+    )
+
+    return {
+      activeTag,
+      activeSourceID,
+      activeKeyword,
+      filteredSourceIDs,
+      includeHidden,
+    }
+  }, [keyword, normalizeSourceKind, parseSourceIDFilter, sourceByID, sourceFilter, tagFilter])
+
   const loadSources = useCallback(async () => {
     try {
       setLoadingSources(true)
@@ -106,13 +129,7 @@ export function useReaderDataController({
       try {
         setLoadingFeed(true)
         setFeedError(null)
-        const activeTag = overrides?.tag ?? tagFilter
-        const activeSourceID = overrides?.sourceID ?? sourceFilter
-        const activeKeyword = (overrides?.keyword ?? keyword).trim()
-        const filteredSourceIDs = parseSourceIDFilter(activeSourceID)
-        const includeHidden = filteredSourceIDs.some(
-          (sourceID) => normalizeSourceKind(sourceByID.get(sourceID)?.kind) === 'thread',
-        )
+        const { activeTag, activeSourceID, activeKeyword, filteredSourceIDs, includeHidden } = resolveFeedScope(overrides)
 
         const response = await listFeed({
           limit: 20,
@@ -136,6 +153,7 @@ export function useReaderDataController({
           setFeed((previous) => [...previous, ...articleItems])
         } else {
           setFeed(articleItems)
+          setPendingFeedCount(0)
         }
 
         setFeedCursor(response.meta.next_cursor || '')
@@ -159,21 +177,54 @@ export function useReaderDataController({
     [
       feedCursor,
       feedRequestSeqRef,
-      keyword,
-      normalizeSourceKind,
-      parseSourceIDFilter,
+      resolveFeedScope,
       setFeed,
       setFeedCursor,
       setFeedError,
       setHasMoreFeed,
       setLoadingFeed,
       setNotice,
-      sourceByID,
-      sourceFilter,
-      tagFilter,
       toErrorMessage,
     ],
   )
+
+  const checkFeedUpdates = useCallback(async () => {
+    if (activeTab !== 'reader' || loadingFeed || feed.length === 0) {
+      return
+    }
+
+    try {
+      setCheckingFeedUpdates(true)
+      const { activeTag, activeSourceID, activeKeyword, filteredSourceIDs, includeHidden } = resolveFeedScope()
+      const response = await listFeed({
+        limit: Math.min(Math.max(feed.length, 20), 60),
+        tag: activeTag,
+        sourceID: activeSourceID,
+        keyword: activeKeyword,
+        includeHidden,
+      })
+
+      const scopedItems =
+        filteredSourceIDs.length > 0
+          ? response.data.filter((item) => filteredSourceIDs.includes(item.source_id))
+          : response.data
+      const currentIDs = new Set(feed.map((item) => item.id))
+      const nextPendingCount = scopedItems.reduce(
+        (count, item) => (currentIDs.has(item.id) ? count : count + 1),
+        0,
+      )
+      setPendingFeedCount(nextPendingCount)
+    } catch {
+      // Silent fail: new-message checking should not interrupt reading.
+    } finally {
+      setCheckingFeedUpdates(false)
+    }
+  }, [activeTab, feed, loadingFeed, resolveFeedScope])
+
+  const applyPendingFeedUpdates = useCallback(async () => {
+    setPendingFeedCount(0)
+    await loadFeed(false)
+  }, [loadFeed])
 
   const cancelSidebarTagFeedReload = useCallback(() => {
     if (sidebarTagFilterTimerRef.current !== null) {
@@ -199,7 +250,7 @@ export function useReaderDataController({
       tasks.push(loadStatus())
     }
     await Promise.allSettled(tasks)
-    setNotice({ kind: 'info', text: '已刷新最新数据。' })
+    setNotice({ kind: 'info', text: '已更新视图数据（缓存优先）。' })
   }, [activeTab, loadFeed, loadSources, loadStatus, setNotice])
 
   const loadMore = useCallback(() => {
@@ -213,6 +264,28 @@ export function useReaderDataController({
     }
   }, [cancelSidebarTagFeedReload])
 
+  useEffect(() => {
+    setPendingFeedCount(0)
+  }, [activeTab, keyword, sourceFilter, tagFilter])
+
+  useEffect(() => {
+    if (activeTab !== 'reader') {
+      return
+    }
+
+    void checkFeedUpdates()
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return
+      }
+      void checkFeedUpdates()
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [activeTab, checkFeedUpdates])
+
   return {
     loadSources,
     loadStatus,
@@ -222,5 +295,8 @@ export function useReaderDataController({
     scheduleSidebarTagFeedReload,
     refreshAll,
     loadMore,
+    pendingFeedCount,
+    checkingFeedUpdates,
+    applyPendingFeedUpdates,
   }
 }

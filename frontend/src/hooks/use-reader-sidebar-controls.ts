@@ -13,22 +13,24 @@ type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: strin
 type UseReaderSidebarControlsParams = {
   cancelSidebarTagFeedReload: () => void
   resetFeedBriefingState: () => void
-  setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
-  setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
+  sidebarState: {
+    setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
+    setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
+    setShowSubscriptionSidebar: Dispatch<SetStateAction<boolean>>
+    sidebarTagFilterMode: SidebarTagFilterMode
+    setSidebarTagFilterMode: Dispatch<SetStateAction<SidebarTagFilterMode>>
+    readerFeedSources: Source[]
+    sourceGroups: Array<{ key: string; label: string }>
+    sidebarTagFilters: string[]
+    sidebarTagFilterSet: Set<string>
+  }
   setSourceFilter: Dispatch<SetStateAction<string>>
   setSelectedArticle: Dispatch<SetStateAction<ArticleDetail | null>>
   setSelectedArticleID: Dispatch<SetStateAction<number | null>>
   setFeedCursor: Dispatch<SetStateAction<string>>
   loadFeed: (append?: boolean, overrides?: FeedLoadOverrides) => Promise<void>
-  setShowSubscriptionSidebar: Dispatch<SetStateAction<boolean>>
   sidebarSourceItemRefs: MutableRefObject<Map<number, HTMLDivElement>>
-  sidebarTagFilterMode: SidebarTagFilterMode
-  setSidebarTagFilterMode: Dispatch<SetStateAction<SidebarTagFilterMode>>
-  readerFeedSources: Source[]
   sourceTagList: (source: Pick<Source, 'tags'>) => string[]
-  sourceGroups: Array<{ key: string; label: string }>
-  sidebarTagFilters: string[]
-  sidebarTagFilterSet: Set<string>
   closeSourceContextMenu: () => void
   setSourceProfileSource: Dispatch<SetStateAction<Source | null>>
   setSourceProfileTagPickerOpen: Dispatch<SetStateAction<boolean>>
@@ -39,28 +41,32 @@ type UseReaderSidebarControlsParams = {
 export function useReaderSidebarControls({
   cancelSidebarTagFeedReload,
   resetFeedBriefingState,
-  setSourceGroupFilter,
-  setSidebarTagFilters,
+  sidebarState,
   setSourceFilter,
   setSelectedArticle,
   setSelectedArticleID,
   setFeedCursor,
   loadFeed,
-  setShowSubscriptionSidebar,
   sidebarSourceItemRefs,
-  sidebarTagFilterMode,
-  setSidebarTagFilterMode,
-  readerFeedSources,
   sourceTagList,
-  sourceGroups,
-  sidebarTagFilters,
-  sidebarTagFilterSet,
   closeSourceContextMenu,
   setSourceProfileSource,
   setSourceProfileTagPickerOpen,
   setSourceProfileTagInput,
   setPendingDeleteSource,
 }: UseReaderSidebarControlsParams) {
+  const {
+    setSourceGroupFilter,
+    setSidebarTagFilters,
+    setShowSubscriptionSidebar,
+    sidebarTagFilterMode,
+    setSidebarTagFilterMode,
+    readerFeedSources,
+    sourceGroups,
+    sidebarTagFilters,
+    sidebarTagFilterSet,
+  } = sidebarState
+
   const applySourceFilterFromSidebar = useCallback((sourceID: string, options?: { preserveSidebarTags?: boolean }) => {
     cancelSidebarTagFeedReload()
     resetFeedBriefingState()

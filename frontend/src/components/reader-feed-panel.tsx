@@ -1,5 +1,4 @@
 import { Fragment, Suspense, lazy, memo, useCallback, useMemo, type RefObject } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
@@ -467,18 +466,52 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                   >
                     重算
                   </button>
+                  <button
+                    type="button"
+                    className="feed-ai-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      onCloseFeedAIMoreMenu()
+                      onToggleFeedSearch()
+                    }}
+                  >
+                    {showFeedSearch ? '收起搜索与筛选' : '打开搜索与筛选'}
+                  </button>
+                  <button
+                    type="button"
+                    className="feed-ai-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      onCloseFeedAIMoreMenu()
+                      onToggleFeedTitleOnlyMode()
+                    }}
+                  >
+                    {feedTitleOnlyMode ? '切换到标准模式' : '切换到仅标题'}
+                  </button>
+                  <button
+                    type="button"
+                    className="feed-ai-more-item"
+                    role="menuitem"
+                    disabled={feedTitleOnlyMode}
+                    onClick={() => {
+                      onCloseFeedAIMoreMenu()
+                      if (feedTitleOnlyMode) return
+                      onToggleFeedImages()
+                    }}
+                  >
+                    {feedTitleOnlyMode ? '仅标题模式下不可显示图片' : showFeedImages ? '关闭图片' : '显示图片'}
+                  </button>
                 </div>
               )}
             </div>
           </div>
           <div className="feed-read-actions">
-            <Badge variant="outline">未读 {unreadVisibleCount}</Badge>
             <div className="feed-read-toggle" role="group" aria-label="文章可见范围">
               <Button type="button" variant={!unreadOnly ? 'default' : 'ghost'} size="sm" aria-pressed={!unreadOnly} onClick={() => onSetUnreadOnly(false)}>
                 全部
               </Button>
               <Button type="button" variant={unreadOnly ? 'default' : 'ghost'} size="sm" aria-pressed={unreadOnly} onClick={() => onSetUnreadOnly(true)}>
-                未读
+                未读 {unreadVisibleCount}
               </Button>
             </div>
           </div>
@@ -492,16 +525,17 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             >
               {feedTitleOnlyMode ? '仅标题' : '标准'}
             </Button>
-            <Button
-              type="button"
-              variant={!feedTitleOnlyMode && showFeedImages ? 'default' : 'ghost'}
-              size="sm"
-              aria-pressed={!feedTitleOnlyMode && showFeedImages}
-              disabled={feedTitleOnlyMode}
-              onClick={onToggleFeedImages}
-            >
-              图片
-            </Button>
+            {!feedTitleOnlyMode && (
+              <Button
+                type="button"
+                variant={showFeedImages ? 'default' : 'ghost'}
+                size="sm"
+                aria-pressed={showFeedImages}
+                onClick={onToggleFeedImages}
+              >
+                图片
+              </Button>
+            )}
           </div>
         </div>
       </div>

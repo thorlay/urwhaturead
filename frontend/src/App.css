@@ -58,6 +58,18 @@
   gap: 0.5rem;
 }
 
+.topbar-feed-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.topbar-feed-status {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .view-tabs {
   display: inline-flex;
   gap: 0.35rem;
@@ -1033,6 +1045,10 @@
   flex-wrap: wrap;
 }
 
+.feed-header-tools > * {
+  min-width: 0;
+}
+
 .feed-ai-actions {
   display: flex;
   gap: 0.38rem;
@@ -1048,7 +1064,7 @@
   top: calc(100% + 0.32rem);
   right: 0;
   z-index: 20;
-  min-width: 7.2rem;
+  min-width: 12rem;
   border: 1px solid var(--line-strong);
   background: #fff;
   padding: 0.18rem;
@@ -1064,9 +1080,10 @@
   color: var(--text);
   text-align: left;
   font-size: 0.78rem;
-  line-height: 1.2;
+  line-height: 1.3;
   padding: 0.42rem 0.48rem;
   cursor: pointer;
+  white-space: normal;
 }
 
 .feed-ai-more-item:hover:not(:disabled) {
@@ -1081,7 +1098,7 @@
 .feed-read-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.2rem;
 }
 
 .feed-density-actions {
@@ -2169,10 +2186,25 @@ button {
 
   .mobile-reader-toolbar {
     display: flex;
-    justify-content: flex-start;
-    margin-bottom: 0.55rem;
-    position: relative;
+    position: fixed;
+    right: max(0.7rem, env(safe-area-inset-right));
+    bottom: max(0.9rem, env(safe-area-inset-bottom));
     z-index: 58;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .mobile-reader-toolbar button {
+    pointer-events: auto;
+    min-height: 2.2rem;
+    padding-inline: 0.7rem;
+    border-radius: 999px;
+    background: #fff;
+    border-color: var(--line-strong);
+  }
+
+  .mobile-reader-toolbar.is-open button {
+    border-color: transparent;
   }
 
   .mobile-sidebar-backdrop {
@@ -2220,6 +2252,39 @@ button {
 
   .feed-with-floating {
     padding-right: 0;
+  }
+
+  .feed-header-tools {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.34rem;
+    align-items: stretch;
+  }
+
+  .feed-ai-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.28rem;
+  }
+
+  .feed-read-actions {
+    width: 100%;
+  }
+
+  .feed-read-toggle,
+  .feed-density-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.16rem;
+  }
+
+  .feed-read-toggle .btn,
+  .feed-density-actions .btn {
+    min-width: 0;
+    width: 100%;
   }
 
   .detail-floating {
@@ -2270,7 +2335,6 @@ button {
   .ai-task-strip-badges,
   .ai-task-strip-actions,
   .feed-header,
-  .feed-header-tools,
   .feed-filter-toggle-row,
   .feed-filters,
   .feed-filters-advanced,
@@ -2290,6 +2354,26 @@ button {
 
   .detail {
     padding: 0.8rem;
+  }
+
+  .feed-header-title .hint {
+    display: none;
+  }
+
+  .feed-density-actions,
+  .feed-filter-toggle-row {
+    display: none;
+  }
+
+  .feed-ai-actions .btn,
+  .feed-read-toggle .btn,
+  .feed-density-actions .btn {
+    font-size: 0.74rem;
+    padding-inline: 0.48rem;
+  }
+
+  .feed-ai-more-menu {
+    min-width: min(85vw, 18rem);
   }
 
   .feed-item-body {

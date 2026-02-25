@@ -25,7 +25,7 @@ type NoticePayload = {
   text: string
 }
 
-type UseSourceManagementActionsParams = {
+export type UseSourceManagementActionsParams = {
   newSourceName: string
   newSourceURL: string
   newSourceTags: string
@@ -237,14 +237,14 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
       await refreshSource(sourceID)
       params.setNotice({
         kind: 'info',
-        text: `来源 ${sourceID} 刷新成功。`,
+        text: `来源 ${sourceID} 强制刷新成功。`,
       })
       await params.loadFeed(false)
       await params.refreshStatusIfVisible()
     } catch (error) {
       params.setNotice({
         kind: 'error',
-        text: `刷新来源失败: ${params.toErrorMessage(error)}`,
+        text: `强制刷新来源失败: ${params.toErrorMessage(error)}`,
       })
     } finally {
       params.setBusySourceID(null)

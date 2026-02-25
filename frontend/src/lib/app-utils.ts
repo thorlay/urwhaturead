@@ -597,7 +597,7 @@ export function bulkActionLabel(action: BulkSourceAction): string {
     case 'disable':
       return '停用'
     case 'refresh':
-      return '刷新'
+      return '强制刷新'
     case 'add_tags':
       return '添加标签'
     case 'remove_tags':

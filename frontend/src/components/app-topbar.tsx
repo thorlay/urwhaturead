@@ -6,11 +6,14 @@ type AppTopbarProps = {
   sourcesCount: number
   loadingSources: boolean
   loadingFeed: boolean
+  pendingFeedCount: number
+  checkingFeedUpdates: boolean
   canAccessManagement: boolean
   showAdminLogout: boolean
   onOpenReaderTab: () => void
   onOpenSourcesTab: () => void
   onRefreshAll: () => void
+  onApplyPendingFeedUpdates: () => void
   onAdminLogout: () => void
 }
 
@@ -20,11 +23,14 @@ export function AppTopbar(props: AppTopbarProps) {
     sourcesCount,
     loadingSources,
     loadingFeed,
+    pendingFeedCount,
+    checkingFeedUpdates,
     canAccessManagement,
     showAdminLogout,
     onOpenReaderTab,
     onOpenSourcesTab,
     onRefreshAll,
+    onApplyPendingFeedUpdates,
     onAdminLogout,
   } = props
 
@@ -57,9 +63,28 @@ export function AppTopbar(props: AppTopbarProps) {
             </Button>
           )}
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onRefreshAll} disabled={loadingSources || loadingFeed}>
-          刷新全部
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          title="只更新当前页面数据，不触发来源强制抓取"
+          onClick={onRefreshAll}
+          disabled={loadingSources || loadingFeed}
+        >
+          更新视图
         </Button>
+        {activeTab === 'reader' && (
+          <div className="topbar-feed-update">
+            <span className="topbar-feed-status">
+              {pendingFeedCount > 0 ? `新消息 ${pendingFeedCount} 条` : checkingFeedUpdates ? '检查新消息中...' : '已是最新'}
+            </span>
+            {pendingFeedCount > 0 && (
+              <Button type="button" variant="secondary" size="sm" onClick={onApplyPendingFeedUpdates} disabled={loadingFeed}>
+                查看新消息
+              </Button>
+            )}
+          </div>
+        )}
         {showAdminLogout && (
           <Button type="button" variant="outline" size="sm" onClick={onAdminLogout}>
             退出管理

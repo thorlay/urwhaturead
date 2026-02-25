@@ -13,16 +13,20 @@ type UseAppUIEffectsParams = {
   loadStatus: () => Promise<void>
   sourceSiteKeyMap: Map<number, string>
   setMutedSiteKeys: (updater: (previous: string[]) => string[]) => void
-  sourceGroups: SourceGroup[]
-  sidebarTagFilters: string[]
-  sidebarTagFilterMode: SidebarTagFilterMode
+  sidebarState: {
+    sourceGroups: SourceGroup[]
+    sidebarTagFilters: string[]
+    sidebarTagFilterMode: SidebarTagFilterMode
+    sourceGroupFilter: AppliedSourceGroupFilter | null
+    setSourceGroupFilter: (value: AppliedSourceGroupFilter | null) => void
+    readerSources: Source[]
+    showSubscriptionSidebar: boolean
+    sidebarVisibleFeedSources: Source[]
+  }
   applySidebarTagFilters: (keys: string[], mode?: SidebarTagFilterMode) => void
-  sourceGroupFilter: AppliedSourceGroupFilter | null
-  setSourceGroupFilter: (value: AppliedSourceGroupFilter | null) => void
   setSourceFilter: (value: string) => void
   loadFeed: (append?: boolean, overrides?: Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>) => Promise<void>
   sourceFilter: string
-  readerSources: Source[]
   parseSourceIDFilter: (value: string) => number[]
   sourceSelectAllRef: RefObject<HTMLInputElement | null>
   selectedVisibleCount: number
@@ -30,10 +34,8 @@ type UseAppUIEffectsParams = {
   showFeedAIMoreMenu: boolean
   feedAIMoreRef: RefObject<HTMLDivElement | null>
   setShowFeedAIMoreMenu: (show: boolean) => void
-  showSubscriptionSidebar: boolean
   previousSidebarSourceItemRectsRef: MutableRefObject<Map<number, DOMRect>>
   previousSidebarSourceIDsRef: MutableRefObject<number[]>
-  sidebarVisibleFeedSources: Source[]
   sidebarSourceItemRefs: MutableRefObject<Map<number, HTMLDivElement>>
   closeSourceContextMenu: () => void
   setPendingDeleteSource: (source: Source | null) => void
@@ -54,16 +56,11 @@ export function useAppUIEffects({
   loadStatus,
   sourceSiteKeyMap,
   setMutedSiteKeys,
-  sourceGroups,
-  sidebarTagFilters,
-  sidebarTagFilterMode,
+  sidebarState,
   applySidebarTagFilters,
-  sourceGroupFilter,
-  setSourceGroupFilter,
   setSourceFilter,
   loadFeed,
   sourceFilter,
-  readerSources,
   parseSourceIDFilter,
   sourceSelectAllRef,
   selectedVisibleCount,
@@ -71,10 +68,8 @@ export function useAppUIEffects({
   showFeedAIMoreMenu,
   feedAIMoreRef,
   setShowFeedAIMoreMenu,
-  showSubscriptionSidebar,
   previousSidebarSourceItemRectsRef,
   previousSidebarSourceIDsRef,
-  sidebarVisibleFeedSources,
   sidebarSourceItemRefs,
   closeSourceContextMenu,
   setPendingDeleteSource,
@@ -87,6 +82,17 @@ export function useAppUIEffects({
   setSourceProfileTagInput,
   pendingDeleteSource,
 }: UseAppUIEffectsParams) {
+  const {
+    sourceGroups,
+    sidebarTagFilters,
+    sidebarTagFilterMode,
+    sourceGroupFilter,
+    setSourceGroupFilter,
+    readerSources,
+    showSubscriptionSidebar,
+    sidebarVisibleFeedSources,
+  } = sidebarState
+
   useEffect(() => {
     if (activeTab === 'sources' && sourceStatus.length === 0 && !loadingStatus) {
       void loadStatus()

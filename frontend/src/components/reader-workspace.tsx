@@ -34,14 +34,15 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
 
   return (
     <>
-      <div className="mobile-reader-toolbar">
+      <div className={`mobile-reader-toolbar ${showSubscriptionSidebar ? 'is-open' : ''}`}>
         <Button
           type="button"
           variant={showSubscriptionSidebar ? 'default' : 'outline'}
           size="sm"
+          aria-label={showSubscriptionSidebar ? '收起来源与标签' : '打开来源与标签'}
           onClick={onToggleSubscriptionSidebar}
         >
-          {showSubscriptionSidebar ? '收起来源' : '来源与标签'}
+          {showSubscriptionSidebar ? '收起来源' : '来源'}
         </Button>
       </div>
 
