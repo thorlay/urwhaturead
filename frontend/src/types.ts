@@ -17,6 +17,42 @@ export type Source = {
   updated_at: string
 }
 
+export type SourceTransferItem = {
+  name: string
+  rss_url: string
+  tags?: string[]
+  enabled?: boolean
+  poll_interval_sec?: number
+  kind?: 'feed' | 'thread' | string
+  hidden_in_sidebar?: boolean
+}
+
+export type SourceExportPayload = {
+  version: string
+  exported_at: string
+  count: number
+  sources: SourceTransferItem[]
+}
+
+export type SourceImportResult = {
+  rss_url: string
+  source_id?: number
+  action: 'created' | 'updated' | 'skipped' | 'failed' | string
+  error?: string
+}
+
+export type SourceImportResponse = {
+  ok: boolean
+  meta: {
+    total: number
+    created: number
+    updated: number
+    skipped: number
+    failed: number
+  }
+  data: SourceImportResult[]
+}
+
 export type FeedItem = {
   id: number
   source_id: number

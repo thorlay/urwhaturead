@@ -139,6 +139,8 @@ export function useSourceManagementFeature({
     setDiscoveredSources: sourceManagementState.setDiscoveredSources,
     setBusySourceID: sourceManagementState.setBusySourceID,
     setReclassifyingSources: sourceManagementState.setReclassifyingSources,
+    setExportingSources: sourceManagementState.setExportingSources,
+    setImportingSources: sourceManagementState.setImportingSources,
     setBulkSourceAction: sourceManagementState.setBulkSourceAction,
     setSources,
     setSourceProfileSource,

@@ -55,6 +55,8 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
   const [discoveredSources, setDiscoveredSources] = useState<DiscoverSourceCandidate[]>([])
   const [reclassifyingSources, setReclassifyingSources] = useState(false)
   const [creatingSource, setCreatingSource] = useState(false)
+  const [exportingSources, setExportingSources] = useState(false)
+  const [importingSources, setImportingSources] = useState(false)
   const [busySourceID, setBusySourceID] = useState<number | null>(null)
 
   const sourceHealthCounts = useMemo(() => {
@@ -245,6 +247,10 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
     setReclassifyingSources,
     creatingSource,
     setCreatingSource,
+    exportingSources,
+    setExportingSources,
+    importingSources,
+    setImportingSources,
     busySourceID,
     setBusySourceID,
   }

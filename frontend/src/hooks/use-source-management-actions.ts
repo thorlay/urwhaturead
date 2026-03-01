@@ -4,6 +4,8 @@ import {
   createSource,
   deleteSource,
   discoverSources,
+  exportSources,
+  importSources,
   reclassifySources,
   refreshSource,
   testSource,
@@ -57,6 +59,8 @@ export type UseSourceManagementActionsParams = {
   setDiscoveredSources: Dispatch<SetStateAction<DiscoverSourceCandidate[]>>
   setBusySourceID: Dispatch<SetStateAction<number | null>>
   setReclassifyingSources: Dispatch<SetStateAction<boolean>>
+  setExportingSources: Dispatch<SetStateAction<boolean>>
+  setImportingSources: Dispatch<SetStateAction<boolean>>
   setBulkSourceAction: Dispatch<SetStateAction<BulkSourceAction | null>>
   setSources: Dispatch<SetStateAction<Source[]>>
   setSourceProfileSource: Dispatch<SetStateAction<Source | null>>
@@ -78,6 +82,62 @@ export type UseSourceManagementActionsParams = {
 }
 
 export function useSourceManagementActions(params: UseSourceManagementActionsParams) {
+  async function onExportSources() {
+    try {
+      params.setExportingSources(true)
+      const payload = await exportSources()
+      const fileName = `quick-sources-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+      const objectURL = window.URL.createObjectURL(blob)
+      const anchor = window.document.createElement('a')
+      anchor.href = objectURL
+      anchor.download = fileName
+      window.document.body.appendChild(anchor)
+      anchor.click()
+      window.document.body.removeChild(anchor)
+      window.URL.revokeObjectURL(objectURL)
+      params.setNotice({ kind: 'info', text: `导出完成：${payload.count} 个来源。` })
+    } catch (error) {
+      params.setNotice({
+        kind: 'error',
+        text: `导出来源失败: ${params.toErrorMessage(error)}`,
+      })
+    } finally {
+      params.setExportingSources(false)
+    }
+  }
+
+  async function onImportSourcesFile(file: File) {
+    if (!file) {
+      return
+    }
+    try {
+      params.setImportingSources(true)
+      const text = await file.text()
+      let payload: unknown
+      try {
+        payload = JSON.parse(text)
+      } catch {
+        params.setNotice({ kind: 'error', text: '导入失败: 文件不是有效 JSON。' })
+        return
+      }
+
+      const response = await importSources(payload)
+      await Promise.allSettled([params.loadSources(), params.loadFeed(false), params.refreshStatusIfVisible()])
+      params.setNotice({
+        kind: response.meta.failed > 0 ? 'error' : 'info',
+        text: `导入完成：新增 ${response.meta.created}，更新 ${response.meta.updated}，跳过 ${response.meta.skipped}，失败 ${response.meta.failed}`,
+      })
+    } catch (error) {
+      params.setNotice({
+        kind: 'error',
+        text: `导入来源失败: ${params.toErrorMessage(error)}`,
+      })
+    } finally {
+      params.setImportingSources(false)
+    }
+  }
+
   async function onCreateSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!params.newSourceURL.trim()) {
@@ -520,6 +580,8 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
   }
 
   return {
+    onExportSources,
+    onImportSourcesFile,
     onCreateSource,
     onDiscoverSources,
     onBatchCreateSources,

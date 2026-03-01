@@ -308,6 +308,17 @@ curl "http://localhost:8080/api/v1/feed?limit=20&tag=world&q=economy"
 # Use next_cursor from the previous response
 curl "http://localhost:8080/api/v1/feed?limit=20&cursor=<NEXT_CURSOR>"
 
+# Export sources (JSON)
+curl -X POST http://localhost:8080/api/v1/sources/export \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -o sources-export.json
+
+# Import sources (JSON)
+curl -X POST http://localhost:8080/api/v1/sources/import \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @sources-export.json
+
 curl "http://localhost:8080/api/v1/articles/138"
 
 curl -X POST http://localhost:8080/api/v1/sources/1/refresh

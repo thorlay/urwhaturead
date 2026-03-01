@@ -1,4 +1,4 @@
-import { useMemo, type FormEvent, type RefObject } from 'react'
+import { useMemo, useRef, type ChangeEvent, type FormEvent, type RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,6 +90,10 @@ type SourceManagementPanelProps = {
   onSetNewSourceTags: (value: string) => void
   creatingSource: boolean
   onCreateSource: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  exportingSources: boolean
+  importingSources: boolean
+  onExportSources: () => Promise<void>
+  onImportSourcesFile: (file: File) => Promise<void>
   batchSourceURLs: string
   onSetBatchSourceURLs: (value: string) => void
   batchSourceTags: string
@@ -192,6 +196,10 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     onSetNewSourceTags,
     creatingSource,
     onCreateSource,
+    exportingSources,
+    importingSources,
+    onExportSources,
+    onImportSourcesFile,
     batchSourceURLs,
     onSetBatchSourceURLs,
     batchSourceTags,
@@ -207,6 +215,16 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     confidenceLabel,
     onAddDiscoveredSource,
   } = controller
+  const importFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    void onImportSourcesFile(file)
+  }
 
   const failingSourceHighlights = useMemo(() => {
     const highlights: Array<{
@@ -304,6 +322,31 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
             >
               {reclassifyingSources ? '重分类中...' : '自动重分类'}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onExportSources()}
+              disabled={exportingSources || importingSources}
+            >
+              {exportingSources ? '导出中...' : '导出来源 JSON'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => importFileInputRef.current?.click()}
+              disabled={importingSources || exportingSources}
+            >
+              {importingSources ? '导入中...' : '导入来源 JSON'}
+            </Button>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={handleImportFileChange}
+            />
           </div>
         </div>
 

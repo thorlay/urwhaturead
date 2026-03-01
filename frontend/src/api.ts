@@ -10,6 +10,8 @@ import type {
   FeedTestResult,
   ReclassifySourcesResponse,
   Source,
+  SourceExportPayload,
+  SourceImportResponse,
   SourceStatusResponse,
   SourcesResponse,
   TrackThreadResponse,
@@ -217,6 +219,19 @@ export async function discoverSources(url: string): Promise<DiscoverSourcesRespo
   return request<DiscoverSourcesResponse>('/api/v1/sources/discover', {
     method: 'POST',
     body: JSON.stringify({ url }),
+  })
+}
+
+export async function exportSources(): Promise<SourceExportPayload> {
+  return request<SourceExportPayload>('/api/v1/sources/export', {
+    method: 'POST',
+  })
+}
+
+export async function importSources(payload: unknown): Promise<SourceImportResponse> {
+  return request<SourceImportResponse>('/api/v1/sources/import', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

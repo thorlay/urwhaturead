@@ -545,3 +545,78 @@ func TestApplySourceTagBulkAction(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeSourceKindValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty defaults feed", input: "", want: "feed"},
+		{name: "feed stays feed", input: "feed", want: "feed"},
+		{name: "thread stays thread", input: "thread", want: "thread"},
+		{name: "unknown defaults feed", input: "unknown", want: "feed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeSourceKindValue(tt.input)
+			if got != tt.want {
+				t.Fatalf("normalizeSourceKindValue(%q)=%q, want=%q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseSourceImportPayload(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       string
+		wantCount int
+		wantErr   bool
+	}{
+		{
+			name:      "object payload",
+			raw:       `{"sources":[{"name":"HN","rss_url":"https://hnrss.org/best"}]}`,
+			wantCount: 1,
+		},
+		{
+			name:      "array payload",
+			raw:       `[{"name":"HN","rss_url":"https://hnrss.org/best"}]`,
+			wantCount: 1,
+		},
+		{
+			name:      "wrapped data payload",
+			raw:       `{"data":{"sources":[{"name":"HN","rss_url":"https://hnrss.org/best"}]}}`,
+			wantCount: 1,
+		},
+		{
+			name:    "invalid payload",
+			raw:     `not-json`,
+			wantErr: true,
+		},
+		{
+			name:    "empty payload",
+			raw:     ``,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := parseSourceImportPayload([]byte(tt.raw))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil payload=%+v", payload)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(payload.Sources) != tt.wantCount {
+				t.Fatalf("len(payload.Sources)=%d, want=%d", len(payload.Sources), tt.wantCount)
+			}
+		})
+	}
+}
