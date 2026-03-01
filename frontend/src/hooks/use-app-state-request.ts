@@ -43,3 +43,5 @@ export function useAppStateRequest() {
     setNowTick,
   }
 }
+
+export type AppStateRequest = ReturnType<typeof useAppStateRequest>

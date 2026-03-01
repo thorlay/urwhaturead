@@ -59,3 +59,5 @@ export function useSourcesIndex({
     readArticleIDSet,
   }
 }
+
+export type SourcesIndex = ReturnType<typeof useSourcesIndex>

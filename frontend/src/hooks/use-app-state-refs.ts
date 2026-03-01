@@ -40,3 +40,5 @@ export function useAppStateRefs() {
     readerSessionRef,
   }
 }
+
+export type AppStateRefs = ReturnType<typeof useAppStateRefs>

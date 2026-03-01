@@ -72,3 +72,5 @@ export function useAppStateUI() {
     setPendingDeleteSource,
   }
 }
+
+export type AppStateUI = ReturnType<typeof useAppStateUI>

@@ -97,3 +97,5 @@ export function useAppStateData() {
     setReadArticleIDs,
   }
 }
+
+export type AppStateData = ReturnType<typeof useAppStateData>

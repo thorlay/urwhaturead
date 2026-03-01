@@ -128,3 +128,5 @@ export function useReaderSidebarState(params: UseReaderSidebarStateParams) {
     sidebarVisibleFeedSources,
   }
 }
+
+export type ReaderSidebarState = ReturnType<typeof useReaderSidebarState>

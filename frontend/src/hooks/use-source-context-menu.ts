@@ -105,3 +105,5 @@ export function useSourceContextMenu({ sourceContextMenuRef }: UseSourceContextM
     openSourceContextMenuAt,
   }
 }
+
+export type SourceContextMenuController = ReturnType<typeof useSourceContextMenu>
