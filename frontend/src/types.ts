@@ -189,6 +189,56 @@ export type ArticleSummaryResponse = {
   }
 }
 
+export type ArticleSummaryLibraryItem = {
+  article_id: number
+  source_id: number
+  source_name: string
+  title: string
+  link: string
+  published_at?: string
+  summary: string
+  model: string
+  provider: string
+  input_chars: number
+  truncated: boolean
+  generated_at: string
+}
+
+export type ArticleSummaryLibraryResponse = {
+  data: ArticleSummaryLibraryItem[]
+  meta: {
+    limit: number
+    offset: number
+    count: number
+  }
+}
+
+export type FeedBriefingLibraryItem = {
+  digest_key: string
+  scope_label: string
+  tag: string
+  keyword: string
+  source_ids: string
+  article_ids: string
+  limit: number
+  summary: string
+  model: string
+  provider: string
+  input_chars: number
+  truncated: boolean
+  generated_at: string
+  article_count: number
+}
+
+export type FeedBriefingLibraryResponse = {
+  data: FeedBriefingLibraryItem[]
+  meta: {
+    limit: number
+    offset: number
+    count: number
+  }
+}
+
 export type ArticleSummaryStatusResponse = {
   data: {
     article_id: number

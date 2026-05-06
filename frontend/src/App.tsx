@@ -13,6 +13,7 @@ import { useSourcesIndex } from './hooks/use-sources-index'
 import { useSourceManagementSection } from './hooks/use-source-management-section'
 import { useAppBootstrap } from './hooks/use-app-bootstrap'
 import { useAppTabActions } from './hooks/use-app-tab-actions'
+import { useAILibrarySection } from './hooks/use-ai-library-section'
 import { useReaderFeatureSection } from './hooks/use-reader-feature-section'
 import { useReaderWorkspaceComposition } from './hooks/use-reader-workspace-composition'
 import {
@@ -50,6 +51,11 @@ const SourceManagementPanel = lazy(async () => {
 const SummaryTaskStripPanel = lazy(async () => {
   const module = await import('@/components/summary-task-strip-panel')
   return { default: module.SummaryTaskStripPanel }
+})
+
+const AILibraryPanel = lazy(async () => {
+  const module = await import('@/components/ai-library-panel')
+  return { default: module.AILibraryPanel }
 })
 
 function App() {
@@ -276,6 +282,13 @@ function App() {
     },
   })
 
+  const aiLibrarySection = useAILibrarySection({
+    activeTab,
+    setActiveTab,
+    openArticle: readerSection.openArticle,
+    setNotice,
+  })
+
   const {
     adminAuthEnabled,
     adminAuthenticated,
@@ -343,6 +356,7 @@ function App() {
 
   const {
     onOpenReaderTab,
+    onOpenAITab,
     onOpenSourcesTab,
     onRefreshAllClick,
     onAdminLogoutClick,
@@ -410,6 +424,7 @@ function App() {
         canAccessManagement={canAccessManagement}
         showAdminLogout={adminAuthEnabled && adminAuthenticated}
         onOpenReaderTab={onOpenReaderTab}
+        onOpenAITab={onOpenAITab}
         onOpenSourcesTab={onOpenSourcesTab}
         onRefreshAll={onRefreshAllClick}
         onApplyPendingFeedUpdates={() => void applyPendingFeedUpdates()}
@@ -434,6 +449,24 @@ function App() {
       )}
 
       {activeTab === 'reader' && <ReaderWorkspace {...readerWorkspaceProps} />}
+
+      {activeTab === 'ai' && (
+        <Suspense fallback={null}>
+          <AILibraryPanel
+            aiModel={aiModel}
+            search={aiLibrarySection.search}
+            loading={aiLibrarySection.loading}
+            error={aiLibrarySection.error}
+            articleSummaries={aiLibrarySection.articleSummaries}
+            feedBriefings={aiLibrarySection.feedBriefings}
+            formatTimeAgo={formatTimeAgo}
+            onChangeSearch={aiLibrarySection.setSearch}
+            onApplySearch={aiLibrarySection.applySearch}
+            onRefresh={aiLibrarySection.refresh}
+            onOpenArticleSummary={aiLibrarySection.openArticleSummary}
+          />
+        </Suspense>
+      )}
 
       {activeTab === 'sources' && canAccessManagement && (
         <Suspense

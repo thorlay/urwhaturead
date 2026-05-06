@@ -2,10 +2,12 @@ import type {
   AdminLoginResponse,
   AdminSessionResponse,
   ArticleSummaryResponse,
+  ArticleSummaryLibraryResponse,
   ArticleSummaryStatusResponse,
   DiscoverSourcesResponse,
   ArticleDetail,
   FeedBriefingResponse,
+  FeedBriefingLibraryResponse,
   FeedResponse,
   FeedTestResult,
   ReclassifySourcesResponse,
@@ -181,6 +183,18 @@ export async function summarizeArticle(
   )
 }
 
+export async function listArticleSummaries(params?: {
+  limit?: number
+  offset?: number
+  keyword?: string
+}): Promise<ArticleSummaryLibraryResponse> {
+  const query = new URLSearchParams()
+  query.set('limit', String(params?.limit ?? 50))
+  query.set('offset', String(params?.offset ?? 0))
+  if (params?.keyword?.trim()) query.set('q', params.keyword.trim())
+  return request<ArticleSummaryLibraryResponse>(`/api/v1/articles/summaries?${query.toString()}`)
+}
+
 export async function getArticleSummaryStatus(articleID: number, model?: string): Promise<ArticleSummaryStatusResponse> {
   const query = new URLSearchParams()
   if (model?.trim()) query.set('model', model.trim())
@@ -213,6 +227,18 @@ export async function trackArticleThread(articleID: number): Promise<TrackThread
 
 export async function listSourceStatus(windowHours = 24): Promise<SourceStatusResponse> {
   return request<SourceStatusResponse>(`/api/v1/admin/source-status?window_hours=${windowHours}`)
+}
+
+export async function listFeedBriefings(params?: {
+  limit?: number
+  offset?: number
+  keyword?: string
+}): Promise<FeedBriefingLibraryResponse> {
+  const query = new URLSearchParams()
+  query.set('limit', String(params?.limit ?? 30))
+  query.set('offset', String(params?.offset ?? 0))
+  if (params?.keyword?.trim()) query.set('q', params.keyword.trim())
+  return request<FeedBriefingLibraryResponse>(`/api/v1/feed/briefings?${query.toString()}`)
 }
 
 export async function discoverSources(url: string): Promise<DiscoverSourcesResponse> {

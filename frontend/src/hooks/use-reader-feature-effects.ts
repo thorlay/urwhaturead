@@ -6,7 +6,7 @@ import { useSummaryTaskPoller } from './use-summary-task-poller'
 import { useSummaryTaskPruner } from './use-summary-task-pruner'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
 import { aiModelStorageKey, favoriteArticleStorageKey, readArticleStorageKey } from '../lib/app-domain'
-import type { FeedBriefingSnapshot, Notice, ReaderSession, SourceContextMenuState, SummaryTask } from '../lib/app-domain'
+import type { AppTab, FeedBriefingSnapshot, Notice, ReaderSession, SourceContextMenuState, SummaryTask } from '../lib/app-domain'
 import type { Source } from '../types'
 
 type UseReaderFeatureEffectsParams = {
@@ -29,7 +29,7 @@ type UseReaderFeatureEffectsParams = {
   setArticleSummaryMeta: Dispatch<SetStateAction<string>>
   setArticleSummaryError: Dispatch<SetStateAction<string | null>>
   setNotice: (notice: Notice) => void
-  activeTab: 'reader' | 'sources'
+  activeTab: AppTab
   loadingFeed: boolean
   loadingFeedBriefing: boolean
   activeFeedBriefingAnchorArticleIDs: number[]

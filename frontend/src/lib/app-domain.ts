@@ -5,7 +5,7 @@ export type Notice = {
   text: string
 }
 
-export type AppTab = 'reader' | 'sources'
+export type AppTab = 'reader' | 'ai' | 'sources'
 export type ReaderView = 'stream' | 'detail'
 
 export type SourceGroup = {

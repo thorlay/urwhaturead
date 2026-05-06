@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 type AppTopbarProps = {
-  activeTab: 'reader' | 'sources'
+  activeTab: 'reader' | 'ai' | 'sources'
   sourcesCount: number
   aiModel: string
   loadingSources: boolean
@@ -13,6 +13,7 @@ type AppTopbarProps = {
   canAccessManagement: boolean
   showAdminLogout: boolean
   onOpenReaderTab: () => void
+  onOpenAITab: () => void
   onOpenSourcesTab: () => void
   onRefreshAll: () => void
   onApplyPendingFeedUpdates: () => void
@@ -31,6 +32,7 @@ export function AppTopbar(props: AppTopbarProps) {
     canAccessManagement,
     showAdminLogout,
     onOpenReaderTab,
+    onOpenAITab,
     onOpenSourcesTab,
     onRefreshAll,
     onApplyPendingFeedUpdates,
@@ -54,6 +56,15 @@ export function AppTopbar(props: AppTopbarProps) {
               onClick={onOpenReaderTab}
             >
               阅读流
+            </Button>
+            <Button
+              type="button"
+              variant={activeTab === 'ai' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn('view-tab', activeTab === 'ai' && 'active')}
+              onClick={onOpenAITab}
+            >
+              AI
             </Button>
             {canAccessManagement && (
               <Button

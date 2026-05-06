@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import type { AppStateData } from './use-app-state-data'
 import type { AppStateRefs } from './use-app-state-refs'
 import type { AppStateRequest } from './use-app-state-request'
@@ -6,21 +5,9 @@ import type { AppStateUI } from './use-app-state-ui'
 import type { ReaderSidebarState } from './use-reader-sidebar-state'
 import type { SourceContextMenuController } from './use-source-context-menu'
 import type { SourcesIndex } from './use-sources-index'
-import { useFeedBriefingActions } from './use-feed-briefing-actions'
-import { useReaderArticleActions } from './use-reader-article-actions'
-import { useReaderDataController } from './use-reader-data-controller'
+import { useReaderFeatureActions } from './use-reader-feature-actions'
 import { useReaderFeatureDerived } from './use-reader-feature-derived'
 import { useReaderFeatureEffects } from './use-reader-feature-effects'
-import { useReaderFilterControls } from './use-reader-filter-controls'
-import { useReaderSessionActions } from './use-reader-session-actions'
-import { useReaderSidebarControls } from './use-reader-sidebar-controls'
-import { useReaderViewActions } from './use-reader-view-actions'
-import { useSummaryArticleState } from './use-summary-article-state'
-import { useSummaryTaskActions } from './use-summary-task-actions'
-import { useSummaryTaskStripActions } from './use-summary-task-strip-actions'
-import {
-  readMarkMinScrollProgress,
-} from '../lib/app-domain'
 import {
   buildCompactTitleParts,
   formatReplyCount,
@@ -29,14 +16,8 @@ import {
   maxStoredFavoriteArticles,
   maxStoredReadArticles,
   normalizeImageURL,
-  normalizeSourceKind,
-  parseSourceIDFilter,
   plainText,
-  sourceTagList,
-  toggleFavoriteArticleID,
-  toErrorMessage,
   truncate,
-  upsertReadArticleID,
 } from '../lib/app-utils'
 
 type UseReaderFeatureSectionParams = {
@@ -62,26 +43,16 @@ export function useReaderFeatureSection({
     floatingDetailRef,
     feedAIMoreRef,
     feedBriefingCacheAttemptedRef,
-    sidebarSourceItemRefs,
     feedAutoLoadRef,
-    sidebarTagFilterTimerRef,
     feedAutoLoadCooldownRef,
-    streamScrollYRef,
-    feedRequestSeqRef,
-    articleRequestSeqRef,
-    summaryRequestSeqRef,
-  summaryTaskNotifiedRef,
-  readerSessionRef,
+    summaryTaskNotifiedRef,
+    readerSessionRef,
   } = refs
   const {
     sources,
-    setSources,
     feed,
-    setFeed,
     selectedArticle,
-    setSelectedArticle,
     selectedArticleID,
-    setSelectedArticleID,
     articleSummary,
     setArticleSummary,
     articleSummaryMeta,
@@ -89,68 +60,39 @@ export function useReaderFeatureSection({
     summaryTasks,
     setSummaryTasks,
     loadingArticleSummary,
-    setLoadingArticleSummary,
     articleSummaryError,
     setArticleSummaryError,
     feedBriefing,
-    setFeedBriefing,
     feedBriefingMeta,
-    setFeedBriefingMeta,
     feedBriefingItems,
-    setFeedBriefingItems,
     feedBriefingArticleCount,
-    setFeedBriefingArticleCount,
     feedBriefingScopeLabel,
-    setFeedBriefingScopeLabel,
     feedBriefingGeneratedAt,
-    setFeedBriefingGeneratedAt,
     feedBriefingAnchorArticleIDs,
-    setFeedBriefingAnchorArticleIDs,
     feedBriefingTaskKey,
-    setFeedBriefingTaskKey,
     feedBriefingSnapshots,
-    setFeedBriefingSnapshots,
     loadingFeedBriefing,
-    setLoadingFeedBriefing,
     feedBriefingError,
-    setFeedBriefingError,
     aiModel,
-    setAIModel,
     sourceStatus,
-    setSourceStatus,
     readArticleIDs,
-    setReadArticleIDs,
     favoriteArticleIDs,
-    setFavoriteArticleIDs,
   } = data
   const {
-    setLoadingSources,
     loadingFeed,
-    setLoadingFeed,
     loadingArticle,
-    setLoadingArticle,
-    setLoadingStatus,
-    setSourcesError,
     feedError,
-    setFeedError,
     articleError,
-    setArticleError,
-    setStatusError,
     feedCursor,
-    setFeedCursor,
     hasMoreFeed,
-    setHasMoreFeed,
     setNotice,
     setNowTick,
   } = request
   const {
     activeTab,
     readerView,
-    setReaderView,
     showFloatingReader,
-    setShowFloatingReader,
     selectedFeedBriefing,
-    setSelectedFeedBriefing,
     unreadOnly,
     setUnreadOnly,
     favoriteOnly,
@@ -162,7 +104,6 @@ export function useReaderFeatureSection({
     sourceFilter,
     setSourceFilter,
     mutedSiteKeys,
-    setMutedSiteKeys,
     feedTitleOnlyMode,
     setFeedTitleOnlyMode,
     showFeedImages,
@@ -192,7 +133,6 @@ export function useReaderFeatureSection({
     sourceGroupFilter,
     setSourceGroupFilter,
     setSidebarTagFilters,
-    setSidebarTagFilterMode,
   } = sidebarState
   const {
     sourceContextMenu,
@@ -205,6 +145,38 @@ export function useReaderFeatureSection({
     readArticleIDSet,
     favoriteArticleIDSet,
   } = sourcesIndex
+
+  const derived = useReaderFeatureDerived({
+    activeTab,
+    feed,
+    summaryTasks,
+    selectedArticle,
+    selectedArticleID,
+    selectedFeedBriefing,
+    unreadOnly,
+    favoriteOnly,
+    keyword,
+    tagFilter,
+    sourceFilter,
+    sourceGroupFilter,
+    mutedSiteKeys,
+    aiModel,
+    feedBriefing,
+    feedBriefingError,
+    loadingFeedBriefing,
+    feedBriefingGeneratedAt,
+    feedBriefingAnchorArticleIDs,
+    expandedThreadComments,
+    threadCommentsNewestFirst,
+    sources,
+    sourceStatus,
+    sourceByID,
+    sourceSiteKeyMap,
+    mutedSiteSet,
+    readArticleIDSet,
+    favoriteArticleIDSet,
+    readerSources: sidebarState.readerSources,
+  })
 
   const {
     hasFeedBriefingEntry,
@@ -248,55 +220,12 @@ export function useReaderFeatureSection({
     canTrackThread,
     canForceRecalcSummary,
     hasDetailMoreActions,
-  } = useReaderFeatureDerived({
-    activeTab,
-    feed,
-    summaryTasks,
-    selectedArticle,
-    selectedArticleID,
-    selectedFeedBriefing,
-    unreadOnly,
-    favoriteOnly,
-    keyword,
-    tagFilter,
-    sourceFilter,
-    sourceGroupFilter,
-    mutedSiteKeys,
-    aiModel,
-    feedBriefing,
-    feedBriefingError,
-    loadingFeedBriefing,
-    feedBriefingGeneratedAt,
-    feedBriefingAnchorArticleIDs,
-    expandedThreadComments,
-    threadCommentsNewestFirst,
-    sources,
-    sourceStatus,
-    sourceByID,
-    sourceSiteKeyMap,
-    mutedSiteSet,
-    readArticleIDSet,
-    favoriteArticleIDSet,
-    readerSources: sidebarState.readerSources,
-  })
-
-  const { loadCachedSummary, resolveSummaryTaskIdentity } = useSummaryArticleState({
-    selectedSummaryTask,
-    setArticleSummaryMeta,
-    summaryRequestSeqRef,
-    setArticleSummary,
-    setArticleSummaryError,
-    feed,
-    selectedArticle,
-    toErrorMessage,
-  })
-
-  const { upsertSummaryTask, removeSummaryTask, clearCompletedSummaryTasks } = useSummaryTaskActions({
-    setSummaryTasks,
-    summaryTaskNotifiedRef,
-  })
+  } = derived
 
   const {
+    resolveSummaryTaskIdentity,
+    upsertSummaryTask,
+    clearCompletedSummaryTasks,
     loadSources,
     loadStatus,
     refreshStatusIfVisible,
@@ -307,177 +236,23 @@ export function useReaderFeatureSection({
     pendingFeedCount,
     checkingFeedUpdates,
     applyPendingFeedUpdates,
-  } = useReaderDataController({
-    activeTab,
-    feed,
-    tagFilter,
-    sourceFilter,
-    keyword,
-    feedCursor,
-    loadingFeed,
-    sourceByID,
-    feedRequestSeqRef,
-    sidebarTagFilterTimerRef,
-    setLoadingSources,
-    setSourcesError,
-    setSources,
-    setLoadingStatus,
-    setStatusError,
-    setSourceStatus,
-    setLoadingFeed,
-    setFeedError,
-    setFeed,
-    setFeedCursor,
-    setHasMoreFeed,
-    setNotice,
-    parseSourceIDFilter,
-    normalizeSourceKind,
-    toErrorMessage,
-  })
-
-  const { startReaderSession, finalizeReaderSession, closeFloatingReader, openFeedBriefing } = useReaderSessionActions({
-    readerSessionRef,
-    setReadArticleIDs,
-    upsertReadArticleID,
-    readMarkMinScrollProgress,
-    closeDetailMoreMenu,
-    setShowFloatingReader,
-    articleRequestSeqRef,
-    summaryRequestSeqRef,
-    setLoadingArticle,
-    setArticleError,
-    setSelectedArticle,
-    setSelectedArticleID,
-    setSelectedFeedBriefing,
-    setArticleSummary,
-    setArticleSummaryMeta,
-    setArticleSummaryError,
-    setLoadingArticleSummary,
-    setExpandedThreadComments,
-    setThreadCommentsNewestFirst,
-    setReaderView,
-    floatingDetailRef,
-  })
-
-  const {
     applyFeedBriefingSnapshot,
     saveFeedBriefingSnapshot,
-    resetFeedBriefingState,
     onGenerateFeedBriefing,
-  } = useFeedBriefingActions({
-    activeFeedBriefingAnchorArticleIDs,
-    activeFeedBriefingSourceIDs,
-    activeFeedBriefingScopeLabel,
-    activeFeedBriefingTaskKey,
-    activeFeedBriefingKeyword,
-    tagFilter,
-    aiModel,
-    setFeedBriefingTaskKey,
-    setFeedBriefingScopeLabel,
-    setFeedBriefingAnchorArticleIDs,
-    setLoadingFeedBriefing,
-    setFeedBriefingError,
-    setFeedBriefing,
-    setFeedBriefingItems,
-    setFeedBriefingArticleCount,
-    setFeedBriefingGeneratedAt,
-    setFeedBriefingMeta,
-    setSelectedFeedBriefing,
-    setFeedBriefingSnapshots,
-    setNotice,
-    upsertSummaryTask,
-    toErrorMessage,
-  })
-
-  const { openArticle, onSummarizeArticle, onTrackThread } = useReaderArticleActions({
-    aiModel,
-    selectedArticleID,
-    sourceByID,
-    readerSessionRef,
-    articleRequestSeqRef,
-    summaryRequestSeqRef,
-    summaryTaskNotifiedRef,
-    closeDetailMoreMenu,
-    finalizeReaderSession,
-    startReaderSession,
-    loadCachedSummary,
-    resolveSummaryTaskIdentity,
-    upsertSummaryTask,
-    setLoadingArticle,
-    setReaderView,
-    setShowFloatingReader,
-    setArticleError,
-    setSelectedFeedBriefing,
-    setSelectedArticleID,
-    setArticleSummary,
-    setArticleSummaryMeta,
-    setArticleSummaryError,
-    setLoadingArticleSummary,
-    setExpandedThreadComments,
-    setThreadCommentsNewestFirst,
-    setSelectedArticle,
-    floatingDetailRef,
-    setNotice,
-    loadSources,
-    refreshStatusIfVisible,
-  })
-
-  const { onOpenSummaryTask, onDismissSummaryTask } = useSummaryTaskStripActions({
-    feedBriefingSnapshots,
-    applyFeedBriefingSnapshot,
-    setNotice,
-    setActiveTab: ui.setActiveTab,
-    openFeedBriefing,
-    setReaderView,
     openArticle,
-    removeSummaryTask,
-  })
-
-  const { openImmersiveReader, returnToReaderStream } = useReaderViewActions({
-    streamScrollYRef,
-    setReaderView,
-    setShowFloatingReader,
-    finalizeReaderSession,
-  })
-
-  const { applyFilters, clearFilters, removeFilter, onChangeAIModel, toggleSiteMuted } = useReaderFilterControls({
-    aiModel,
-    setAIModel,
-    selectedArticleID,
-    summaryRequestSeqRef,
-    loadCachedSummary,
-    resetFeedBriefingState,
-    cancelSidebarTagFeedReload,
-    loadFeed,
-    setKeyword,
-    setTagFilter,
-    setSourceFilter,
-    setUnreadOnly,
-    setFavoriteOnly,
-    setSourceGroupFilter,
-    setSidebarTagFilters,
-    setSidebarTagFilterMode,
-    setMutedSiteKeys,
-    setSelectedArticle,
-    setSelectedArticleID,
-    setFeedCursor,
-    setShowManageModelPicker,
-    setArticleSummary,
-    setArticleSummaryMeta,
-    setArticleSummaryError,
-    setNotice,
-  })
-
-  const onToggleFavoriteArticle = useCallback(
-    (articleID: number) => {
-      setFavoriteArticleIDs((previous) => toggleFavoriteArticleID(previous, articleID))
-    },
-    [setFavoriteArticleIDs],
-  )
-
-  const isFavoriteArticle = Boolean(selectedArticleID && favoriteArticleIDSet.has(selectedArticleID))
-
-  const {
+    onToggleFavoriteArticle,
+    isFavoriteArticle,
+    onSummarizeArticle,
+    onTrackThread,
+    onOpenSummaryTask,
+    onDismissSummaryTask,
+    openImmersiveReader,
+    returnToReaderStream,
+    applyFilters,
+    clearFilters,
+    removeFilter,
+    onChangeAIModel,
+    toggleSiteMuted,
     applySourceFilterFromSidebar,
     registerSidebarSourceItemRef,
     applySidebarTagFilters,
@@ -485,22 +260,18 @@ export function useReaderFeatureSection({
     switchSidebarTagFilterMode,
     openSourceProfile,
     openDeleteSourceConfirm,
-  } = useReaderSidebarControls({
-    cancelSidebarTagFeedReload,
-    resetFeedBriefingState,
+    closeFloatingReader,
+    openFeedBriefing,
+    finalizeReaderSession,
+  } = useReaderFeatureActions({
+    refs,
+    data,
+    request,
+    ui,
     sidebarState,
-    setSourceFilter,
-    setSelectedArticle,
-    setSelectedArticleID,
-    setFeedCursor,
-    loadFeed,
-    sidebarSourceItemRefs,
-    sourceTagList,
-    closeSourceContextMenu,
-    setSourceProfileSource,
-    setSourceProfileTagPickerOpen,
-    setSourceProfileTagInput,
-    setPendingDeleteSource,
+    sourcesIndex,
+    sourceContext,
+    derived,
   })
 
   useReaderFeatureEffects({

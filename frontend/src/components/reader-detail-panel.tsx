@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useMemo, useState, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
@@ -126,7 +126,14 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     hasHiddenThreadComments,
   } = props
 
-  const [detailView, setDetailView] = useState<'read' | 'summary' | 'comments' | 'capture'>('read')
+  type DetailView = 'read' | 'summary' | 'comments' | 'capture'
+  const [detailViewPreference, setDetailViewPreference] = useState<{
+    articleID: number | null
+    view: DetailView
+  }>({
+    articleID: null,
+    view: 'read',
+  })
 
   const hasAIArticleSummary = Boolean(articleSummary.trim())
   const hasThreadCommentsView = Boolean(selectedArticle?.thread)
@@ -148,18 +155,23 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
       ].filter((item) => item.enabled),
     [hasAIArticleSummary, hasArticleBody, hasCapturedExternal, hasThreadCommentsView],
   )
-
-  useEffect(() => {
-    if (!selectedArticle) return
-    setDetailView('read')
-  }, [selectedArticle?.id])
-
-  useEffect(() => {
-    if (detailViewOptions.some((item) => item.key === detailView)) {
-      return
+  const activeArticleID = selectedArticle?.id ?? null
+  const detailView = useMemo<DetailView>(() => {
+    const requestedView = detailViewPreference.articleID === activeArticleID ? detailViewPreference.view : 'read'
+    if (detailViewOptions.some((item) => item.key === requestedView)) {
+      return requestedView
     }
-    setDetailView(detailViewOptions[0]?.key ?? 'read')
-  }, [detailView, detailViewOptions])
+    return detailViewOptions[0]?.key ?? 'read'
+  }, [activeArticleID, detailViewOptions, detailViewPreference.articleID, detailViewPreference.view])
+  const setDetailView = useCallback(
+    (view: DetailView) => {
+      setDetailViewPreference({
+        articleID: activeArticleID,
+        view,
+      })
+    },
+    [activeArticleID],
+  )
 
   if (!showFloatingReader && readerView !== 'detail') {
     return null

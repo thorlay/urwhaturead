@@ -4,7 +4,7 @@ import { useFeedBriefingDerived } from './use-feed-briefing-derived'
 import { useReaderStream } from './use-reader-stream'
 import { useSummaryTaskView } from './use-summary-task-view'
 import { threadPreviewCommentLimit } from '../lib/app-domain'
-import type { SummaryTask } from '../lib/app-domain'
+import type { AppTab, SummaryTask } from '../lib/app-domain'
 import {
   formatReplyCount,
   formatTimeAgo,
@@ -17,7 +17,7 @@ import {
 import type { FeedItem, Source, SourceStatus } from '../types'
 
 type UseReaderFeatureDerivedParams = {
-  activeTab: 'reader' | 'sources'
+  activeTab: AppTab
   feed: FeedItem[]
   summaryTasks: SummaryTask[]
   selectedArticle: FeedItem | null

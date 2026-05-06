@@ -28,6 +28,13 @@ export function useAppTabActions({
     setShowFloatingReader(false)
   }, [finalizeReaderSession, setActiveTab, setReaderView, setShowFloatingReader])
 
+  const onOpenAITab = useCallback(() => {
+    finalizeReaderSession('close')
+    setShowFloatingReader(false)
+    setReaderView('stream')
+    setActiveTab('ai')
+  }, [finalizeReaderSession, setActiveTab, setReaderView, setShowFloatingReader])
+
   const onOpenSourcesTab = useCallback(() => {
     if (!canAccessManagement) {
       return
@@ -48,6 +55,7 @@ export function useAppTabActions({
 
   return {
     onOpenReaderTab,
+    onOpenAITab,
     onOpenSourcesTab,
     onRefreshAllClick,
     onAdminLogoutClick,
