@@ -1282,6 +1282,13 @@
   flex-wrap: wrap;
 }
 
+.source-profile-inline-actions {
+  display: flex;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+  margin-right: auto;
+}
+
 .source-delete-overlay {
   position: fixed;
   inset: 0;

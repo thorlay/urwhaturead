@@ -579,6 +579,36 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
     params.setSourceProfileTagInput('')
   }
 
+  async function onSetSourceProfileAIBriefing(enabled: boolean, intervalMin?: number) {
+    if (!params.sourceProfileSource) return
+    const nextIntervalMin =
+      intervalMin ?? params.sourceProfileSource.ai_briefing_interval_min ?? 360
+
+    try {
+      params.setBusySourceID(params.sourceProfileSource.id)
+      const updated = await updateSource(params.sourceProfileSource.id, {
+        ai_briefing_enabled: enabled,
+        ai_briefing_interval_min: nextIntervalMin,
+      })
+      params.setSources((previous) => previous.map((source) => (source.id === updated.id ? updated : source)))
+      params.setSourceProfileSource(updated)
+      params.setNotice({
+        kind: 'info',
+        text: enabled
+          ? `已为 ${updated.name} 开启定时 AI 速览（每 ${updated.ai_briefing_interval_min ?? nextIntervalMin} 分钟）。`
+          : `已关闭 ${updated.name} 的定时 AI 速览。`,
+      })
+      await Promise.allSettled([params.refreshStatusIfVisible()])
+    } catch (error) {
+      params.setNotice({
+        kind: 'error',
+        text: `更新定时 AI 速览失败: ${params.toErrorMessage(error)}`,
+      })
+    } finally {
+      params.setBusySourceID(null)
+    }
+  }
+
   return {
     onExportSources,
     onImportSourcesFile,
@@ -598,5 +628,6 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
     onQuickSetSourceEnabled,
     onRemoveSourceProfileTag,
     onAddSourceProfileTags,
+    onSetSourceProfileAIBriefing,
   }
 }

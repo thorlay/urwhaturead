@@ -101,6 +101,8 @@ export async function createSource(payload: {
   name?: string
   rss_url: string
   tags?: string[]
+  ai_briefing_enabled?: boolean
+  ai_briefing_interval_min?: number
 }): Promise<Source> {
   return request<Source>('/api/v1/sources', {
     method: 'POST',
@@ -116,6 +118,8 @@ export async function updateSource(
     tags?: string[]
     enabled?: boolean
     poll_interval_sec?: number
+    ai_briefing_enabled?: boolean
+    ai_briefing_interval_min?: number
   },
 ): Promise<Source> {
   return request<Source>(`/api/v1/sources/${sourceID}`, {

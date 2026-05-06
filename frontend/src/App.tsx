@@ -451,6 +451,7 @@ function App() {
     sourceProfileTagCandidates,
     onRemoveSourceProfileTag: sourceManagementActions.onRemoveSourceProfileTag,
     onAddSourceProfileTags: sourceManagementActions.onAddSourceProfileTags,
+    onSetSourceProfileAIBriefing: sourceManagementActions.onSetSourceProfileAIBriefing,
     setSourceProfileSource,
     normalizeSourceKind,
     resolveSourceSiteKey,

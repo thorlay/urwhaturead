@@ -12,6 +12,10 @@ export type Source = {
   click_count?: number
   last_clicked_at?: string
   last_fetched_at?: string
+  ai_briefing_enabled?: boolean
+  ai_briefing_interval_min?: number
+  ai_briefing_last_run_at?: string
+  ai_briefing_last_generated_at?: string
   enabled: boolean
   poll_interval_sec: number
   created_at: string

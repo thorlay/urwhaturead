@@ -75,6 +75,7 @@ export type SourceProfileDialogProps = {
   busySourceID: number | null
   onRemoveSourceProfileTag: (tag: string) => Promise<void>
   onAddSourceProfileTags: (tags: string[]) => Promise<void>
+  onSetSourceProfileAIBriefing: (enabled: boolean, intervalMin?: number) => Promise<void>
   onQuickSetSourceEnabled: (source: Source, enabled: boolean) => Promise<void>
   onOpenDeleteConfirm: (source: Source) => void
   onCloseSourceProfile: () => void
@@ -103,6 +104,7 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
     busySourceID,
     onRemoveSourceProfileTag,
     onAddSourceProfileTags,
+    onSetSourceProfileAIBriefing,
     onQuickSetSourceEnabled,
     onOpenDeleteConfirm,
     onCloseSourceProfile,
@@ -269,10 +271,68 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
             <dt>点击次数</dt>
             <dd>{sourceClickCount(sourceProfileSource)}</dd>
           </div>
+          <div className="source-profile-section">AI 速览</div>
+          <div>
+            <dt>定时 AI 速览</dt>
+            <dd className="source-profile-status">
+              <Badge variant={sourceProfileSource.ai_briefing_enabled ? 'secondary' : 'outline'}>
+                {sourceProfileSource.ai_briefing_enabled ? '已启用' : '已关闭'}
+              </Badge>
+              {sourceProfileSource.ai_briefing_enabled && (
+                <span className="hint">每 {sourceProfileSource.ai_briefing_interval_min ?? 360} 分钟</span>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>最近运行</dt>
+            <dd>{sourceProfileSource.ai_briefing_last_run_at ? formatTimeAgo(sourceProfileSource.ai_briefing_last_run_at) : '-'}</dd>
+          </div>
+          <div>
+            <dt>最近生成</dt>
+            <dd>{sourceProfileSource.ai_briefing_last_generated_at ? formatTimeAgo(sourceProfileSource.ai_briefing_last_generated_at) : '-'}</dd>
+          </div>
         </dl>
 
         {canManageSources && (
           <div className="source-profile-actions">
+            <div className="source-profile-inline-actions">
+              <Button
+                type="button"
+                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 60 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => void onSetSourceProfileAIBriefing(true, 60)}
+                disabled={busySourceID === sourceProfileSource.id}
+              >
+                1h 速览
+              </Button>
+              <Button
+                type="button"
+                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 180 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => void onSetSourceProfileAIBriefing(true, 180)}
+                disabled={busySourceID === sourceProfileSource.id}
+              >
+                3h 速览
+              </Button>
+              <Button
+                type="button"
+                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 360 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => void onSetSourceProfileAIBriefing(true, 360)}
+                disabled={busySourceID === sourceProfileSource.id}
+              >
+                6h 速览
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void onSetSourceProfileAIBriefing(false)}
+                disabled={busySourceID === sourceProfileSource.id || !sourceProfileSource.ai_briefing_enabled}
+              >
+                关闭 AI 速览
+              </Button>
+            </div>
             <Button
               type="button"
               variant="outline"

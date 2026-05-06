@@ -22,6 +22,7 @@ type UseSourceOverlaysPropsParams = {
   sourceProfileTagCandidates: string[]
   onRemoveSourceProfileTag: (tag: string) => Promise<void>
   onAddSourceProfileTags: (tags: string[]) => Promise<void>
+  onSetSourceProfileAIBriefing: (enabled: boolean, intervalMin?: number) => Promise<void>
   setSourceProfileSource: Dispatch<SetStateAction<Source | null>>
   normalizeSourceKind: (kind?: string) => 'feed' | 'thread'
   resolveSourceSiteKey: (source: Pick<Source, 'site_key' | 'rss_url'>) => string
@@ -55,6 +56,7 @@ export function useSourceOverlaysProps({
   sourceProfileTagCandidates,
   onRemoveSourceProfileTag,
   onAddSourceProfileTags,
+  onSetSourceProfileAIBriefing,
   setSourceProfileSource,
   normalizeSourceKind,
   resolveSourceSiteKey,
@@ -92,6 +94,7 @@ export function useSourceOverlaysProps({
       busySourceID,
       onRemoveSourceProfileTag,
       onAddSourceProfileTags,
+      onSetSourceProfileAIBriefing,
       onQuickSetSourceEnabled,
       onOpenDeleteConfirm,
       onCloseSourceProfile: () => setSourceProfileSource(null),
