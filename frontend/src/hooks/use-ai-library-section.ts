@@ -12,6 +12,9 @@ type UseAILibrarySectionParams = {
   setNotice: (notice: Notice | null) => void
 }
 
+type AILibraryView = 'articles' | 'briefings'
+type AILibraryRange = '24h' | '7d' | '30d' | 'all'
+
 export function useAILibrarySection({
   activeTab,
   setActiveTab,
@@ -25,6 +28,8 @@ export function useAILibrarySection({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
+  const [activeView, setActiveView] = useState<AILibraryView>('articles')
+  const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -115,6 +120,10 @@ export function useAILibrarySection({
   return {
     search,
     setSearch,
+    activeView,
+    setActiveView,
+    timeRange,
+    setTimeRange,
     articleSummaries,
     feedBriefings,
     loading,

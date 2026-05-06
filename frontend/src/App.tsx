@@ -493,12 +493,16 @@ function App() {
             search={aiLibrarySection.search}
             loading={aiLibrarySection.loading}
             error={aiLibrarySection.error}
+            activeView={aiLibrarySection.activeView}
+            timeRange={aiLibrarySection.timeRange}
             articleSummaries={aiLibrarySection.articleSummaries}
             feedBriefings={aiLibrarySection.feedBriefings}
             formatTimeAgo={formatTimeAgo}
             onChangeSearch={aiLibrarySection.setSearch}
             onApplySearch={aiLibrarySection.applySearch}
             onRefresh={aiLibrarySection.refresh}
+            onChangeView={aiLibrarySection.setActiveView}
+            onChangeTimeRange={aiLibrarySection.setTimeRange}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
             onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />
