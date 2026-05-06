@@ -12,6 +12,7 @@ type Source struct {
 	TopicURL            *string     `json:"topic_url,omitempty" gorm:"column:topic_url"`
 	HiddenInSidebar     bool        `json:"hidden_in_sidebar" gorm:"column:hidden_in_sidebar;not null;default:false;index"`
 	Tags                StringArray `json:"tags,omitempty" gorm:"column:tags;type:text[]"`
+	NewArticles24h      int64       `json:"new_articles_24h" gorm:"column:new_articles_24h;->;-:migration"`
 	ClickCount          int64       `json:"click_count" gorm:"column:click_count;not null;default:0"`
 	LastClickedAt       *time.Time  `json:"last_clicked_at,omitempty" gorm:"column:last_clicked_at"`
 	Enabled             bool        `json:"enabled" gorm:"column:enabled;not null;default:true"`

@@ -8,6 +8,7 @@ export type Source = {
   topic_url?: string
   hidden_in_sidebar?: boolean
   tags?: string[]
+  new_articles_24h?: number
   click_count?: number
   last_clicked_at?: string
   last_fetched_at?: string

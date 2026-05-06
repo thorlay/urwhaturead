@@ -92,6 +92,9 @@ const SubscriptionSourceRow = memo(function SubscriptionSourceRow(props: Subscri
         onContextMenu={handleContextMenu}
       >
         <span className="subscription-item-name">{source.name}</span>
+        {(source.new_articles_24h ?? 0) > 0 && (
+          <span className="subscription-item-state fresh">{source.new_articles_24h} / 24h</span>
+        )}
         {!source.enabled && <span className="subscription-item-state disabled">停用</span>}
       </Button>
       <button

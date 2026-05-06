@@ -120,13 +120,33 @@ type reclassifySourceResult struct {
 
 const threadAutoHideAfter = 14 * 24 * time.Hour
 
+func recentArticleCountsSubquery(db *gorm.DB, window time.Duration) *gorm.DB {
+	if window <= 0 {
+		window = 24 * time.Hour
+	}
+	cutoff := time.Now().UTC().Add(-window)
+	return db.
+		Table("articles").
+		Select("source_id, COUNT(*) AS new_articles_24h").
+		Where("COALESCE(published_at, created_at) >= ?", cutoff).
+		Group("source_id")
+}
+
+func (h *SourceHandler) baseSourceListQuery() *gorm.DB {
+	counts := recentArticleCountsSubquery(h.db, 24*time.Hour)
+	return h.db.
+		Model(&models.Source{}).
+		Select("sources.*, COALESCE(article_counts.new_articles_24h, 0) AS new_articles_24h").
+		Joins("LEFT JOIN (?) AS article_counts ON article_counts.source_id = sources.id", counts)
+}
+
 func (h *SourceHandler) List(c *gin.Context) {
 	if err := h.autoHideStaleThreadSources(c.Request.Context(), threadAutoHideAfter); err != nil {
 		internalServerError(c, "auto-hide stale thread sources failed", err)
 		return
 	}
 
-	query := h.db.Model(&models.Source{})
+	query := h.baseSourceListQuery()
 
 	if ownerRaw := c.Query("owner_user_id"); ownerRaw != "" {
 		ownerID, err := strconv.ParseUint(ownerRaw, 10, 64)
@@ -231,7 +251,7 @@ func (h *SourceHandler) Get(c *gin.Context) {
 	}
 
 	var source models.Source
-	if err := h.db.First(&source, id).Error; err != nil {
+	if err := h.baseSourceListQuery().Where("sources.id = ?", id).First(&source).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			notFound(c, "source not found")
 			return

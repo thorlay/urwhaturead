@@ -591,6 +591,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                       </td>
                       <td>
                         <div className="source-cell-main">
+                          <p className="source-cell-meta">24h 新增 {source.new_articles_24h ?? 0}</p>
                           <p className="source-cell-meta">总点击 {sourceClickCount(source)}</p>
                           <p className="source-cell-meta">最近点击 {source.last_clicked_at ? formatTimeAgo(source.last_clicked_at) : '-'}</p>
                         </div>

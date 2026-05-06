@@ -797,6 +797,12 @@
   color: #777;
 }
 
+.subscription-item-state.fresh {
+  background: rgba(16, 185, 129, 0.12);
+  color: #0f766e;
+  font-variant-numeric: tabular-nums;
+}
+
 .subscription-item-thread {
   flex: 0 0 auto;
   font-size: 0.64rem;
