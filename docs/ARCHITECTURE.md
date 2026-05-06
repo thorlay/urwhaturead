@@ -84,11 +84,17 @@
   - 文章摘要接口
   - 线程跟踪入口（将论坛帖子变成可轮询来源）
 - `source_handler.go`
-  - 来源 CRUD
-  - 自动发现 RSS
-  - 自动重分类（基于 URL/探测样本）
-  - 批量标签操作
-  - 测试与手动刷新
+  - 来源 CRUD、重分类、批量标签操作、测试与手动刷新
+- `source_transfer.go`
+  - 来源导入/导出
+  - 传输 payload 解析与去重/更新策略
+- `source_discovery.go`
+  - feed probe
+  - RSS 自动发现（HTML link / robots / sitemap / RSSHub alias）
+- `source_classification.go`
+  - 来源标签归一化与自动推断
+- `source_identity.go`
+  - 站点名、`site_key`、RSSHub/内网地址识别规则
 - `admin_status_handler.go`
   - 来源健康统计（窗口成功率、最新抓取状态、stale 判定）
 
@@ -228,14 +234,14 @@
 
 ### 7.1 总体模式
 
-- 单页应用，核心是一个大的 state orchestration 组件。
+- 单页应用，`App.tsx` 更接近顶层装配器而不是唯一状态中心。
 - 视图层分成两个 tab：
   - `reader`：阅读流 + 详情阅读
   - `sources`：管理（来源列表、健康、批量操作、发现、重分类）
 
 ### 7.2 主要状态域
 
-`App.tsx` 中重点状态：
+顶层状态仍然主要在 `App.tsx`，但阅读流的组合与副作用已经下沉到专用 hooks。重点状态域仍包括：
 
 - 来源域：`sources/sourceStatus`
 - 流域：`feed/feedCursor/hasMoreFeed`
@@ -248,10 +254,10 @@
 
 目录：`frontend/src/hooks/`
 
-- `use-reader-stream`：阅读流可见项与插入逻辑
-- `use-detail-panel`：详情面板行为（含 thread 展示判断）
-- `use-summary-task-poller`：AI 任务轮询与状态收敛
-- `use-feed-briefing-cache-restore`：速览缓存恢复
+- `use-reader-feature-section`：阅读区主组合层，串联 reader 相关 action/data/effects
+- `use-reader-feature-derived`：阅读流与详情的派生状态
+- `use-reader-feature-effects`：阅读流相关副作用与轮询
+- `use-reader-workspace-composition`：把 reader 状态装配成 `ReaderWorkspace` 所需 props
 - `use-source-management-state`：来源管理页状态收敛
 - `use-source-management-actions`：来源管理操作集合（create/update/bulk/discover）
 
@@ -332,6 +338,6 @@
 
 如果后续你要继续重构，建议优先顺序：
 
-1. 继续缩减 `App.tsx`（把 reader/sources 两大域再下沉一层容器）。
+1. 继续缩减 `use-reader-feature-section`，把 reader 主组合层再拆成更稳的 domain hooks。
 2. 把 `article_handler.go` 的剩余编排继续向 service 下沉。
 3. 给“线程解析规则”做独立 adapter 注册机制（减少 if/else 分支增长）。
