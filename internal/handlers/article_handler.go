@@ -63,6 +63,7 @@ func (h *ArticleHandler) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (h *ArticleHandler) RegisterReadRoutes(group *gin.RouterGroup) {
+	group.GET("/summaries", h.ListSummaries)
 	group.GET("/:id", h.Get)
 	group.GET("/:id/cluster-diagnosis", h.GetClusterDiagnosis)
 	group.GET("/:id/summary", h.GetSummary)
@@ -141,6 +142,21 @@ type articleSummaryTaskPayload struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type articleSummaryListItem struct {
+	ArticleID   uint64     `json:"article_id"`
+	SourceID    uint64     `json:"source_id"`
+	SourceName  string     `json:"source_name"`
+	Title       string     `json:"title"`
+	Link        string     `json:"link"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	Summary     string     `json:"summary"`
+	Model       string     `json:"model"`
+	Provider    string     `json:"provider"`
+	InputChars  int        `json:"input_chars"`
+	Truncated   bool       `json:"truncated"`
+	GeneratedAt time.Time  `json:"generated_at"`
+}
+
 func (h *ArticleHandler) Get(c *gin.Context) {
 	id, err := parseUintParam(c, "id")
 	if err != nil {
@@ -158,6 +174,58 @@ func (h *ArticleHandler) Get(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, article)
+}
+
+func (h *ArticleHandler) ListSummaries(c *gin.Context) {
+	limit, offset, err := parseListWindow(c, 20, 100)
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
+
+	query := h.db.WithContext(c.Request.Context()).
+		Table("article_summaries AS sm").
+		Select(`
+			sm.article_id,
+			a.source_id,
+			s.name AS source_name,
+			a.title,
+			a.link,
+			a.published_at,
+			sm.summary,
+			sm.model,
+			sm.provider,
+			sm.input_chars,
+			sm.truncated,
+			sm.generated_at
+		`).
+		Joins("JOIN articles AS a ON a.id = sm.article_id").
+		Joins("JOIN sources AS s ON s.id = a.source_id")
+
+	if keyword := strings.TrimSpace(c.Query("q")); keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("(a.title ILIKE ? OR s.name ILIKE ? OR sm.summary ILIKE ?)", like, like, like)
+	}
+
+	var rows []articleSummaryListItem
+	if err := query.
+		Order("sm.generated_at DESC").
+		Order("sm.article_id DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error; err != nil {
+		internalServerError(c, "query article summaries failed", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": rows,
+		"meta": gin.H{
+			"limit":  limit,
+			"offset": offset,
+			"count":  len(rows),
+		},
+	})
 }
 
 func (h *ArticleHandler) TrackThread(c *gin.Context) {

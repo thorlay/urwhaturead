@@ -71,6 +71,7 @@ func (h *FeedHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *FeedHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("", h.List)
+	group.GET("/briefings", h.ListBriefings)
 	group.POST("/briefing", h.Briefing)
 }
 
@@ -125,6 +126,23 @@ type feedBriefingPayload struct {
 	InputItems   []feedBriefingInputItem `json:"input_items"`
 }
 
+type feedBriefingListItem struct {
+	DigestKey    string    `json:"digest_key"`
+	ScopeLabel   string    `json:"scope_label"`
+	Tag          string    `json:"tag"`
+	Keyword      string    `json:"keyword"`
+	SourceIDs    string    `json:"source_ids"`
+	ArticleIDs   string    `json:"article_ids"`
+	Limit        int       `json:"limit"`
+	Summary      string    `json:"summary"`
+	Model        string    `json:"model"`
+	Provider     string    `json:"provider"`
+	InputChars   int       `json:"input_chars"`
+	Truncated    bool      `json:"truncated"`
+	GeneratedAt  time.Time `json:"generated_at"`
+	ArticleCount int       `json:"article_count"`
+}
+
 type feedBriefingInputItem struct {
 	ID          uint64     `json:"id"`
 	SourceID    uint64     `json:"source_id"`
@@ -139,6 +157,62 @@ const (
 	maxBriefingLimit      = 50
 	maxBriefingInputItems = 12
 )
+
+func (h *FeedHandler) ListBriefings(c *gin.Context) {
+	limit, offset, err := parseListWindow(c, 20, 100)
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
+
+	query := h.db.WithContext(c.Request.Context()).
+		Model(&models.FeedBriefing{})
+
+	if keyword := strings.TrimSpace(c.Query("q")); keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("(summary ILIKE ? OR tag ILIKE ? OR keyword ILIKE ?)", like, like, like)
+	}
+
+	var rows []models.FeedBriefing
+	if err := query.
+		Order("generated_at DESC").
+		Order("id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error; err != nil {
+		internalServerError(c, "query feed briefings failed", err)
+		return
+	}
+
+	items := make([]feedBriefingListItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, feedBriefingListItem{
+			DigestKey:    row.DigestKey,
+			ScopeLabel:   buildFeedBriefingScopeLabel(row.Tag, row.Keyword, row.SourceIDs),
+			Tag:          row.Tag,
+			Keyword:      row.Keyword,
+			SourceIDs:    row.SourceIDs,
+			ArticleIDs:   row.ArticleIDs,
+			Limit:        row.Limit,
+			Summary:      row.Summary,
+			Model:        row.Model,
+			Provider:     row.Provider,
+			InputChars:   row.InputChars,
+			Truncated:    row.Truncated,
+			GeneratedAt:  row.GeneratedAt,
+			ArticleCount: countCSVEntries(row.ArticleIDs),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": items,
+		"meta": gin.H{
+			"limit":  limit,
+			"offset": offset,
+			"count":  len(items),
+		},
+	})
+}
 
 func (h *FeedHandler) List(c *gin.Context) {
 	limit := 20
@@ -702,8 +776,42 @@ func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Clien
 	return strings.TrimSpace(summarizer.DefaultModel())
 }
 
+func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string) string {
+	tag = normalizeSourceTag(tag)
+	keyword = normalizeBriefingKeyword(keyword)
+	if tag != "" && keyword != "" {
+		return tag + " · " + keyword
+	}
+	if keyword != "" {
+		return "关键词 · " + keyword
+	}
+	if tag != "" {
+		return "标签 · " + tag
+	}
+	sourceCount := countCSVEntries(sourceIDsCSV)
+	if sourceCount > 0 {
+		return fmt.Sprintf("%d 个来源", sourceCount)
+	}
+	return "当前阅读流"
+}
+
 func normalizeBriefingKeyword(raw string) string {
 	return strings.ToLower(strings.TrimSpace(raw))
+}
+
+func countCSVEntries(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0
+	}
+	parts := strings.Split(raw, ",")
+	count := 0
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {
