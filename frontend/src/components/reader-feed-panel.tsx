@@ -222,10 +222,19 @@ const FeedArticleListItem = memo(
     )
     const replyCountText = useMemo(() => formatReplyCount(item.reply_count), [formatReplyCount, item.reply_count])
     const plainSummaryText = useMemo(() => plainText(item.summary), [item.summary, plainText])
+    const compactPreviewText = useMemo(() => {
+      const summary = plainText(item.summary)
+      if (summary) {
+        return summary
+      }
+      return plainText(item.content)
+    }, [item.content, item.summary, plainText])
     const isShortSummary = plainSummaryText.length > 0 && plainSummaryText.length <= 72
+    const duplicateCountText =
+      typeof item.duplicate_count === 'number' && item.duplicate_count > 1 ? `+${item.duplicate_count - 1}源` : ''
     const compactTitleParts = useMemo(
-      () => buildCompactTitleParts(item.title, item.summary),
-      [buildCompactTitleParts, item.summary, item.title],
+      () => buildCompactTitleParts(item.title, compactPreviewText),
+      [buildCompactTitleParts, compactPreviewText, item.title],
     )
 
     const handleOpen = useCallback(() => {
@@ -241,6 +250,10 @@ const FeedArticleListItem = memo(
           <div className="feed-item-content">
             {feedTitleOnlyMode ? (
               <div className="feed-item-compact-row">
+                <div className="feed-item-compact-leading">
+                  <span className="feed-item-compact-time">{compactPublishedLabel}</span>
+                  <span className="feed-item-compact-source">{item.source_name}</span>
+                </div>
                 <h3 className="feed-item-title">
                   <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
                   {compactTitleParts.summary && (
@@ -254,18 +267,17 @@ const FeedArticleListItem = memo(
                   )}
                 </h3>
                 <div className="feed-item-compact-meta">
-                  <span className="feed-source feed-item-compact-source">{item.source_name}</span>
-                  <span className="feed-sep">·</span>
-                  <span>{compactPublishedLabel}</span>
+                  {duplicateCountText && <span className="feed-item-compact-burst">{duplicateCountText}</span>}
                   {replyCountText && (
                     <>
-                      <span className="feed-sep">·</span>
                       <span>{replyCountText}</span>
-                    </>
+                    </> 
+                  )}
+                  {previewImageURL && (
+                    <span className="feed-item-compact-flag">图</span>
                   )}
                   {summaryTaskStatus && (
                     <>
-                      <span className="feed-sep">·</span>
                       <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
                         AI {summaryTaskStatusLabel(summaryTaskStatus)}
                       </span>
