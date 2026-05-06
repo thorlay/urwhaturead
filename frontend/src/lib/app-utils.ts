@@ -406,6 +406,51 @@ export function plainTextBlock(input?: string): string {
   return sanitizeDisplayTextBlock(normalized)
 }
 
+export function plainTextParagraphs(input?: string): string[] {
+  const normalized = plainTextBlock(input)
+  if (!normalized) return []
+
+  const explicitParagraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+  if (explicitParagraphs.length > 1) {
+    return explicitParagraphs
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length <= 1) {
+    return normalized ? [normalized] : []
+  }
+
+  const paragraphs: string[] = []
+  let current: string[] = []
+  const flush = () => {
+    if (current.length === 0) return
+    paragraphs.push(current.join('\n').trim())
+    current = []
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const next = lines[index + 1]
+    current.push(line)
+
+    if (!next) {
+      flush()
+      continue
+    }
+    if (shouldSplitPlainTextParagraph(line, next)) {
+      flush()
+    }
+  }
+
+  return paragraphs.length > 0 ? paragraphs : [normalized]
+}
+
 export function buildCompactTitleParts(title: string, summary?: string): { title: string; summary: string } {
   const normalizedTitle = plainText(title).trim()
   if (!normalizedTitle) return { title: '', summary: '' }
@@ -451,6 +496,19 @@ export function sanitizeDisplayTextBlock(input: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{4,}/g, '\n\n\n')
   return value.trim()
+}
+
+function shouldSplitPlainTextParagraph(currentLine: string, nextLine: string): boolean {
+  if (!currentLine || !nextLine) return false
+  if (isPlainTextListLine(nextLine)) return true
+  if (/[。！？.!?]["'”’」』)]*$/.test(currentLine) && currentLine.length >= 24 && nextLine.length >= 8) {
+    return true
+  }
+  return false
+}
+
+function isPlainTextListLine(line: string): boolean {
+  return /^([-*•]\s+|\d+[.)]\s+)/.test(line)
 }
 
 export function stripFeedBoilerplate(input: string): string {

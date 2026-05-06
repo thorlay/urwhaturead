@@ -2,14 +2,28 @@ import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
-import { containsRenderableHTMLTag, plainTextBlock, sanitizeRichHTML } from '@/lib/app-utils'
+import { containsRenderableHTMLTag, plainTextParagraphs, sanitizeRichHTML } from '@/lib/app-utils'
+
+export function PlainTextBlock(props: { content?: string; className?: string }) {
+  const paragraphs = useMemo(() => plainTextParagraphs(props.content), [props.content])
+  if (paragraphs.length === 0) return null
+
+  return (
+    <div className={props.className ? `plain-text-block ${props.className}` : 'plain-text-block'}>
+      {paragraphs.map((paragraph, index) => (
+        <p key={`plain-text-paragraph-${index}`} className="plain-text-paragraph">
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  )
+}
 
 export function SafeHTMLBlock(props: { content?: string; baseURL?: string }) {
-  const fallbackText = useMemo(() => plainTextBlock(props.content), [props.content])
   const sanitizedHTML = useMemo(() => sanitizeRichHTML(props.content, props.baseURL), [props.content, props.baseURL])
 
   if (!sanitizedHTML || !containsRenderableHTMLTag(sanitizedHTML)) {
-    return <p className="reading-block prose">{fallbackText}</p>
+    return <PlainTextBlock content={props.content} className="reading-block prose" />
   }
 
   return <div className="html-block" dangerouslySetInnerHTML={{ __html: sanitizedHTML }} />

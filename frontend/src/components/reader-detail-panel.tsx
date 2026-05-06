@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
-import { MarkdownBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
+import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
 
 type ThreadComment = {
@@ -58,7 +58,6 @@ export type ReaderDetailPanelProps = {
   selectedSummaryTask: ReaderSummaryTask
   isThreadArticle: boolean
   threadPrimaryBody: string
-  plainTextBlock: (input?: string) => string
   visibleThreadComments: ThreadComment[]
   threadComments: ThreadComment[]
   threadCommentsNewestFirst: boolean
@@ -113,7 +112,6 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     selectedSummaryTask,
     isThreadArticle,
     threadPrimaryBody,
-    plainTextBlock,
     visibleThreadComments,
     threadComments,
     threadCommentsNewestFirst,
@@ -458,13 +456,13 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                 )}
               </div>
               {isThreadArticle && threadPrimaryBody ? (
-                <p className="reading-block prose">{plainTextBlock(threadPrimaryBody)}</p>
+                <PlainTextBlock content={threadPrimaryBody} className="reading-block prose" />
               ) : selectedArticle.content_html ? (
                 <SafeHTMLBlock content={selectedArticle.content_html} baseURL={selectedArticle.link} />
               ) : selectedArticle.content ? (
-                <p className="reading-block prose">{plainTextBlock(selectedArticle.content)}</p>
+                <PlainTextBlock content={selectedArticle.content} className="reading-block prose" />
               ) : selectedArticle.summary ? (
-                <p className="reading-block">{plainTextBlock(selectedArticle.summary)}</p>
+                <PlainTextBlock content={selectedArticle.summary} className="reading-block" />
               ) : (
                 <p className="hint">暂无可展示正文。</p>
               )}
@@ -500,7 +498,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                 </Button>
               </div>
               <p className="hint">{selectedArticle.external.title}</p>
-              <p className="reading-block prose">{plainTextBlock(selectedArticle.external.content)}</p>
+              <PlainTextBlock content={selectedArticle.external.content} className="reading-block prose" />
               {selectedArticle.external.truncated && <p className="hint">原文较长，已截断显示。</p>}
             </section>
           )}
@@ -536,7 +534,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                           #{comment.post_number || index + 2} · {comment.author || 'unknown'} ·{' '}
                           {comment.published_at ? formatTimeAgo(comment.published_at) : '-'}
                         </p>
-                        <p className="reading-block">{plainTextBlock(comment.content)}</p>
+                        <PlainTextBlock content={comment.content} className="reading-block" />
                       </article>
                     ))}
                   </div>

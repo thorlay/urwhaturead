@@ -1890,6 +1890,18 @@
   line-height: 1.82;
 }
 
+.plain-text-block {
+  display: grid;
+  gap: 0.95rem;
+  white-space: normal;
+}
+
+.plain-text-paragraph {
+  margin: 0;
+  white-space: pre-line;
+  line-height: inherit;
+}
+
 .html-block {
   max-width: 78ch;
   width: min(100%, 78ch);

@@ -46,7 +46,6 @@ type UseReaderWorkspaceDetailPropsParams = {
   selectedSummaryTask: DetailProps['selectedSummaryTask']
   isThreadArticle: DetailProps['isThreadArticle']
   threadPrimaryBody: DetailProps['threadPrimaryBody']
-  plainTextBlock: DetailProps['plainTextBlock']
   visibleThreadComments: DetailProps['visibleThreadComments']
   threadComments: DetailProps['threadComments']
   threadCommentsNewestFirst: DetailProps['threadCommentsNewestFirst']
@@ -103,7 +102,6 @@ export function useReaderWorkspaceDetailProps(
     selectedSummaryTask: params.selectedSummaryTask,
     isThreadArticle: params.isThreadArticle,
     threadPrimaryBody: params.threadPrimaryBody,
-    plainTextBlock: params.plainTextBlock,
     visibleThreadComments: params.visibleThreadComments,
     threadComments: params.threadComments,
     threadCommentsNewestFirst: params.threadCommentsNewestFirst,
