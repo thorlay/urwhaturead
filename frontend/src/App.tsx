@@ -495,6 +495,7 @@ function App() {
             error={aiLibrarySection.error}
             activeView={aiLibrarySection.activeView}
             timeRange={aiLibrarySection.timeRange}
+            sourceFilter={aiLibrarySection.sourceFilter}
             articleSummaries={aiLibrarySection.articleSummaries}
             feedBriefings={aiLibrarySection.feedBriefings}
             formatTimeAgo={formatTimeAgo}
@@ -503,6 +504,7 @@ function App() {
             onRefresh={aiLibrarySection.refresh}
             onChangeView={aiLibrarySection.setActiveView}
             onChangeTimeRange={aiLibrarySection.setTimeRange}
+            onChangeSourceFilter={aiLibrarySection.setSourceFilter}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
             onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />

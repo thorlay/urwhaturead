@@ -375,6 +375,31 @@
   gap: 0.8rem;
 }
 
+.ai-library-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ai-library-select-label {
+  display: grid;
+  gap: 0.35rem;
+  color: #516275;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ai-library-select {
+  min-width: min(100%, 260px);
+  min-height: 2.4rem;
+  padding: 0 0.8rem;
+  border: 1px solid rgba(15, 23, 42, 0.11);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #243648;
+  font-size: 0.88rem;
+}
+
 .ai-library-segmented,
 .ai-library-range-pills {
   display: flex;

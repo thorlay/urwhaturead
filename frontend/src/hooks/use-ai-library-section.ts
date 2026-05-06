@@ -30,6 +30,7 @@ export function useAILibrarySection({
   const [loadedOnce, setLoadedOnce] = useState(false)
   const [activeView, setActiveView] = useState<AILibraryView>('articles')
   const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
+  const [sourceFilter, setSourceFilter] = useState('all')
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -124,6 +125,8 @@ export function useAILibrarySection({
     setActiveView,
     timeRange,
     setTimeRange,
+    sourceFilter,
+    setSourceFilter,
     articleSummaries,
     feedBriefings,
     loading,

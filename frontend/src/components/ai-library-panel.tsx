@@ -12,6 +12,7 @@ type AILibraryPanelProps = {
   error: string | null
   activeView: AILibraryView
   timeRange: AILibraryRange
+  sourceFilter: string
   articleSummaries: ArticleSummaryLibraryItem[]
   feedBriefings: FeedBriefingLibraryItem[]
   formatTimeAgo: (input: string) => string
@@ -20,6 +21,7 @@ type AILibraryPanelProps = {
   onRefresh: () => void
   onChangeView: (view: AILibraryView) => void
   onChangeTimeRange: (range: AILibraryRange) => void
+  onChangeSourceFilter: (value: string) => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
   onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
@@ -109,6 +111,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     error,
     activeView,
     timeRange,
+    sourceFilter,
     articleSummaries,
     feedBriefings,
     formatTimeAgo,
@@ -117,15 +120,42 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onRefresh,
     onChangeView,
     onChangeTimeRange,
+    onChangeSourceFilter,
     onOpenArticleSummary,
     onOpenFeedBriefing,
   } = props
 
-  const filteredArticles = articleSummaries.filter((item) => withinRange(item.generated_at, timeRange))
-  const filteredBriefings = feedBriefings.filter((item) => withinRange(item.generated_at, timeRange))
+  const articleSourceOptions = Array.from(new Set(articleSummaries.map((item) => item.source_name).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'zh-Hans-CN'),
+  )
+  const briefingScopeOptions = Array.from(new Set(feedBriefings.map((item) => item.scope_label || '当前阅读流').filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, 'zh-Hans-CN'),
+  )
+
+  const filteredArticles = articleSummaries.filter((item) => {
+    if (!withinRange(item.generated_at, timeRange)) {
+      return false
+    }
+    if (sourceFilter !== 'all' && item.source_name !== sourceFilter) {
+      return false
+    }
+    return true
+  })
+  const filteredBriefings = feedBriefings.filter((item) => {
+    if (!withinRange(item.generated_at, timeRange)) {
+      return false
+    }
+    const scope = item.scope_label || '当前阅读流'
+    if (sourceFilter !== 'all' && scope !== sourceFilter) {
+      return false
+    }
+    return true
+  })
   const articleSections = groupByRecency(filteredArticles)
   const briefingSections = groupByRecency(filteredBriefings)
   const activeCount = activeView === 'articles' ? filteredArticles.length : filteredBriefings.length
+  const sourceOptions = activeView === 'articles' ? articleSourceOptions : briefingScopeOptions
+  const sourceLabel = activeView === 'articles' ? '来源' : '范围'
 
   return (
     <main className="ai-library-page">
@@ -202,6 +232,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </button>
               ))}
             </div>
+
+            <div className="ai-library-filter-row">
+              <label className="ai-library-select-label">
+                <span>{sourceLabel}</span>
+                <select className="ai-library-select" value={sourceFilter} onChange={(event) => onChangeSourceFilter(event.target.value)}>
+                  <option value="all">全部{sourceLabel}</option>
+                  {sourceOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -215,6 +259,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
           <p className="hint">
             当前视图共 {activeCount} 条
             {timeRange !== 'all' ? ` · 已按 ${timeRange} 过滤` : ''}
+            {sourceFilter !== 'all' ? ` · ${sourceLabel} ${sourceFilter}` : ''}
             {search.trim() ? ` · 关键词 “${search.trim()}”` : ''}
           </p>
         </div>
