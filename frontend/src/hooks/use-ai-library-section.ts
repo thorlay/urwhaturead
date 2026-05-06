@@ -8,6 +8,7 @@ type UseAILibrarySectionParams = {
   activeTab: AppTab
   setActiveTab: (tab: AppTab) => void
   openArticle: (articleID: number) => Promise<void>
+  openFeedBriefing: (item: FeedBriefingLibraryItem) => void
   setNotice: (notice: Notice | null) => void
 }
 
@@ -15,6 +16,7 @@ export function useAILibrarySection({
   activeTab,
   setActiveTab,
   openArticle,
+  openFeedBriefing,
   setNotice,
 }: UseAILibrarySectionParams) {
   const [search, setSearch] = useState('')
@@ -71,6 +73,14 @@ export function useAILibrarySection({
     [openArticle, setActiveTab],
   )
 
+  const openFeedBriefingSummary = useCallback(
+    (item: FeedBriefingLibraryItem) => {
+      setActiveTab('reader')
+      openFeedBriefing(item)
+    },
+    [openFeedBriefing, setActiveTab],
+  )
+
   return {
     search,
     setSearch,
@@ -82,5 +92,6 @@ export function useAILibrarySection({
     applySearch,
     refresh,
     openArticleSummary,
+    openFeedBriefingSummary,
   }
 }

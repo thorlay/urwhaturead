@@ -15,6 +15,7 @@ type AILibraryPanelProps = {
   onApplySearch: () => void
   onRefresh: () => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
+  onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
 
 export function AILibraryPanel(props: AILibraryPanelProps) {
@@ -30,6 +31,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onApplySearch,
     onRefresh,
     onOpenArticleSummary,
+    onOpenFeedBriefing,
   } = props
 
   return (
@@ -128,6 +130,18 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                         {formatTimeAgo(item.generated_at)} · {item.model} · {item.article_count} 条信息
                       </p>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onOpenFeedBriefing(item)
+                      }}
+                    >
+                      打开速览
+                    </Button>
                   </summary>
                   <div className="ai-library-item-body">
                     <p className="hint">

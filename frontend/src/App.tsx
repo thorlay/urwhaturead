@@ -41,6 +41,7 @@ import {
   toErrorMessage,
 } from './lib/app-utils'
 import { summaryTaskKindLabel, summaryTaskStatusLabel } from './lib/summary-task-utils'
+import type { FeedBriefingLibraryItem } from './types'
 import './App.css'
 
 const SourceManagementPanel = lazy(async () => {
@@ -76,6 +77,16 @@ function App() {
     selectedArticle,
     setSelectedArticle,
     setSelectedArticleID,
+    setFeedBriefing,
+    setFeedBriefingMeta,
+    setFeedBriefingItems,
+    setFeedBriefingArticleCount,
+    setFeedBriefingScopeLabel,
+    setFeedBriefingGeneratedAt,
+    setFeedBriefingAnchorArticleIDs,
+    setFeedBriefingTaskKey,
+    setLoadingFeedBriefing,
+    setFeedBriefingError,
     aiModel,
     setAIModel,
     sourceStatus,
@@ -104,6 +115,7 @@ function App() {
     setActiveTab,
     setReaderView,
     setShowFloatingReader,
+    setSelectedFeedBriefing,
     sourceProfileSource,
     setSourceProfileSource,
     sourceProfileTagPickerOpen,
@@ -282,10 +294,34 @@ function App() {
     },
   })
 
+  const openFeedBriefingFromLibrary = (item: FeedBriefingLibraryItem) => {
+    const anchorArticleIDs = item.article_ids
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value > 0)
+
+    setSelectedArticle(null)
+    setSelectedArticleID(null)
+    setReaderView('detail')
+    setShowFloatingReader(false)
+    setSelectedFeedBriefing(true)
+    setFeedBriefing(item.summary)
+    setFeedBriefingMeta(`${item.provider} · ${item.model} · ${item.article_count} 条信息`)
+    setFeedBriefingItems([])
+    setFeedBriefingArticleCount(item.article_count)
+    setFeedBriefingScopeLabel(item.scope_label || '当前阅读流')
+    setFeedBriefingGeneratedAt(item.generated_at)
+    setFeedBriefingAnchorArticleIDs(anchorArticleIDs)
+    setFeedBriefingTaskKey(item.digest_key)
+    setFeedBriefingError(null)
+    setLoadingFeedBriefing(false)
+  }
+
   const aiLibrarySection = useAILibrarySection({
     activeTab,
     setActiveTab,
     openArticle: readerSection.openArticle,
+    openFeedBriefing: openFeedBriefingFromLibrary,
     setNotice,
   })
 
@@ -464,6 +500,7 @@ function App() {
             onApplySearch={aiLibrarySection.applySearch}
             onRefresh={aiLibrarySection.refresh}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
+            onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />
         </Suspense>
       )}
