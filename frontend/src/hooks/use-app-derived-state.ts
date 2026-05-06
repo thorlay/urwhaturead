@@ -10,6 +10,7 @@ type UseAppDerivedStateParams = {
   tagFilter: string
   sourceFilter: string
   unreadOnly: boolean
+  favoriteOnly: boolean
   mutedSiteKeys: string[]
   sources: Source[]
   sourceStatus: SourceStatus[]
@@ -33,6 +34,7 @@ export function useAppDerivedState({
   tagFilter,
   sourceFilter,
   unreadOnly,
+  favoriteOnly,
   mutedSiteKeys,
   sources,
   sourceStatus,
@@ -66,7 +68,7 @@ export function useAppDerivedState({
     return formatTimeAgo(feedBriefingGeneratedAt)
   }, [feedBriefingGeneratedAt, formatTimeAgo])
 
-  const hasActiveFilters = Boolean(keyword.trim() || tagFilter || sourceFilter || unreadOnly || mutedSiteKeys.length > 0)
+  const hasActiveFilters = Boolean(keyword.trim() || tagFilter || sourceFilter || unreadOnly || favoriteOnly || mutedSiteKeys.length > 0)
   const enabledSourceCount = useMemo(() => sources.filter((source) => source.enabled).length, [sources])
   const unhealthySourceCount = useMemo(
     () => sourceStatus.filter((item) => item.health === 'warn' || item.health === 'error' || item.health === 'stale').length,

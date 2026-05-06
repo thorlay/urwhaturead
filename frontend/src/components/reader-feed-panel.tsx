@@ -1,4 +1,4 @@
-import { Fragment, Suspense, lazy, memo, useCallback, useMemo, type RefObject } from 'react'
+import { Fragment, Suspense, lazy, memo, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
@@ -20,7 +20,9 @@ export type ReaderFeedPanelProps = {
   showFeedAIMoreMenu: boolean
   loadingFeedBriefing: boolean
   unreadVisibleCount: number
+  favoriteVisibleCount: number
   unreadOnly: boolean
+  favoriteOnly: boolean
   hasActiveFilters: boolean
   keyword: string
   tagFilter: string
@@ -39,6 +41,7 @@ export type ReaderFeedPanelProps = {
   selectedArticleID: number | null
   selectedFeedBriefing: boolean
   readArticleIDSet: Set<number>
+  favoriteArticleIDSet: Set<number>
   feedAIMoreRef: RefObject<HTMLDivElement | null>
   feedAutoLoadRef: RefObject<HTMLDivElement | null>
   hasMoreFeed: boolean
@@ -52,6 +55,7 @@ export type ReaderFeedPanelProps = {
   onCloseFeedAIMoreMenu: () => void
   onToggleFeedAIMoreMenu: () => void
   onSetUnreadOnly: (next: boolean) => void
+  onSetFavoriteOnly: (next: boolean) => void
   onToggleFeedTitleOnlyMode: () => void
   onToggleFeedImages: () => void
   onToggleFeedSearch: () => void
@@ -61,9 +65,10 @@ export type ReaderFeedPanelProps = {
   onChangeTagFilter: (value: string) => void
   onChangeSourceFilter: (value: string) => void
   onClearFilters: () => void
-  onRemoveFilter: (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread') => void
+  onRemoveFilter: (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread' | 'favorite') => void
   onRetryLoadFeed: () => Promise<void>
   onOpenArticle: (articleID: number) => Promise<void>
+  onToggleFavoriteArticle: (articleID: number) => void
   onOpenFeedBriefing: () => void
   onLoadMore: () => void
   normalizeImageURL: (rawURL?: string) => string | null
@@ -177,11 +182,13 @@ type FeedArticleListItemProps = {
   item: FeedItem
   isActive: boolean
   isRead: boolean
+  isFavorite: boolean
   feedTitleOnlyMode: boolean
   showFeedImages: boolean
   summaryTaskStatus: FeedSummaryTaskStatus | null
   summaryTaskStatusLabel: (status: FeedSummaryTaskStatus) => string
   onOpenArticle: (articleID: number) => Promise<void>
+  onToggleFavoriteArticle: (articleID: number) => void
   normalizeImageURL: (rawURL?: string) => string | null
   formatTimeAgo: (input: string) => string
   formatTimeAgoCompact: (input: string) => string
@@ -197,11 +204,13 @@ const FeedArticleListItem = memo(
       item,
       isActive,
       isRead,
+      isFavorite,
       feedTitleOnlyMode,
       showFeedImages,
       summaryTaskStatus,
       summaryTaskStatusLabel,
       onOpenArticle,
+      onToggleFavoriteArticle,
       normalizeImageURL,
       formatTimeAgo,
       formatTimeAgoCompact,
@@ -241,19 +250,24 @@ const FeedArticleListItem = memo(
       void onOpenArticle(item.id)
     }, [item.id, onOpenArticle])
 
+    const handleToggleFavorite = useCallback(
+      (event: ReactMouseEvent<HTMLButtonElement>) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onToggleFavoriteArticle(item.id)
+      },
+      [item.id, onToggleFavoriteArticle],
+    )
+
     return (
       <article
-        className={cn('feed-item', isActive && 'active', isRead && 'read')}
+        className={cn('feed-item', isActive && 'active', isRead && 'read', isFavorite && 'favorited')}
         onClick={handleOpen}
       >
         <div className="feed-item-body">
           <div className="feed-item-content">
             {feedTitleOnlyMode ? (
               <div className="feed-item-compact-row">
-                <div className="feed-item-compact-leading">
-                  <span className="feed-item-compact-time">{compactPublishedLabel}</span>
-                  <span className="feed-item-compact-source">{item.source_name}</span>
-                </div>
                 <h3 className="feed-item-title">
                   <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
                   {compactTitleParts.summary && (
@@ -267,6 +281,17 @@ const FeedArticleListItem = memo(
                   )}
                 </h3>
                 <div className="feed-item-compact-meta">
+                  <span className="feed-item-compact-time">{compactPublishedLabel}</span>
+                  <span className="feed-item-compact-source">{item.source_name}</span>
+                  <button
+                    type="button"
+                    className={cn('feed-favorite-toggle', isFavorite && 'active')}
+                    aria-label={isFavorite ? '取消收藏' : '收藏文章'}
+                    aria-pressed={isFavorite}
+                    onClick={handleToggleFavorite}
+                  >
+                    {isFavorite ? '★' : '☆'}
+                  </button>
                   {duplicateCountText && <span className="feed-item-compact-burst">{duplicateCountText}</span>}
                   {replyCountText && (
                     <>
@@ -289,6 +314,15 @@ const FeedArticleListItem = memo(
               <>
                 <div className="feed-topline">
                   <span className="feed-source">{item.source_name}</span>
+                  <button
+                    type="button"
+                    className={cn('feed-favorite-toggle', 'feed-favorite-mark', isFavorite && 'active')}
+                    aria-label={isFavorite ? '取消收藏' : '收藏文章'}
+                    aria-pressed={isFavorite}
+                    onClick={handleToggleFavorite}
+                  >
+                    {isFavorite ? '已收藏' : '收藏'}
+                  </button>
                   <span className="feed-sep">·</span>
                   <span>{item.source_tag}</span>
                   <span className="feed-sep">·</span>
@@ -347,11 +381,13 @@ const FeedArticleListItem = memo(
     prev.item === next.item &&
     prev.isActive === next.isActive &&
     prev.isRead === next.isRead &&
+    prev.isFavorite === next.isFavorite &&
     prev.feedTitleOnlyMode === next.feedTitleOnlyMode &&
     prev.showFeedImages === next.showFeedImages &&
     prev.summaryTaskStatus === next.summaryTaskStatus &&
     prev.summaryTaskStatusLabel === next.summaryTaskStatusLabel &&
     prev.onOpenArticle === next.onOpenArticle &&
+    prev.onToggleFavoriteArticle === next.onToggleFavoriteArticle &&
     prev.normalizeImageURL === next.normalizeImageURL &&
     prev.formatTimeAgo === next.formatTimeAgo &&
     prev.formatTimeAgoCompact === next.formatTimeAgoCompact &&
@@ -372,7 +408,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     showFeedAIMoreMenu,
     loadingFeedBriefing,
     unreadVisibleCount,
+    favoriteVisibleCount,
     unreadOnly,
+    favoriteOnly,
     hasActiveFilters,
     keyword,
     tagFilter,
@@ -391,6 +429,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     selectedArticleID,
     selectedFeedBriefing,
     readArticleIDSet,
+    favoriteArticleIDSet,
     feedAIMoreRef,
     feedAutoLoadRef,
     hasMoreFeed,
@@ -404,6 +443,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     onCloseFeedAIMoreMenu,
     onToggleFeedAIMoreMenu,
     onSetUnreadOnly,
+    onSetFavoriteOnly,
     onToggleFeedTitleOnlyMode,
     onToggleFeedImages,
     onToggleFeedSearch,
@@ -416,6 +456,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     onRemoveFilter,
     onRetryLoadFeed,
     onOpenArticle,
+    onToggleFavoriteArticle,
     onOpenFeedBriefing,
     onLoadMore,
     normalizeImageURL,
@@ -523,11 +564,41 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </div>
           <div className="feed-read-actions">
             <div className="feed-read-toggle" role="group" aria-label="文章可见范围">
-              <Button type="button" variant={!unreadOnly ? 'default' : 'ghost'} size="sm" aria-pressed={!unreadOnly} onClick={() => onSetUnreadOnly(false)}>
+              <Button
+                type="button"
+                variant={!unreadOnly && !favoriteOnly ? 'default' : 'ghost'}
+                size="sm"
+                aria-pressed={!unreadOnly && !favoriteOnly}
+                onClick={() => {
+                  onSetUnreadOnly(false)
+                  onSetFavoriteOnly(false)
+                }}
+              >
                 全部
               </Button>
-              <Button type="button" variant={unreadOnly ? 'default' : 'ghost'} size="sm" aria-pressed={unreadOnly} onClick={() => onSetUnreadOnly(true)}>
+              <Button
+                type="button"
+                variant={unreadOnly ? 'default' : 'ghost'}
+                size="sm"
+                aria-pressed={unreadOnly}
+                onClick={() => {
+                  onSetUnreadOnly(true)
+                  onSetFavoriteOnly(false)
+                }}
+              >
                 未读 {unreadVisibleCount}
+              </Button>
+              <Button
+                type="button"
+                variant={favoriteOnly ? 'default' : 'ghost'}
+                size="sm"
+                aria-pressed={favoriteOnly}
+                onClick={() => {
+                  onSetFavoriteOnly(true)
+                  onSetUnreadOnly(false)
+                }}
+              >
+                收藏 {favoriteVisibleCount}
               </Button>
             </div>
           </div>
@@ -585,6 +656,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             onClearFilters={onClearFilters}
             onRemoveFilter={onRemoveFilter}
             unreadOnly={unreadOnly}
+            favoriteOnly={favoriteOnly}
           />
         </Suspense>
       )}
@@ -652,11 +724,13 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 item={item}
                 isActive={selectedArticleID === item.id && !selectedFeedBriefing}
                 isRead={readArticleIDSet.has(item.id)}
+                isFavorite={favoriteArticleIDSet.has(item.id)}
                 feedTitleOnlyMode={feedTitleOnlyMode}
                 showFeedImages={showFeedImages}
                 summaryTaskStatus={summaryTaskStatus}
                 summaryTaskStatusLabel={summaryTaskStatusLabel}
                 onOpenArticle={onOpenArticle}
+                onToggleFavoriteArticle={onToggleFavoriteArticle}
                 normalizeImageURL={normalizeImageURL}
                 formatTimeAgo={formatTimeAgo}
                 formatTimeAgoCompact={formatTimeAgoCompact}

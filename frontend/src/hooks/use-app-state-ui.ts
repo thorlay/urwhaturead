@@ -7,6 +7,7 @@ export function useAppStateUI() {
   const [tagFilter, setTagFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [mutedSiteKeys, setMutedSiteKeys] = useState<string[]>([])
   const [feedTitleOnlyMode, setFeedTitleOnlyMode] = useState(true)
   const [showFeedImages, setShowFeedImages] = useState(false)
@@ -36,6 +37,8 @@ export function useAppStateUI() {
     setSourceFilter,
     unreadOnly,
     setUnreadOnly,
+    favoriteOnly,
+    setFavoriteOnly,
     mutedSiteKeys,
     setMutedSiteKeys,
     feedTitleOnlyMode,

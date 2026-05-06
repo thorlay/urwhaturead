@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import type { AppStateData } from './use-app-state-data'
 import type { AppStateRefs } from './use-app-state-refs'
 import type { AppStateRequest } from './use-app-state-request'
@@ -25,12 +26,14 @@ import {
   formatReplyCount,
   formatTimeAgo,
   formatTimeAgoCompact,
+  maxStoredFavoriteArticles,
   maxStoredReadArticles,
   normalizeImageURL,
   normalizeSourceKind,
   parseSourceIDFilter,
   plainText,
   sourceTagList,
+  toggleFavoriteArticleID,
   toErrorMessage,
   truncate,
   upsertReadArticleID,
@@ -67,8 +70,8 @@ export function useReaderFeatureSection({
     feedRequestSeqRef,
     articleRequestSeqRef,
     summaryRequestSeqRef,
-    summaryTaskNotifiedRef,
-    readerSessionRef,
+  summaryTaskNotifiedRef,
+  readerSessionRef,
   } = refs
   const {
     sources,
@@ -117,6 +120,8 @@ export function useReaderFeatureSection({
     setSourceStatus,
     readArticleIDs,
     setReadArticleIDs,
+    favoriteArticleIDs,
+    setFavoriteArticleIDs,
   } = data
   const {
     setLoadingSources,
@@ -148,6 +153,8 @@ export function useReaderFeatureSection({
     setSelectedFeedBriefing,
     unreadOnly,
     setUnreadOnly,
+    favoriteOnly,
+    setFavoriteOnly,
     keyword,
     setKeyword,
     tagFilter,
@@ -196,6 +203,7 @@ export function useReaderFeatureSection({
     sourceByID,
     mutedSiteSet,
     readArticleIDSet,
+    favoriteArticleIDSet,
   } = sourcesIndex
 
   const {
@@ -206,6 +214,7 @@ export function useReaderFeatureSection({
     readerStreamItems,
     selectedFeedIndex,
     unreadVisibleCount,
+    favoriteVisibleCount,
     sourceFilterIDs,
     activeFeedBriefingSourceIDs,
     activeFeedBriefingKeyword,
@@ -247,6 +256,7 @@ export function useReaderFeatureSection({
     selectedArticleID,
     selectedFeedBriefing,
     unreadOnly,
+    favoriteOnly,
     keyword,
     tagFilter,
     sourceFilter,
@@ -266,6 +276,7 @@ export function useReaderFeatureSection({
     sourceSiteKeyMap,
     mutedSiteSet,
     readArticleIDSet,
+    favoriteArticleIDSet,
     readerSources: sidebarState.readerSources,
   })
 
@@ -442,6 +453,7 @@ export function useReaderFeatureSection({
     setTagFilter,
     setSourceFilter,
     setUnreadOnly,
+    setFavoriteOnly,
     setSourceGroupFilter,
     setSidebarTagFilters,
     setSidebarTagFilterMode,
@@ -455,6 +467,15 @@ export function useReaderFeatureSection({
     setArticleSummaryError,
     setNotice,
   })
+
+  const onToggleFavoriteArticle = useCallback(
+    (articleID: number) => {
+      setFavoriteArticleIDs((previous) => toggleFavoriteArticleID(previous, articleID))
+    },
+    [setFavoriteArticleIDs],
+  )
+
+  const isFavoriteArticle = Boolean(selectedArticleID && favoriteArticleIDSet.has(selectedArticleID))
 
   const {
     applySourceFilterFromSidebar,
@@ -485,7 +506,9 @@ export function useReaderFeatureSection({
   useReaderFeatureEffects({
     aiModel,
     readArticleIDs,
+    favoriteArticleIDs,
     maxStoredReadArticles,
+    maxStoredFavoriteArticles,
     setSummaryTasks,
     summaryTaskNotifiedRef,
     pendingArticleSummaryTasks,
@@ -547,6 +570,7 @@ export function useReaderFeatureSection({
     readerStreamItems,
     selectedFeedIndex,
     unreadVisibleCount,
+    favoriteVisibleCount,
     sourceFilterIDs,
     activeFeedBriefingSourceIDs,
     activeFeedBriefingKeyword,
@@ -579,6 +603,7 @@ export function useReaderFeatureSection({
     canTrackThread,
     canForceRecalcSummary,
     hasDetailMoreActions,
+    isFavoriteArticle,
     clearCompletedSummaryTasks,
     loadSources,
     loadStatus,
@@ -593,6 +618,7 @@ export function useReaderFeatureSection({
     applyFeedBriefingSnapshot,
     onGenerateFeedBriefing,
     openArticle,
+    onToggleFavoriteArticle,
     onSummarizeArticle,
     onTrackThread,
     onOpenSummaryTask,
@@ -653,6 +679,7 @@ export function useReaderFeatureSection({
     feedError,
     feed,
     readArticleIDSet,
+    favoriteArticleIDSet,
     feedAIMoreRef,
     feedAutoLoadRef,
     keyword,
@@ -660,7 +687,9 @@ export function useReaderFeatureSection({
     mutedSiteKeys,
     sourceFilter,
     unreadOnly,
+    favoriteOnly,
     setUnreadOnly,
+    setFavoriteOnly,
     setKeyword,
     setTagFilter,
     setSourceFilter,

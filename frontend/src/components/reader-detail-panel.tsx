@@ -43,6 +43,8 @@ export type ReaderDetailPanelProps = {
   selectedArticleReplyCountLabel: string
   selectedArticleImageURL: string | null
   closeDetailMoreMenu: () => void
+  isFavoriteArticle: boolean
+  onToggleFavoriteArticle: (articleID: number) => void
   onSummarizeArticle: (force: boolean) => Promise<void>
   loadingArticleSummary: boolean
   hasDetailMoreActions: boolean
@@ -97,6 +99,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     selectedArticleReplyCountLabel,
     selectedArticleImageURL,
     closeDetailMoreMenu,
+    isFavoriteArticle,
+    onToggleFavoriteArticle,
     onSummarizeArticle,
     loadingArticleSummary,
     hasDetailMoreActions,
@@ -346,6 +350,16 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   打开原文
                 </a>
               </Button>
+              {selectedArticleID && selectedArticleID > 0 && (
+                <Button
+                  type="button"
+                  variant={isFavoriteArticle ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onToggleFavoriteArticle(selectedArticleID)}
+                >
+                  {isFavoriteArticle ? '已收藏' : '收藏'}
+                </Button>
+              )}
               {selectedArticleID && selectedArticleID > 0 && (
                 <div className="summary-actions">
                   <span className="hint ai-model-hint">{aiModel}</span>

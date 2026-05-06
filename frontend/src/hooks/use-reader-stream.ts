@@ -13,7 +13,9 @@ export type ReaderStreamItem =
 type UseReaderStreamParams = {
   feed: FeedItem[]
   unreadOnly: boolean
+  favoriteOnly: boolean
   readArticleIDSet: Set<number>
+  favoriteArticleIDSet: Set<number>
   sourceSiteKeyMap: Map<number, string>
   mutedSiteSet: Set<string>
   hasFeedBriefingEntry: boolean
@@ -23,15 +25,24 @@ type UseReaderStreamParams = {
 }
 
 export function useReaderStream(params: UseReaderStreamParams) {
-  const visibleFeed = useMemo(
+  const visibleFeedBase = useMemo(
     () =>
       params.feed.filter((item) => {
-        if (params.unreadOnly && params.readArticleIDSet.has(item.id)) return false
         const siteKey = params.sourceSiteKeyMap.get(item.source_id)
         if (!siteKey) return true
         return !params.mutedSiteSet.has(siteKey)
       }),
-    [params.feed, params.mutedSiteSet, params.readArticleIDSet, params.sourceSiteKeyMap, params.unreadOnly],
+    [params.feed, params.mutedSiteSet, params.sourceSiteKeyMap],
+  )
+
+  const visibleFeed = useMemo(
+    () =>
+      visibleFeedBase.filter((item) => {
+        if (params.unreadOnly && params.readArticleIDSet.has(item.id)) return false
+        if (params.favoriteOnly && !params.favoriteArticleIDSet.has(item.id)) return false
+        return true
+      }),
+    [params.favoriteArticleIDSet, params.favoriteOnly, params.readArticleIDSet, params.unreadOnly, visibleFeedBase],
   )
 
   const feedBriefingAnchorArticleIDSet = useMemo(() => new Set(params.feedBriefingAnchorArticleIDs), [params.feedBriefingAnchorArticleIDs])
@@ -77,6 +88,11 @@ export function useReaderStream(params: UseReaderStreamParams) {
     [visibleFeed, params.readArticleIDSet],
   )
 
+  const favoriteVisibleCount = useMemo(
+    () => visibleFeedBase.filter((item) => params.favoriteArticleIDSet.has(item.id)).length,
+    [params.favoriteArticleIDSet, visibleFeedBase],
+  )
+
   return {
     visibleFeed,
     feedBriefingInsertIndex,
@@ -84,6 +100,6 @@ export function useReaderStream(params: UseReaderStreamParams) {
     readerStreamItems,
     selectedFeedIndex,
     unreadVisibleCount,
+    favoriteVisibleCount,
   }
 }
-

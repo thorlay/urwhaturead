@@ -13,7 +13,9 @@ type UseReaderWorkspaceFeedPropsParams = {
   showFeedAIMoreMenu: FeedProps['showFeedAIMoreMenu']
   loadingFeedBriefing: FeedProps['loadingFeedBriefing']
   unreadVisibleCount: FeedProps['unreadVisibleCount']
+  favoriteVisibleCount: FeedProps['favoriteVisibleCount']
   unreadOnly: FeedProps['unreadOnly']
+  favoriteOnly: FeedProps['favoriteOnly']
   hasActiveFilters: FeedProps['hasActiveFilters']
   keyword: FeedProps['keyword']
   tagFilter: FeedProps['tagFilter']
@@ -32,6 +34,7 @@ type UseReaderWorkspaceFeedPropsParams = {
   selectedArticleID: FeedProps['selectedArticleID']
   selectedFeedBriefing: FeedProps['selectedFeedBriefing']
   readArticleIDSet: FeedProps['readArticleIDSet']
+  favoriteArticleIDSet: FeedProps['favoriteArticleIDSet']
   feedAIMoreRef: FeedProps['feedAIMoreRef']
   feedAutoLoadRef: FeedProps['feedAutoLoadRef']
   hasMoreFeed: FeedProps['hasMoreFeed']
@@ -43,6 +46,7 @@ type UseReaderWorkspaceFeedPropsParams = {
   feedBriefingItems: FeedProps['feedBriefingItems']
   onGenerateFeedBriefing: FeedProps['onGenerateFeedBriefing']
   onSetUnreadOnly: FeedProps['onSetUnreadOnly']
+  onSetFavoriteOnly: FeedProps['onSetFavoriteOnly']
   onApplyFilters: FeedProps['onApplyFilters']
   onChangeKeyword: FeedProps['onChangeKeyword']
   onChangeTagFilter: FeedProps['onChangeTagFilter']
@@ -50,6 +54,7 @@ type UseReaderWorkspaceFeedPropsParams = {
   onRemoveFilter: FeedProps['onRemoveFilter']
   onRetryLoadFeed: FeedProps['onRetryLoadFeed']
   onOpenArticle: FeedProps['onOpenArticle']
+  onToggleFavoriteArticle: FeedProps['onToggleFavoriteArticle']
   onOpenFeedBriefing: FeedProps['onOpenFeedBriefing']
   onLoadMore: FeedProps['onLoadMore']
   normalizeImageURL: FeedProps['normalizeImageURL']
@@ -84,7 +89,9 @@ export function useReaderWorkspaceFeedProps(
     showFeedAIMoreMenu: params.showFeedAIMoreMenu,
     loadingFeedBriefing: params.loadingFeedBriefing,
     unreadVisibleCount: params.unreadVisibleCount,
+    favoriteVisibleCount: params.favoriteVisibleCount,
     unreadOnly: params.unreadOnly,
+    favoriteOnly: params.favoriteOnly,
     hasActiveFilters: params.hasActiveFilters,
     keyword: params.keyword,
     tagFilter: params.tagFilter,
@@ -103,6 +110,7 @@ export function useReaderWorkspaceFeedProps(
     selectedArticleID: params.selectedArticleID,
     selectedFeedBriefing: params.selectedFeedBriefing,
     readArticleIDSet: params.readArticleIDSet,
+    favoriteArticleIDSet: params.favoriteArticleIDSet,
     feedAIMoreRef: params.feedAIMoreRef,
     feedAutoLoadRef: params.feedAutoLoadRef,
     hasMoreFeed: params.hasMoreFeed,
@@ -116,6 +124,7 @@ export function useReaderWorkspaceFeedProps(
     onCloseFeedAIMoreMenu: () => params.setShowFeedAIMoreMenu(false),
     onToggleFeedAIMoreMenu: () => params.setShowFeedAIMoreMenu((value) => !value),
     onSetUnreadOnly: params.onSetUnreadOnly,
+    onSetFavoriteOnly: params.onSetFavoriteOnly,
     onToggleFeedTitleOnlyMode: () => params.setFeedTitleOnlyMode((value) => !value),
     onToggleFeedImages: () => params.setShowFeedImages((value) => !value),
     onToggleFeedSearch: () => {
@@ -140,6 +149,7 @@ export function useReaderWorkspaceFeedProps(
     onRemoveFilter: params.onRemoveFilter,
     onRetryLoadFeed: params.onRetryLoadFeed,
     onOpenArticle: params.onOpenArticle,
+    onToggleFavoriteArticle: params.onToggleFavoriteArticle,
     onOpenFeedBriefing: params.onOpenFeedBriefing,
     onLoadMore: params.onLoadMore,
     normalizeImageURL: params.normalizeImageURL,

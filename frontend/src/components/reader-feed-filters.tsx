@@ -21,8 +21,9 @@ type ReaderFeedFiltersProps = {
   onChangeTagFilter: (value: string) => void
   onChangeSourceFilter: (value: string) => void
   onClearFilters: () => void
-  onRemoveFilter: (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread') => void
+  onRemoveFilter: (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread' | 'favorite') => void
   unreadOnly: boolean
+  favoriteOnly: boolean
 }
 
 export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
@@ -46,6 +47,7 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
     onClearFilters,
     onRemoveFilter,
     unreadOnly,
+    favoriteOnly,
   } = props
 
   return (
@@ -120,6 +122,11 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
           {unreadOnly && (
             <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('unread')}>
               仅未读 ×
+            </Button>
+          )}
+          {favoriteOnly && (
+            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('favorite')}>
+              仅收藏 ×
             </Button>
           )}
           {mutedSiteKeys.length > 0 && (

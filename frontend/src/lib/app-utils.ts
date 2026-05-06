@@ -2,6 +2,7 @@ import type { ArticleDetail, Source, SourceStatus } from '../types'
 import type { BulkSourceAction } from '../hooks/use-source-management-state'
 
 export const maxStoredReadArticles = 3000
+export const maxStoredFavoriteArticles = 3000
 const readMarkLongDwellMs = 8_000
 const compactInlineSummaryMaxRunes = 180
 
@@ -11,6 +12,17 @@ export function parseStoredReadArticleIDs(raw: string | null): number[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return normalizeReadArticleIDs(parsed)
+  } catch {
+    return []
+  }
+}
+
+export function parseStoredFavoriteArticleIDs(raw: string | null): number[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return normalizeFavoriteArticleIDs(parsed)
   } catch {
     return []
   }
@@ -29,6 +41,19 @@ export function normalizeReadArticleIDs(values: unknown[]): number[] {
   return output
 }
 
+export function normalizeFavoriteArticleIDs(values: unknown[]): number[] {
+  const seen = new Set<number>()
+  const output: number[] = []
+  for (const value of values) {
+    const articleID = normalizeArticleID(value)
+    if (!articleID || seen.has(articleID)) continue
+    seen.add(articleID)
+    output.push(articleID)
+    if (output.length >= maxStoredFavoriteArticles) break
+  }
+  return output
+}
+
 export function normalizeArticleID(value: unknown): number | null {
   if (typeof value !== 'number') return null
   if (!Number.isInteger(value)) return null
@@ -41,6 +66,15 @@ export function upsertReadArticleID(previous: number[], articleID: number): numb
   if (!normalized) return previous
   const next = [normalized, ...previous.filter((value) => value !== normalized)]
   return next.slice(0, maxStoredReadArticles)
+}
+
+export function toggleFavoriteArticleID(previous: number[], articleID: number): number[] {
+  const normalized = normalizeArticleID(articleID)
+  if (!normalized) return previous
+  if (previous.includes(normalized)) {
+    return previous.filter((value) => value !== normalized)
+  }
+  return [normalized, ...previous].slice(0, maxStoredFavoriteArticles)
 }
 
 export function resolveReadDwellThresholdMs(article: ArticleDetail): number {

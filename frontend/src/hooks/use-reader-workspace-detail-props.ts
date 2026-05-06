@@ -31,6 +31,8 @@ type UseReaderWorkspaceDetailPropsParams = {
   selectedArticleReplyCountLabel: DetailProps['selectedArticleReplyCountLabel']
   selectedArticleImageURL: DetailProps['selectedArticleImageURL']
   closeDetailMoreMenu: DetailProps['closeDetailMoreMenu']
+  isFavoriteArticle: DetailProps['isFavoriteArticle']
+  onToggleFavoriteArticle: DetailProps['onToggleFavoriteArticle']
   onSummarizeArticle: DetailProps['onSummarizeArticle']
   loadingArticleSummary: DetailProps['loadingArticleSummary']
   hasDetailMoreActions: DetailProps['hasDetailMoreActions']
@@ -87,6 +89,8 @@ export function useReaderWorkspaceDetailProps(
     selectedArticleReplyCountLabel: params.selectedArticleReplyCountLabel,
     selectedArticleImageURL: params.selectedArticleImageURL,
     closeDetailMoreMenu: params.closeDetailMoreMenu,
+    isFavoriteArticle: params.isFavoriteArticle,
+    onToggleFavoriteArticle: params.onToggleFavoriteArticle,
     onSummarizeArticle: params.onSummarizeArticle,
     loadingArticleSummary: params.loadingArticleSummary,
     hasDetailMoreActions: params.hasDetailMoreActions,

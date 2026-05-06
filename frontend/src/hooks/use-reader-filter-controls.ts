@@ -18,6 +18,7 @@ type UseReaderFilterControlsParams = {
   setTagFilter: Dispatch<SetStateAction<string>>
   setSourceFilter: Dispatch<SetStateAction<string>>
   setUnreadOnly: Dispatch<SetStateAction<boolean>>
+  setFavoriteOnly: Dispatch<SetStateAction<boolean>>
   setSourceGroupFilter: Dispatch<SetStateAction<{ key: string; label: string } | null>>
   setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
   setSidebarTagFilterMode: Dispatch<SetStateAction<SidebarTagFilterMode>>
@@ -45,6 +46,7 @@ export function useReaderFilterControls({
   setTagFilter,
   setSourceFilter,
   setUnreadOnly,
+  setFavoriteOnly,
   setSourceGroupFilter,
   setSidebarTagFilters,
   setSidebarTagFilterMode,
@@ -81,6 +83,7 @@ export function useReaderFilterControls({
     setTagFilter('')
     setSourceFilter('')
     setUnreadOnly(false)
+    setFavoriteOnly(false)
     setSourceGroupFilter(null)
     setSidebarTagFilters([])
     setMutedSiteKeys([])
@@ -107,10 +110,11 @@ export function useReaderFilterControls({
     setSourceGroupFilter,
     setTagFilter,
     setUnreadOnly,
+    setFavoriteOnly,
   ])
 
   const removeFilter = useCallback(
-    (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread') => {
+    (type: 'keyword' | 'tag' | 'source' | 'muted_sites' | 'unread' | 'favorite') => {
       cancelSidebarTagFeedReload()
       if (type === 'keyword') {
         resetFeedBriefingState()
@@ -132,6 +136,10 @@ export function useReaderFilterControls({
         setUnreadOnly(false)
         return
       }
+      if (type === 'favorite') {
+        setFavoriteOnly(false)
+        return
+      }
 
       setSourceFilter('')
       setSourceGroupFilter(null)
@@ -150,6 +158,7 @@ export function useReaderFilterControls({
       setSourceGroupFilter,
       setTagFilter,
       setUnreadOnly,
+      setFavoriteOnly,
     ],
   )
 

@@ -3,11 +3,12 @@ import type { ArticleDetail, FeedBriefingInputItem, FeedItem, Source, SourceStat
 import {
   aiModelOptions,
   aiModelStorageKey,
+  favoriteArticleStorageKey,
   type FeedBriefingSnapshot,
   readArticleStorageKey,
   type SummaryTask,
 } from '../lib/app-domain'
-import { parseStoredReadArticleIDs } from '../lib/app-utils'
+import { parseStoredFavoriteArticleIDs, parseStoredReadArticleIDs } from '../lib/app-utils'
 
 export function useAppStateData() {
   const [sources, setSources] = useState<Source[]>([])
@@ -46,6 +47,12 @@ export function useAppStateData() {
       return []
     }
     return parseStoredReadArticleIDs(window.localStorage.getItem(readArticleStorageKey))
+  })
+  const [favoriteArticleIDs, setFavoriteArticleIDs] = useState<number[]>(() => {
+    if (typeof window === 'undefined') {
+      return []
+    }
+    return parseStoredFavoriteArticleIDs(window.localStorage.getItem(favoriteArticleStorageKey))
   })
 
   return {
@@ -95,6 +102,8 @@ export function useAppStateData() {
     setAIModel,
     readArticleIDs,
     setReadArticleIDs,
+    favoriteArticleIDs,
+    setFavoriteArticleIDs,
   }
 }
 

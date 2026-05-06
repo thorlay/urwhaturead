@@ -6,6 +6,7 @@ type UseSourcesIndexParams = {
   sourceStatus: SourceStatus[]
   mutedSiteKeys: string[]
   readArticleIDs: number[]
+  favoriteArticleIDs: number[]
   sourceTagList: (source: Pick<Source, 'tags'>) => string[]
   resolveSourceSiteKey: (source: Pick<Source, 'site_key' | 'rss_url'>) => string
 }
@@ -15,6 +16,7 @@ export function useSourcesIndex({
   sourceStatus,
   mutedSiteKeys,
   readArticleIDs,
+  favoriteArticleIDs,
   sourceTagList,
   resolveSourceSiteKey,
 }: UseSourcesIndexParams) {
@@ -49,6 +51,7 @@ export function useSourcesIndex({
 
   const mutedSiteSet = useMemo(() => new Set(mutedSiteKeys), [mutedSiteKeys])
   const readArticleIDSet = useMemo(() => new Set(readArticleIDs), [readArticleIDs])
+  const favoriteArticleIDSet = useMemo(() => new Set(favoriteArticleIDs), [favoriteArticleIDs])
 
   return {
     availableTags,
@@ -57,6 +60,7 @@ export function useSourcesIndex({
     sourceStatusMap,
     mutedSiteSet,
     readArticleIDSet,
+    favoriteArticleIDSet,
   }
 }
 

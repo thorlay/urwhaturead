@@ -5,14 +5,16 @@ import { useReaderRuntimeEffects } from './use-reader-runtime-effects'
 import { useSummaryTaskPoller } from './use-summary-task-poller'
 import { useSummaryTaskPruner } from './use-summary-task-pruner'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
-import { aiModelStorageKey, readArticleStorageKey } from '../lib/app-domain'
+import { aiModelStorageKey, favoriteArticleStorageKey, readArticleStorageKey } from '../lib/app-domain'
 import type { FeedBriefingSnapshot, Notice, ReaderSession, SourceContextMenuState, SummaryTask } from '../lib/app-domain'
 import type { Source } from '../types'
 
 type UseReaderFeatureEffectsParams = {
   aiModel: string
   readArticleIDs: number[]
+  favoriteArticleIDs: number[]
   maxStoredReadArticles: number
+  maxStoredFavoriteArticles: number
   setSummaryTasks: Dispatch<SetStateAction<SummaryTask[]>>
   summaryTaskNotifiedRef: MutableRefObject<Set<string>>
   pendingArticleSummaryTasks: SummaryTask[]
@@ -73,7 +75,9 @@ type UseReaderFeatureEffectsParams = {
 export function useReaderFeatureEffects({
   aiModel,
   readArticleIDs,
+  favoriteArticleIDs,
   maxStoredReadArticles,
+  maxStoredFavoriteArticles,
   setSummaryTasks,
   summaryTaskNotifiedRef,
   pendingArticleSummaryTasks,
@@ -129,9 +133,12 @@ export function useReaderFeatureEffects({
   useReaderLocalPersistence({
     aiModel,
     readArticleIDs,
+    favoriteArticleIDs,
     aiModelStorageKey,
     readArticleStorageKey,
+    favoriteArticleStorageKey,
     maxStoredReadArticles,
+    maxStoredFavoriteArticles,
   })
 
   useSummaryTaskPruner({

@@ -24,6 +24,7 @@ type UseReaderFeatureDerivedParams = {
   selectedArticleID: number | null
   selectedFeedBriefing: boolean
   unreadOnly: boolean
+  favoriteOnly: boolean
   keyword: string
   tagFilter: string
   sourceFilter: string
@@ -43,6 +44,7 @@ type UseReaderFeatureDerivedParams = {
   sourceSiteKeyMap: Map<number, string>
   mutedSiteSet: Set<string>
   readArticleIDSet: Set<number>
+  favoriteArticleIDSet: Set<number>
   readerSources: Source[]
 }
 
@@ -54,6 +56,7 @@ export function useReaderFeatureDerived({
   selectedArticleID,
   selectedFeedBriefing,
   unreadOnly,
+  favoriteOnly,
   keyword,
   tagFilter,
   sourceFilter,
@@ -73,6 +76,7 @@ export function useReaderFeatureDerived({
   sourceSiteKeyMap,
   mutedSiteSet,
   readArticleIDSet,
+  favoriteArticleIDSet,
   readerSources,
 }: UseReaderFeatureDerivedParams) {
   const hasFeedBriefingEntry = Boolean(feedBriefing || feedBriefingError || loadingFeedBriefing)
@@ -83,10 +87,13 @@ export function useReaderFeatureDerived({
     readerStreamItems,
     selectedFeedIndex,
     unreadVisibleCount,
+    favoriteVisibleCount,
   } = useReaderStream({
     feed,
     unreadOnly,
+    favoriteOnly,
     readArticleIDSet,
+    favoriteArticleIDSet,
     sourceSiteKeyMap,
     mutedSiteSet,
     hasFeedBriefingEntry,
@@ -149,6 +156,7 @@ export function useReaderFeatureDerived({
     tagFilter,
     sourceFilter,
     unreadOnly,
+    favoriteOnly,
     mutedSiteKeys,
     sources,
     sourceStatus,
@@ -188,6 +196,7 @@ export function useReaderFeatureDerived({
     readerStreamItems,
     selectedFeedIndex,
     unreadVisibleCount,
+    favoriteVisibleCount,
     sourceFilterIDs,
     activeFeedBriefingSourceIDs,
     activeFeedBriefingKeyword,

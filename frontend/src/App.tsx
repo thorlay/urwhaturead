@@ -74,6 +74,7 @@ function App() {
     setAIModel,
     sourceStatus,
     readArticleIDs,
+    favoriteArticleIDs,
   } = data
 
   const {
@@ -134,11 +135,13 @@ function App() {
     sourceStatusMap,
     mutedSiteSet,
     readArticleIDSet,
+    favoriteArticleIDSet,
   } = useSourcesIndex({
     sources,
     sourceStatus,
     mutedSiteKeys,
     readArticleIDs,
+    favoriteArticleIDs,
     sourceTagList,
     resolveSourceSiteKey,
   })
@@ -156,6 +159,7 @@ function App() {
       sourceStatusMap,
       mutedSiteSet,
       readArticleIDSet,
+      favoriteArticleIDSet,
     },
     sourceContext,
   })
