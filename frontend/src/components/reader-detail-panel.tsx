@@ -28,6 +28,8 @@ export type ReaderDetailPanelProps = {
   feedBriefingScopeLabel: string
   feedBriefingFreshnessLabel: string
   returnToReaderStream: () => void
+  returnToAILibrary?: (() => void) | null
+  returnToAILibraryLabel?: string
   closeFloatingReader: () => void
   openImmersiveReader: () => void
   aiModel: string
@@ -84,6 +86,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     feedBriefingScopeLabel,
     feedBriefingFreshnessLabel,
     returnToReaderStream,
+    returnToAILibrary,
+    returnToAILibraryLabel,
     closeFloatingReader,
     openImmersiveReader,
     aiModel,
@@ -177,6 +181,9 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     return null
   }
 
+  const handleReturn = returnToAILibrary ?? returnToReaderStream
+  const returnLabel = returnToAILibraryLabel ?? '返回列表'
+
   return (
     <section
       ref={floatingDetailRef}
@@ -222,8 +229,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             <div className="detail-toolbar-actions detail-toolbar-main-actions">
               <div className="detail-mode-actions">
                 {readerView === 'detail' ? (
-                  <Button type="button" variant="outline" size="sm" onClick={returnToReaderStream}>
-                    返回列表
+                  <Button type="button" variant="outline" size="sm" onClick={handleReturn}>
+                    {returnLabel}
                   </Button>
                 ) : (
                   <>
@@ -337,8 +344,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             <div className="detail-toolbar-actions detail-toolbar-main-actions">
               <div className="detail-mode-actions">
                 {readerView === 'detail' ? (
-                  <Button type="button" variant="outline" size="sm" onClick={returnToReaderStream}>
-                    返回列表
+                  <Button type="button" variant="outline" size="sm" onClick={handleReturn}>
+                    {returnLabel}
                   </Button>
                 ) : (
                   <>

@@ -15,6 +15,8 @@ type UseReaderWorkspaceCompositionParams = {
   availableTags: SourcesIndex['availableTags']
   onOpenSourceContextMenu: SourceContextMenuController['openSourceContextMenu']
   onOpenSourceContextMenuAt: SourceContextMenuController['openSourceContextMenuAt']
+  returnToAILibrary?: () => void
+  returnToAILibraryLabel?: string
 }
 
 export function useReaderWorkspaceComposition({
@@ -23,6 +25,8 @@ export function useReaderWorkspaceComposition({
   availableTags,
   onOpenSourceContextMenu,
   onOpenSourceContextMenuAt,
+  returnToAILibrary,
+  returnToAILibraryLabel,
 }: UseReaderWorkspaceCompositionParams) {
   const {
     sourceGroupFilter,
@@ -273,6 +277,8 @@ export function useReaderWorkspaceComposition({
     feedBriefingScopeLabel,
     feedBriefingFreshnessLabel,
     returnToReaderStream,
+    returnToAILibrary,
+    returnToAILibraryLabel,
     closeFloatingReader,
     openImmersiveReader,
     aiModel,

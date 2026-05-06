@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppTopbar } from '@/components/app-topbar'
 import { NoticeBanner } from '@/components/notice-banner'
 import { ReaderWorkspace } from '@/components/reader-workspace'
@@ -61,6 +61,7 @@ const AILibraryPanel = lazy(async () => {
 
 function App() {
   const { refs, data, request, ui } = useAppState()
+  const [canReturnToAILibrary, setCanReturnToAILibrary] = useState(false)
 
   const {
     sourceSelectAllRef,
@@ -317,11 +318,20 @@ function App() {
     setLoadingFeedBriefing(false)
   }
 
+  const returnToAILibrary = () => {
+    finalizeReaderSession('navigate')
+    setReaderView('stream')
+    setShowFloatingReader(false)
+    setActiveTab('ai')
+    setCanReturnToAILibrary(false)
+  }
+
   const aiLibrarySection = useAILibrarySection({
     activeTab,
     setActiveTab,
     openArticle: readerSection.openArticle,
     openFeedBriefing: openFeedBriefingFromLibrary,
+    onOpenFromAILibrary: () => setCanReturnToAILibrary(true),
     setNotice,
   })
 
@@ -406,12 +416,19 @@ function App() {
     onAdminLogout,
   })
 
+  const onOpenReaderTabWithReset = () => {
+    setCanReturnToAILibrary(false)
+    onOpenReaderTab()
+  }
+
   const { readerWorkspaceProps } = useReaderWorkspaceComposition({
     sidebarState,
     readerSection,
     availableTags,
     onOpenSourceContextMenu: openSourceContextMenu,
     onOpenSourceContextMenuAt: openSourceContextMenuAt,
+    returnToAILibrary: canReturnToAILibrary ? returnToAILibrary : undefined,
+    returnToAILibraryLabel: canReturnToAILibrary ? '返回 AI 内容库' : undefined,
   })
 
   const sourceOverlaysProps = useSourceOverlaysProps({
@@ -459,7 +476,7 @@ function App() {
         checkingFeedUpdates={checkingFeedUpdates}
         canAccessManagement={canAccessManagement}
         showAdminLogout={adminAuthEnabled && adminAuthenticated}
-        onOpenReaderTab={onOpenReaderTab}
+        onOpenReaderTab={onOpenReaderTabWithReset}
         onOpenAITab={onOpenAITab}
         onOpenSourcesTab={onOpenSourcesTab}
         onRefreshAll={onRefreshAllClick}

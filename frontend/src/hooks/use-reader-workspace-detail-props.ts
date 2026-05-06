@@ -16,6 +16,8 @@ type UseReaderWorkspaceDetailPropsParams = {
   feedBriefingScopeLabel: DetailProps['feedBriefingScopeLabel']
   feedBriefingFreshnessLabel: DetailProps['feedBriefingFreshnessLabel']
   returnToReaderStream: DetailProps['returnToReaderStream']
+  returnToAILibrary: DetailProps['returnToAILibrary']
+  returnToAILibraryLabel: DetailProps['returnToAILibraryLabel']
   closeFloatingReader: DetailProps['closeFloatingReader']
   openImmersiveReader: DetailProps['openImmersiveReader']
   aiModel: DetailProps['aiModel']
@@ -74,6 +76,8 @@ export function useReaderWorkspaceDetailProps(
     feedBriefingScopeLabel: params.feedBriefingScopeLabel,
     feedBriefingFreshnessLabel: params.feedBriefingFreshnessLabel,
     returnToReaderStream: params.returnToReaderStream,
+    returnToAILibrary: params.returnToAILibrary,
+    returnToAILibraryLabel: params.returnToAILibraryLabel,
     closeFloatingReader: params.closeFloatingReader,
     openImmersiveReader: params.openImmersiveReader,
     aiModel: params.aiModel,
