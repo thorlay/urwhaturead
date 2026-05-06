@@ -86,6 +86,13 @@ func main() {
 		}
 	}
 
+	briefingScheduler := handlers.NewFeedBriefingScheduler(db, summaryClient, handlers.FeedBriefingSchedulerOptions{
+		TickSec:           cfg.AutoAIBriefingTickSec,
+		Limit:             cfg.AutoAIBriefingLimit,
+		MaxSourcesPerTick: cfg.AutoAIBriefingMaxSourcesPerTick,
+	})
+	go briefingScheduler.Start(ctx)
+
 	articleOptions := handlers.ArticleHandlerOptions{
 		ExternalFetchEnabled:      cfg.ExternalFetchEnabled,
 		ExternalFetchEnabledSet:   true,

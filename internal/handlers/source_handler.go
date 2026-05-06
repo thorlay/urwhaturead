@@ -73,20 +73,24 @@ func (h *SourceHandler) RegisterWriteRoutes(group *gin.RouterGroup) {
 }
 
 type createSourceRequest struct {
-	OwnerUserID     *uint64  `json:"owner_user_id"`
-	Name            string   `json:"name"`
-	RSSURL          string   `json:"rss_url" binding:"required,url"`
-	Tags            []string `json:"tags"`
-	Enabled         *bool    `json:"enabled"`
-	PollIntervalSec *int     `json:"poll_interval_sec"`
+	OwnerUserID           *uint64  `json:"owner_user_id"`
+	Name                  string   `json:"name"`
+	RSSURL                string   `json:"rss_url" binding:"required,url"`
+	Tags                  []string `json:"tags"`
+	Enabled               *bool    `json:"enabled"`
+	PollIntervalSec       *int     `json:"poll_interval_sec"`
+	AIBriefingEnabled     *bool    `json:"ai_briefing_enabled"`
+	AIBriefingIntervalMin *int     `json:"ai_briefing_interval_min"`
 }
 
 type updateSourceRequest struct {
-	Name            *string   `json:"name"`
-	RSSURL          *string   `json:"rss_url" binding:"omitempty,url"`
-	Tags            *[]string `json:"tags"`
-	Enabled         *bool     `json:"enabled"`
-	PollIntervalSec *int      `json:"poll_interval_sec"`
+	Name                  *string   `json:"name"`
+	RSSURL                *string   `json:"rss_url" binding:"omitempty,url"`
+	Tags                  *[]string `json:"tags"`
+	Enabled               *bool     `json:"enabled"`
+	PollIntervalSec       *int      `json:"poll_interval_sec"`
+	AIBriefingEnabled     *bool     `json:"ai_briefing_enabled"`
+	AIBriefingIntervalMin *int      `json:"ai_briefing_interval_min"`
 }
 
 type discoverSourcesRequest struct {
@@ -318,16 +322,31 @@ func (h *SourceHandler) Create(c *gin.Context) {
 		pollIntervalSec = *req.PollIntervalSec
 	}
 
+	aiBriefingEnabled := false
+	if req.AIBriefingEnabled != nil {
+		aiBriefingEnabled = *req.AIBriefingEnabled
+	}
+	aiBriefingIntervalMin := 360
+	if req.AIBriefingIntervalMin != nil {
+		if *req.AIBriefingIntervalMin <= 0 {
+			badRequest(c, "ai_briefing_interval_min must be > 0")
+			return
+		}
+		aiBriefingIntervalMin = *req.AIBriefingIntervalMin
+	}
+
 	source := models.Source{
-		OwnerUserID:     req.OwnerUserID,
-		Name:            name,
-		RSSURL:          rssURL,
-		SiteKey:         normalizeSiteKey(rssURL),
-		Kind:            "feed",
-		HiddenInSidebar: false,
-		Tags:            mergeSourceTags(tags),
-		Enabled:         enabled,
-		PollIntervalSec: pollIntervalSec,
+		OwnerUserID:           req.OwnerUserID,
+		Name:                  name,
+		RSSURL:                rssURL,
+		SiteKey:               normalizeSiteKey(rssURL),
+		Kind:                  "feed",
+		HiddenInSidebar:       false,
+		Tags:                  mergeSourceTags(tags),
+		AIBriefingEnabled:     aiBriefingEnabled,
+		AIBriefingIntervalMin: aiBriefingIntervalMin,
+		Enabled:               enabled,
+		PollIntervalSec:       pollIntervalSec,
 	}
 
 	if err := h.db.Create(&source).Error; err != nil {
@@ -588,6 +607,16 @@ func (h *SourceHandler) Update(c *gin.Context) {
 			return
 		}
 		updates["poll_interval_sec"] = *req.PollIntervalSec
+	}
+	if req.AIBriefingEnabled != nil {
+		updates["ai_briefing_enabled"] = *req.AIBriefingEnabled
+	}
+	if req.AIBriefingIntervalMin != nil {
+		if *req.AIBriefingIntervalMin <= 0 {
+			badRequest(c, "ai_briefing_interval_min must be > 0")
+			return
+		}
+		updates["ai_briefing_interval_min"] = *req.AIBriefingIntervalMin
 	}
 
 	if len(updates) == 0 {

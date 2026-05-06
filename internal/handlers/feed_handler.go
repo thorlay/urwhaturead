@@ -184,11 +184,17 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 		return
 	}
 
+	sourceNameByID, err := h.loadSourceNamesForBriefings(c.Request.Context(), rows)
+	if err != nil {
+		internalServerError(c, "query feed briefing source names failed", err)
+		return
+	}
+
 	items := make([]feedBriefingListItem, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, feedBriefingListItem{
 			DigestKey:    row.DigestKey,
-			ScopeLabel:   buildFeedBriefingScopeLabel(row.Tag, row.Keyword, row.SourceIDs),
+			ScopeLabel:   buildFeedBriefingScopeLabel(row.Tag, row.Keyword, row.SourceIDs, sourceNameByID),
 			Tag:          row.Tag,
 			Keyword:      row.Keyword,
 			SourceIDs:    row.SourceIDs,
@@ -776,7 +782,7 @@ func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Clien
 	return strings.TrimSpace(summarizer.DefaultModel())
 }
 
-func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string) string {
+func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string, sourceNameByID map[uint64]string) string {
 	tag = normalizeSourceTag(tag)
 	keyword = normalizeBriefingKeyword(keyword)
 	if tag != "" && keyword != "" {
@@ -788,11 +794,39 @@ func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string
 	if tag != "" {
 		return "标签 · " + tag
 	}
+	if sourceIDs := parseCSVUint64Loose(sourceIDsCSV); len(sourceIDs) == 1 {
+		if name := strings.TrimSpace(sourceNameByID[sourceIDs[0]]); name != "" {
+			return name
+		}
+	}
 	sourceCount := countCSVEntries(sourceIDsCSV)
 	if sourceCount > 0 {
 		return fmt.Sprintf("%d 个来源", sourceCount)
 	}
 	return "当前阅读流"
+}
+
+func (h *FeedHandler) loadSourceNamesForBriefings(ctx context.Context, rows []models.FeedBriefing) (map[uint64]string, error) {
+	sourceIDs := make([]uint64, 0)
+	for _, row := range rows {
+		sourceIDs = append(sourceIDs, parseCSVUint64Loose(row.SourceIDs)...)
+	}
+	sourceIDs = uniqueSortedUint64(sourceIDs)
+	if len(sourceIDs) == 0 {
+		return map[uint64]string{}, nil
+	}
+	var sources []struct {
+		ID   uint64
+		Name string
+	}
+	if err := h.db.WithContext(ctx).Table("sources").Select("id, name").Where("id IN ?", sourceIDs).Scan(&sources).Error; err != nil {
+		return nil, err
+	}
+	result := make(map[uint64]string, len(sources))
+	for _, source := range sources {
+		result[source.ID] = strings.TrimSpace(source.Name)
+	}
+	return result, nil
 }
 
 func normalizeBriefingKeyword(raw string) string {
@@ -812,6 +846,23 @@ func countCSVEntries(raw string) int {
 		}
 	}
 	return count
+}
+
+func parseCSVUint64Loose(raw string) []uint64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	result := make([]uint64, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64)
+		if err != nil {
+			continue
+		}
+		result = append(result, value)
+	}
+	return uniqueSortedUint64(result)
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {
