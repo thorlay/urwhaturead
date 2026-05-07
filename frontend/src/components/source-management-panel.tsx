@@ -454,6 +454,232 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </Button>
         </div>
 
+        {sourcesError && (
+          <div className="inline-error">
+            <span>来源加载失败: {sourcesError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadSources()}>
+              重试
+            </Button>
+          </div>
+        )}
+
+        {statusError && (
+          <div className="inline-error">
+            <span>状态加载失败: {statusError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()}>
+              重试
+            </Button>
+          </div>
+        )}
+
+        {failingSourceHighlights.length > 0 && (
+          <div className="source-failure-banner" role="status" aria-live="polite">
+            <div className="source-failure-banner-main">
+              <p className="source-failure-title">抓取异常：{unhealthySourceCount} 个来源需要关注</p>
+              <p className="source-failure-list">
+                {failingSourceHighlights.map((item) => (
+                  <span key={item.sourceID}>
+                    {item.name}
+                    {typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}：{item.reason}
+                  </span>
+                ))}
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
+              {loadingStatus ? '刷新中...' : '立即复查'}
+            </Button>
+          </div>
+        )}
+
+        {manageTab === 'status' && (
+          <section className="source-status-layout">
+            <div className="source-status-grid">
+              <article className="source-status-card">
+                <h4>抓取异常关注</h4>
+                {failingSourceHighlights.length === 0 ? (
+                  <p className="hint">当前没有明显异常来源。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {failingSourceHighlights.map((item) => (
+                      <div key={item.sourceID} className="source-status-item">
+                        <p className="source-status-item-title">
+                          {item.name}
+                          {typeof item.httpStatus === 'number' ? ` · HTTP ${item.httpStatus}` : ''}
+                        </p>
+                        <p className="source-cell-meta">{item.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="source-status-card">
+                <h4>已开启 AI 速览</h4>
+                {aiEnabledSources.length === 0 ? (
+                  <p className="hint">还没有来源开启定时 AI 速览。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {aiEnabledSources.map((source) => (
+                      <div key={source.id} className="source-status-item">
+                        <p className="source-status-item-title">
+                          {source.name} · {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h
+                        </p>
+                        <p className="source-cell-meta">
+                          最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="source-status-card">
+                <h4>建议动作</h4>
+                {statusAdvice.length === 0 ? (
+                  <p className="hint">当前没有明显需要处理的来源建议。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {statusAdvice.map((item) => (
+                      <div key={item.source.id} className="source-status-item">
+                        <p className="source-status-item-title">{item.source.name}</p>
+                        <p className="source-cell-meta">{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </div>
+          </section>
+        )}
+
+        {manageTab === 'sources' && (
+        <>
+        <section className="panel source-manage-forms">
+          <div className="source-manage-form-grid">
+            <section className="source-manage-form-block">
+              <h4>新增来源</h4>
+              <form className="source-form" onSubmit={(event) => void onCreateSource(event)}>
+                <label>
+                  名称（可选）
+                  <Input
+                    value={newSourceName}
+                    onChange={(event) => onSetNewSourceName(event.target.value)}
+                    placeholder="留空则自动使用 RSS title"
+                  />
+                </label>
+                <label>
+                  RSS URL
+                  <Input
+                    value={newSourceURL}
+                    onChange={(event) => onSetNewSourceURL(event.target.value)}
+                    placeholder="https://example.com/feed.xml"
+                  />
+                </label>
+                <label>
+                  标签（可选，逗号分隔）
+                  <Input
+                    value={newSourceTags}
+                    onChange={(event) => onSetNewSourceTags(event.target.value)}
+                    placeholder="tech, ai, startup"
+                  />
+                </label>
+                <Button type="submit" disabled={creatingSource}>
+                  {creatingSource ? '创建中...' : '新增来源'}
+                </Button>
+              </form>
+            </section>
+
+            <section className="source-manage-form-block">
+              <div className="discover-head">
+                <h4>批量添加 RSS</h4>
+                <p className="hint">每行一个 URL，可一次添加多个来源</p>
+              </div>
+              <form className="batch-form" onSubmit={(event) => void onBatchCreateSources(event)}>
+                <Textarea
+                  className="batch-textarea"
+                  value={batchSourceURLs}
+                  onChange={(event) => onSetBatchSourceURLs(event.target.value)}
+                  placeholder={[
+                    'https://feeds.bloomberg.com/markets/news.rss',
+                    'https://feeds.bloomberg.com/politics/news.rss',
+                    'https://feeds.bloomberg.com/technology/news.rss',
+                  ].join('\n')}
+                />
+                <div className="batch-actions">
+                  <Input
+                    value={batchSourceTags}
+                    onChange={(event) => onSetBatchSourceTags(event.target.value)}
+                    placeholder="标签（可选，逗号分隔）"
+                  />
+                  <Button type="submit" disabled={batchCreatingSources}>
+                    {batchCreatingSources ? '添加中...' : '批量添加'}
+                  </Button>
+                </div>
+              </form>
+              {batchCreateResult && (
+                <div className="batch-result">
+                  <p className="hint">
+                    成功 {batchCreateResult.success.length} 条，失败 {batchCreateResult.failed.length} 条
+                  </p>
+                  {batchCreateResult.failed.length > 0 && (
+                    <div className="batch-errors">
+                      {batchCreateResult.failed.map((item) => (
+                        <p key={item.url} className="status-error">
+                          {item.url} · {item.error}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <section className="source-manage-form-block">
+            <div className="discover-head">
+              <h4>自动发现 RSS</h4>
+              <p className="hint">输入网站地址，自动探测可订阅源</p>
+            </div>
+            <form className="discover-form" onSubmit={(event) => void onDiscoverSources(event)}>
+              <Input
+                value={discoverURL}
+                onChange={(event) => onSetDiscoverURL(event.target.value)}
+                placeholder="https://example.com"
+              />
+              <Button type="submit" disabled={discoveringSources}>
+                {discoveringSources ? '发现中...' : '开始发现'}
+              </Button>
+            </form>
+            {discoveredSources.length > 0 && (
+              <div className="discover-list">
+                {discoveredSources.map((candidate) => (
+                  <article key={candidate.rss_url} className="discover-item">
+                    <div className="discover-item-main">
+                      <p className="discover-title">{candidate.name}</p>
+                      <p className="discover-url">{candidate.rss_url}</p>
+                      <p className="discover-meta">
+                        <span>{candidate.feed_type.toUpperCase()}</span>
+                        <span>{candidate.item_count} 条</span>
+                        <span>{confidenceLabel(candidate.confidence)}</span>
+                        <span>{candidate.reason}</span>
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant={candidate.existing ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => void onAddDiscoveredSource(candidate)}
+                      disabled={candidate.existing}
+                    >
+                      {candidate.existing ? '已存在' : '添加'}
+                    </Button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </section>
+
         <div className="source-toolbar">
           <Input
             value={sourceManageKeyword}
@@ -645,105 +871,6 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </div>
         </div>
 
-        {sourcesError && (
-          <div className="inline-error">
-            <span>来源加载失败: {sourcesError}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadSources()}>
-              重试
-            </Button>
-          </div>
-        )}
-
-        {statusError && (
-          <div className="inline-error">
-            <span>状态加载失败: {statusError}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()}>
-              重试
-            </Button>
-          </div>
-        )}
-
-        {failingSourceHighlights.length > 0 && (
-          <div className="source-failure-banner" role="status" aria-live="polite">
-            <div className="source-failure-banner-main">
-              <p className="source-failure-title">抓取异常：{unhealthySourceCount} 个来源需要关注</p>
-              <p className="source-failure-list">
-                {failingSourceHighlights.map((item) => (
-                  <span key={item.sourceID}>
-                    {item.name}
-                    {typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}：{item.reason}
-                  </span>
-                ))}
-              </p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
-              {loadingStatus ? '刷新中...' : '立即复查'}
-            </Button>
-          </div>
-        )}
-
-        {manageTab === 'status' && (
-          <section className="source-status-layout">
-            <div className="source-status-grid">
-              <article className="source-status-card">
-                <h4>抓取异常关注</h4>
-                {failingSourceHighlights.length === 0 ? (
-                  <p className="hint">当前没有明显异常来源。</p>
-                ) : (
-                  <div className="source-status-list">
-                    {failingSourceHighlights.map((item) => (
-                      <div key={item.sourceID} className="source-status-item">
-                        <p className="source-status-item-title">
-                          {item.name}
-                          {typeof item.httpStatus === 'number' ? ` · HTTP ${item.httpStatus}` : ''}
-                        </p>
-                        <p className="source-cell-meta">{item.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-
-              <article className="source-status-card">
-                <h4>已开启 AI 速览</h4>
-                {aiEnabledSources.length === 0 ? (
-                  <p className="hint">还没有来源开启定时 AI 速览。</p>
-                ) : (
-                  <div className="source-status-list">
-                    {aiEnabledSources.map((source) => (
-                      <div key={source.id} className="source-status-item">
-                        <p className="source-status-item-title">
-                          {source.name} · {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h
-                        </p>
-                        <p className="source-cell-meta">
-                          最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-
-              <article className="source-status-card">
-                <h4>建议动作</h4>
-                {statusAdvice.length === 0 ? (
-                  <p className="hint">当前没有明显需要处理的来源建议。</p>
-                ) : (
-                  <div className="source-status-list">
-                    {statusAdvice.map((item) => (
-                      <div key={item.source.id} className="source-status-item">
-                        <p className="source-status-item-title">{item.source.name}</p>
-                        <p className="source-cell-meta">{item.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-            </div>
-          </section>
-        )}
-
-        {manageTab === 'sources' && (
         <div className="source-table-wrap">
           {!loadingSources && sources.length === 0 && <p className="hint">暂无来源</p>}
           {!loadingSources && sources.length > 0 && filteredSources.length === 0 && <p className="hint">当前筛选下没有来源</p>}
@@ -974,133 +1101,8 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           )}
           {loadingSources && <p className="hint">加载来源中...</p>}
         </div>
+        </>
         )}
-      </section>
-
-      <section className="panel source-manage-forms">
-        <div className="source-manage-form-grid">
-          <section className="source-manage-form-block">
-            <h4>新增来源</h4>
-            <form className="source-form" onSubmit={(event) => void onCreateSource(event)}>
-              <label>
-                名称（可选）
-                <Input
-                  value={newSourceName}
-                  onChange={(event) => onSetNewSourceName(event.target.value)}
-                  placeholder="留空则自动使用 RSS title"
-                />
-              </label>
-              <label>
-                RSS URL
-                <Input
-                  value={newSourceURL}
-                  onChange={(event) => onSetNewSourceURL(event.target.value)}
-                  placeholder="https://example.com/feed.xml"
-                />
-              </label>
-              <label>
-                标签（可选，逗号分隔）
-                <Input
-                  value={newSourceTags}
-                  onChange={(event) => onSetNewSourceTags(event.target.value)}
-                  placeholder="tech, ai, startup"
-                />
-              </label>
-              <Button type="submit" disabled={creatingSource}>
-                {creatingSource ? '创建中...' : '新增来源'}
-              </Button>
-            </form>
-          </section>
-
-          <section className="source-manage-form-block">
-            <div className="discover-head">
-              <h4>批量添加 RSS</h4>
-              <p className="hint">每行一个 URL，可一次添加多个来源</p>
-            </div>
-            <form className="batch-form" onSubmit={(event) => void onBatchCreateSources(event)}>
-              <Textarea
-                className="batch-textarea"
-                value={batchSourceURLs}
-                onChange={(event) => onSetBatchSourceURLs(event.target.value)}
-                placeholder={[
-                  'https://feeds.bloomberg.com/markets/news.rss',
-                  'https://feeds.bloomberg.com/politics/news.rss',
-                  'https://feeds.bloomberg.com/technology/news.rss',
-                ].join('\n')}
-              />
-              <div className="batch-actions">
-                <Input
-                  value={batchSourceTags}
-                  onChange={(event) => onSetBatchSourceTags(event.target.value)}
-                  placeholder="标签（可选，逗号分隔）"
-                />
-                <Button type="submit" disabled={batchCreatingSources}>
-                  {batchCreatingSources ? '添加中...' : '批量添加'}
-                </Button>
-              </div>
-            </form>
-            {batchCreateResult && (
-              <div className="batch-result">
-                <p className="hint">
-                  成功 {batchCreateResult.success.length} 条，失败 {batchCreateResult.failed.length} 条
-                </p>
-                {batchCreateResult.failed.length > 0 && (
-                  <div className="batch-errors">
-                    {batchCreateResult.failed.map((item) => (
-                      <p key={item.url} className="status-error">
-                        {item.url} · {item.error}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <section className="source-manage-form-block">
-          <div className="discover-head">
-            <h4>自动发现 RSS</h4>
-            <p className="hint">输入网站地址，自动探测可订阅源</p>
-          </div>
-          <form className="discover-form" onSubmit={(event) => void onDiscoverSources(event)}>
-            <Input
-              value={discoverURL}
-              onChange={(event) => onSetDiscoverURL(event.target.value)}
-              placeholder="https://example.com"
-            />
-            <Button type="submit" disabled={discoveringSources}>
-              {discoveringSources ? '发现中...' : '开始发现'}
-            </Button>
-          </form>
-          {discoveredSources.length > 0 && (
-            <div className="discover-list">
-              {discoveredSources.map((candidate) => (
-                <article key={candidate.rss_url} className="discover-item">
-                  <div className="discover-item-main">
-                    <p className="discover-title">{candidate.name}</p>
-                    <p className="discover-url">{candidate.rss_url}</p>
-                    <p className="discover-meta">
-                      <span>{candidate.feed_type.toUpperCase()}</span>
-                      <span>{candidate.item_count} 条</span>
-                      <span>{confidenceLabel(candidate.confidence)}</span>
-                      <span>{candidate.reason}</span>
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant={candidate.existing ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={() => void onAddDiscoveredSource(candidate)}
-                    disabled={candidate.existing}
-                  >
-                    {candidate.existing ? '已存在' : '添加'}
-                  </Button>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
       </section>
     </main>
   )
