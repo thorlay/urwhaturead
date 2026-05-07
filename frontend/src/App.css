@@ -2224,9 +2224,9 @@
 .detail-page .detail-content,
 .detail-page .hint-group,
 .detail-page .inline-error {
-  width: min(980px, 100%);
-  max-width: 980px;
-  margin-left: auto;
+  width: min(1120px, 100%);
+  max-width: 1120px;
+  margin-left: 0;
   margin-right: auto;
 }
 
@@ -2644,6 +2644,21 @@
   color: #161616;
   font-family: 'Noto Serif SC', serif;
   font-size: 1.06rem;
+}
+
+.detail-floating .reading-block,
+.detail-floating .html-block,
+.detail-floating .markdown-block,
+.detail-page .reading-block,
+.detail-page .html-block,
+.detail-page .markdown-block,
+.ai-library-entry-expanded .reading-block,
+.ai-library-entry-expanded .html-block,
+.ai-library-entry-expanded .markdown-block {
+  max-width: 100%;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .markdown-block p,
