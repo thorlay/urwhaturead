@@ -20,12 +20,14 @@ type FeedBriefingScheduler struct {
 	tick              time.Duration
 	limit             int
 	maxSourcesPerTick int
+	minNewArticles    int
 }
 
 type FeedBriefingSchedulerOptions struct {
 	TickSec           int
 	Limit             int
 	MaxSourcesPerTick int
+	MinNewArticles    int
 }
 
 func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options FeedBriefingSchedulerOptions) *FeedBriefingScheduler {
@@ -41,6 +43,10 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 	if maxSources <= 0 {
 		maxSources = 4
 	}
+	minNewArticles := options.MinNewArticles
+	if minNewArticles <= 0 {
+		minNewArticles = 3
+	}
 	return &FeedBriefingScheduler{
 		db:                db,
 		summarizer:        summarizer,
@@ -48,6 +54,7 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 		tick:              tick,
 		limit:             limit,
 		maxSourcesPerTick: maxSources,
+		minNewArticles:    minNewArticles,
 	}
 }
 
@@ -119,7 +126,28 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 	}
 
 	model := resolveFeedBriefingModel("", s.summarizer, true)
-	digestKey, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, rows)
+	promptRows := rows
+	previous, err := s.loadLatestSourceBriefing(ctx, source.ID)
+	if err != nil {
+		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+		return err
+	}
+	if previous != nil {
+		selectedRows, newCount, shouldGenerate := selectSourceBriefingRows(rows, parseCSVUint64Loose(previous.ArticleIDs), s.minNewArticles)
+		if !shouldGenerate {
+			log.Printf(
+				"auto ai briefing source=%d name=%q skipped: only %d new articles (threshold=%d)",
+				source.ID,
+				source.Name,
+				newCount,
+				s.minNewArticles,
+			)
+			return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+		}
+		promptRows = selectedRows
+	}
+
+	digestKey, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, promptRows)
 
 	var cached models.FeedBriefing
 	if err := s.db.WithContext(ctx).Where("digest_key = ?", digestKey).Take(&cached).Error; err == nil {
@@ -129,7 +157,10 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		return err
 	}
 
-	prompt := buildFeedBriefingPrompt(rows)
+	prompt := buildFeedBriefingPrompt(promptRows)
+	if previous != nil {
+		prompt = "优先总结下面新增的文章，避免重复复述上次已经明确的信息。\n\n" + prompt
+	}
 	result, err := s.summarizer.CompleteWithModel(
 		ctx,
 		"你是一个新闻编辑台 AI，输出中文，每段都要有信息密度和可执行性。",
@@ -166,8 +197,60 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 	if err := s.touchSourceBriefingRun(ctx, source.ID, now, &result.GeneratedAt); err != nil {
 		return err
 	}
-	log.Printf("auto ai briefing source=%d name=%q generated model=%s articles=%d", source.ID, source.Name, strings.TrimSpace(result.Model), len(rows))
+	log.Printf(
+		"auto ai briefing source=%d name=%q generated model=%s articles=%d",
+		source.ID,
+		source.Name,
+		strings.TrimSpace(result.Model),
+		len(promptRows),
+	)
 	return nil
+}
+
+func (s *FeedBriefingScheduler) loadLatestSourceBriefing(ctx context.Context, sourceID uint64) (*models.FeedBriefing, error) {
+	var briefing models.FeedBriefing
+	err := s.db.WithContext(ctx).
+		Where("tag = ? AND keyword = ? AND source_ids = ?", "", "", joinUint64([]uint64{sourceID})).
+		Order("generated_at DESC").
+		Order("id DESC").
+		Take(&briefing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &briefing, nil
+}
+
+func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, minNewArticles int) ([]feedItem, int, bool) {
+	if len(rows) == 0 {
+		return nil, 0, false
+	}
+	if len(previousArticleIDs) == 0 {
+		return rows, len(rows), true
+	}
+	if minNewArticles <= 0 {
+		minNewArticles = 1
+	}
+
+	seen := make(map[uint64]struct{}, len(previousArticleIDs))
+	for _, articleID := range previousArticleIDs {
+		seen[articleID] = struct{}{}
+	}
+
+	newRows := make([]feedItem, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := seen[row.ID]; ok {
+			continue
+		}
+		newRows = append(newRows, row)
+	}
+
+	if len(newRows) < minNewArticles {
+		return nil, len(newRows), false
+	}
+	return newRows, len(newRows), true
 }
 
 func (s *FeedBriefingScheduler) touchSourceBriefingRun(ctx context.Context, sourceID uint64, runAt time.Time, generatedAt *time.Time) error {

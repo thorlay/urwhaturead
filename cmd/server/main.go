@@ -90,6 +90,7 @@ func main() {
 		TickSec:           cfg.AutoAIBriefingTickSec,
 		Limit:             cfg.AutoAIBriefingLimit,
 		MaxSourcesPerTick: cfg.AutoAIBriefingMaxSourcesPerTick,
+		MinNewArticles:    cfg.AutoAIBriefingMinNewArticles,
 	})
 	go briefingScheduler.Start(ctx)
 
