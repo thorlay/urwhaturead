@@ -163,7 +163,7 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 	}
 	result, err := s.summarizer.CompleteWithModel(
 		ctx,
-		"你是一个中文新闻编辑台 AI。请先在心里合并重复事件，再按重要性输出。优先保留真正新增、多源确认、讨论升温、影响较大的信息；不要把所有条目写成同等重要，也不要重复复述同一事件的背景。",
+		feedBriefingSystemPrompt,
 		prompt,
 		model,
 	)
