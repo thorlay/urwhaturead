@@ -436,22 +436,24 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
         </div>
 
         <div className="source-manage-nav" role="tablist" aria-label="管理页面视图">
-          <Button
+          <button
             type="button"
-            variant={manageTab === 'sources' ? 'secondary' : 'ghost'}
-            size="sm"
+            role="tab"
+            aria-selected={manageTab === 'sources'}
+            className={cn('source-manage-nav-tab', manageTab === 'sources' && 'active')}
             onClick={() => setManageTab('sources')}
           >
             来源管理
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant={manageTab === 'status' ? 'secondary' : 'ghost'}
-            size="sm"
+            role="tab"
+            aria-selected={manageTab === 'status'}
+            className={cn('source-manage-nav-tab', manageTab === 'status' && 'active')}
             onClick={() => setManageTab('status')}
           >
             运行状态
-          </Button>
+          </button>
         </div>
 
         {sourcesError && (
@@ -719,15 +721,15 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
 
         <div className="source-quickviews">
           {quickViews.map((view) => (
-            <Button
+            <button
               key={view.key}
               type="button"
-              size="sm"
-              variant={sourceManageQuickView === view.key ? 'secondary' : 'outline'}
+              className={cn('source-quickview-pill', sourceManageQuickView === view.key && 'active')}
               onClick={() => onSetSourceManageQuickView(view.key)}
             >
-              {view.label} {quickViewCounts[view.key]}
-            </Button>
+              <span>{view.label}</span>
+              <em>{quickViewCounts[view.key]}</em>
+            </button>
           ))}
           <div className="source-toolbar-inline-group">
             <Select value={sourceManageSortKey} onChange={(event) => onSetSourceManageSortKey(event.target.value as SourceSortKey)}>

@@ -47,35 +47,35 @@ export function AppTopbar(props: AppTopbarProps) {
           <h1>摸摸又鱼鱼</h1>
         </div>
         <div className="topbar-actions">
-        <div className="view-tabs" role="tablist" aria-label="页面">
-            <Button
+          <div className="view-tabs" role="tablist" aria-label="页面">
+            <button
               type="button"
-              variant={activeTab === 'reader' ? 'default' : 'ghost'}
-              size="sm"
+              role="tab"
+              aria-selected={activeTab === 'reader'}
               className={cn('view-tab', activeTab === 'reader' && 'active')}
               onClick={onOpenReaderTab}
             >
               阅读流
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              variant={activeTab === 'ai' ? 'default' : 'ghost'}
-              size="sm"
+              role="tab"
+              aria-selected={activeTab === 'ai'}
               className={cn('view-tab', activeTab === 'ai' && 'active')}
               onClick={onOpenAITab}
             >
               AI
-            </Button>
+            </button>
             {canAccessManagement && (
-              <Button
+              <button
                 type="button"
-                variant={activeTab === 'sources' ? 'default' : 'ghost'}
-                size="sm"
+                role="tab"
+                aria-selected={activeTab === 'sources'}
                 className={cn('view-tab', activeTab === 'sources' && 'active')}
                 onClick={onOpenSourcesTab}
               >
                 管理 ({sourcesCount})
-              </Button>
+              </button>
             )}
           </div>
           <span className="topbar-model-chip" title={aiModel}>

@@ -105,34 +105,34 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
       {hasActiveFilters && (
         <div className="filter-chips">
           {keyword.trim() && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('keyword')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('keyword')}>
               关键词: {keyword.trim()} ×
-            </Button>
+            </button>
           )}
           {tagFilter && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('tag')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('tag')}>
               标签: {tagFilter} ×
-            </Button>
+            </button>
           )}
           {sourceFilter && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('source')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('source')}>
               {sourceFilterChipLabel} ×
-            </Button>
+            </button>
           )}
           {unreadOnly && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('unread')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('unread')}>
               仅未读 ×
-            </Button>
+            </button>
           )}
           {favoriteOnly && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('favorite')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('favorite')}>
               仅收藏 ×
-            </Button>
+            </button>
           )}
           {mutedSiteKeys.length > 0 && (
-            <Button type="button" size="sm" variant="outline" className="chip" onClick={() => onRemoveFilter('muted_sites')}>
+            <button type="button" className="chip" onClick={() => onRemoveFilter('muted_sites')}>
               已隐藏网站: {mutedSiteKeys.length} ×
-            </Button>
+            </button>
           )}
         </div>
       )}

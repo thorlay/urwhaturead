@@ -109,15 +109,33 @@
 
 .view-tabs {
   display: inline-flex;
-  gap: 0.35rem;
-  padding: 0.2rem;
+  gap: 0.7rem;
+  padding: 0;
   border: none;
-  border-radius: 999px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0;
   background: transparent;
 }
 
 .view-tab {
-  border-radius: 999px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.28rem 0.02rem 0.42rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.view-tab:hover {
+  color: var(--text);
+}
+
+.view-tab.active {
+  color: var(--text);
+  border-bottom-color: rgba(15, 62, 120, 0.72);
 }
 
 .notice {
@@ -670,8 +688,29 @@
 
 .source-manage-nav {
   display: inline-flex;
-  gap: 0.35rem;
+  gap: 0.7rem;
   margin-top: 0.8rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.source-manage-nav-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.28rem 0.02rem 0.42rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.source-manage-nav-tab:hover {
+  color: var(--text);
+}
+
+.source-manage-nav-tab.active {
+  color: var(--text);
+  border-bottom-color: rgba(15, 62, 120, 0.72);
 }
 
 .source-toolbar {
@@ -687,6 +726,37 @@
   flex-wrap: wrap;
   align-items: center;
   margin-top: 0.6rem;
+}
+
+.source-quickview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.26rem 0.58rem;
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 500;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.source-quickview-pill:hover {
+  color: var(--text);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+
+.source-quickview-pill em {
+  font-style: normal;
+  color: rgba(17, 17, 17, 0.72);
+  font-size: 0.72rem;
+}
+
+.source-quickview-pill.active {
+  color: #0f3e78;
+  border-color: rgba(15, 62, 120, 0.22);
+  background: rgba(15, 62, 120, 0.05);
 }
 
 .source-toolbar-inline-group {
@@ -1661,7 +1731,20 @@
 }
 
 .chip {
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 999px;
+  background: transparent;
+  padding: 0.22rem 0.56rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: rgba(0, 0, 0, 0.16);
+  background: rgba(0, 0, 0, 0.016);
 }
 
 .ai-briefing {
