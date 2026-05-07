@@ -209,19 +209,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     [flatBriefingItems, selectedBriefingKey],
   )
   const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
-  const selectedBriefingSourceIDs = useMemo(
-    () => (selectedFeedBriefing ? parseIDList(selectedFeedBriefing.source_ids) : []),
-    [selectedFeedBriefing],
-  )
-  const selectedBriefingArticleIDs = useMemo(
-    () => (selectedFeedBriefing ? parseIDList(selectedFeedBriefing.article_ids) : []),
-    [selectedFeedBriefing],
-  )
-  const selectedBriefingSourceNames = useMemo(
-    () =>
-      selectedBriefingSourceIDs.map((sourceID) => sourceNameByID.get(sourceID) ?? `来源 ${sourceID}`),
-    [selectedBriefingSourceIDs, sourceNameByID],
-  )
 
   return (
     <main className="ai-library-page">
@@ -331,8 +318,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         </div>
 
         {activeView === 'articles' && (
-          <div className="ai-library-master-detail">
-            <div className="ai-library-stack">
+          <div className="ai-library-stack">
             {articleSections.length === 0 && !loading && (
               <div className="ai-library-empty">
                 <h3>还没有可回看的文章摘要</h3>
@@ -372,13 +358,31 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <span>{item.model}</span>
                             </p>
                           </div>
-                          <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
-                            打开文章
-                          </Button>
+                          <div className="ai-library-entry-actions">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedArticleKey(`${item.article_id}:${item.generated_at}`)}
+                            >
+                              {selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? '已展开' : '展开'}
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
+                              打开文章
+                            </Button>
+                          </div>
                         </div>
-                        <div className="ai-library-inset">
-                          <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
-                        </div>
+                        {selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? (
+                          <div className="ai-library-entry-expanded">
+                            <div className="ai-library-detail-body">
+                              <MarkdownBlock content={item.summary} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="ai-library-inset">
+                            <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
+                          </div>
+                        )}
                         <p className="ai-library-entry-foot hint">
                           {item.provider} · 输入 {item.input_chars} 字符
                           {item.truncated ? ' · 已截断' : ''}
@@ -389,41 +393,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
               </section>
             ))}
-            </div>
-
-            {selectedArticleSummary && (
-              <aside className="ai-library-detail-pane">
-                <div className="ai-library-detail-head">
-                  <div>
-                    <p className="ai-library-detail-kicker">文章摘要</p>
-                    <h3>{selectedArticleSummary.title}</h3>
-                    <p className="ai-library-entry-meta">
-                      <span>{selectedArticleSummary.source_name}</span>
-                      <span>{formatTimeAgo(selectedArticleSummary.generated_at)}</span>
-                      <span>{selectedArticleSummary.model}</span>
-                    </p>
-                  </div>
-                  <div className="ai-library-detail-actions">
-                    <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(selectedArticleSummary.article_id)}>
-                      打开文章
-                    </Button>
-                  </div>
-                </div>
-                <div className="ai-library-detail-body">
-                  <MarkdownBlock content={selectedArticleSummary.summary} />
-                </div>
-                <p className="ai-library-entry-foot hint">
-                  {selectedArticleSummary.provider} · 输入 {selectedArticleSummary.input_chars} 字符
-                  {selectedArticleSummary.truncated ? ' · 已截断' : ''}
-                </p>
-              </aside>
-            )}
           </div>
         )}
 
         {activeView === 'briefings' && (
-          <div className="ai-library-master-detail">
-            <div className="ai-library-stack">
+          <div className="ai-library-stack">
             {briefingSections.length === 0 && !loading && (
               <div className="ai-library-empty">
                 <h3>还没有可回看的 AI 速览</h3>
@@ -463,13 +437,55 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <span>{item.article_count} 条信息</span>
                             </p>
                           </div>
-                          <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
-                            打开速览
-                          </Button>
+                          <div className="ai-library-entry-actions">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedBriefingKey(`${item.digest_key}:${item.generated_at}`)}
+                            >
+                              {selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? '已展开' : '展开'}
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
+                              打开速览
+                            </Button>
+                          </div>
                         </div>
-                        <div className="ai-library-inset ai-library-inset-briefing">
-                          <p className="ai-library-entry-preview">{previewText(item.summary, 240)}</p>
-                        </div>
+                        {selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? (
+                          <div className="ai-library-entry-expanded">
+                            <div className="ai-library-detail-body">
+                              <MarkdownBlock content={item.summary} />
+                            </div>
+                            <div className="ai-library-detail-context">
+                              <div className="ai-library-detail-stats">
+                                <div className="ai-library-detail-stat">
+                                  <span className="ai-library-detail-stat-label">关联来源</span>
+                                  <strong>{parseIDList(item.source_ids).length}</strong>
+                                </div>
+                                <div className="ai-library-detail-stat">
+                                  <span className="ai-library-detail-stat-label">关联文章</span>
+                                  <strong>{item.article_count || parseIDList(item.article_ids).length}</strong>
+                                </div>
+                              </div>
+                              {parseIDList(item.source_ids).length > 0 && (
+                                <div className="ai-library-detail-source-list">
+                                  <p className="hint">来源明细</p>
+                                  <div className="ai-library-detail-source-pills">
+                                    {parseIDList(item.source_ids).map((sourceID) => (
+                                      <span key={sourceID} className="ai-library-detail-source-pill">
+                                        {sourceNameByID.get(sourceID) ?? `来源 ${sourceID}`}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="ai-library-inset ai-library-inset-briefing">
+                            <p className="ai-library-entry-preview">{previewText(item.summary, 240)}</p>
+                          </div>
+                        )}
                         <p className="ai-library-entry-foot hint">
                           {item.provider}
                           {item.tag ? ` · 标签 ${item.tag}` : ''}
@@ -482,61 +498,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
               </section>
             ))}
-            </div>
-
-            {selectedFeedBriefing && (
-              <aside className="ai-library-detail-pane">
-                <div className="ai-library-detail-head">
-                  <div>
-                    <p className="ai-library-detail-kicker">AI 速览</p>
-                    <h3>{selectedFeedBriefing.scope_label || '当前阅读流'}</h3>
-                    <p className="ai-library-entry-meta">
-                      <span>{formatTimeAgo(selectedFeedBriefing.generated_at)}</span>
-                      <span>{selectedFeedBriefing.model}</span>
-                      <span>{selectedFeedBriefing.article_count} 条信息</span>
-                    </p>
-                  </div>
-                  <div className="ai-library-detail-actions">
-                    <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(selectedFeedBriefing)}>
-                      打开速览
-                    </Button>
-                  </div>
-                </div>
-                <div className="ai-library-detail-body">
-                  <MarkdownBlock content={selectedFeedBriefing.summary} />
-                </div>
-                <div className="ai-library-detail-context">
-                  <div className="ai-library-detail-stats">
-                    <div className="ai-library-detail-stat">
-                      <span className="ai-library-detail-stat-label">关联来源</span>
-                      <strong>{selectedBriefingSourceIDs.length}</strong>
-                    </div>
-                    <div className="ai-library-detail-stat">
-                      <span className="ai-library-detail-stat-label">关联文章</span>
-                      <strong>{selectedFeedBriefing.article_count || selectedBriefingArticleIDs.length}</strong>
-                    </div>
-                  </div>
-                  {selectedBriefingSourceNames.length > 0 && (
-                    <div className="ai-library-detail-source-list">
-                      <p className="hint">来源明细</p>
-                      <div className="ai-library-detail-source-pills">
-                        {selectedBriefingSourceNames.map((sourceName) => (
-                          <span key={sourceName} className="ai-library-detail-source-pill">
-                            {sourceName}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <p className="ai-library-entry-foot hint">
-                  {selectedFeedBriefing.provider}
-                  {selectedFeedBriefing.tag ? ` · 标签 ${selectedFeedBriefing.tag}` : ''}
-                  {selectedFeedBriefing.keyword ? ` · 关键词 ${selectedFeedBriefing.keyword}` : ''}
-                  {selectedFeedBriefing.truncated ? ' · 已截断' : ''}
-                </p>
-              </aside>
-            )}
           </div>
         )}
       </section>
