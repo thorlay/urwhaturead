@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
@@ -171,44 +171,96 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
   const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
+  const [articleSelectionInitialized, setArticleSelectionInitialized] = useState(false)
+  const [briefingSelectionInitialized, setBriefingSelectionInitialized] = useState(false)
+  const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
+  const entryRefs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
     if (flatArticleItems.length === 0) {
       setSelectedArticleKey(null)
+      setArticleSelectionInitialized(false)
       return
     }
-    const hasCurrent = selectedArticleKey
-      ? flatArticleItems.some((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
-      : false
-    if (!hasCurrent) {
+    if (selectedArticleKey) {
+      const hasCurrent = flatArticleItems.some((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
+      if (hasCurrent) {
+        return
+      }
       const first = flatArticleItems[0]
       setSelectedArticleKey(`${first.article_id}:${first.generated_at}`)
+      setArticleSelectionInitialized(true)
+      return
     }
-  }, [flatArticleItems, selectedArticleKey])
+    if (!articleSelectionInitialized) {
+      const first = flatArticleItems[0]
+      setSelectedArticleKey(`${first.article_id}:${first.generated_at}`)
+      setArticleSelectionInitialized(true)
+    }
+  }, [articleSelectionInitialized, flatArticleItems, selectedArticleKey])
 
   useEffect(() => {
     if (flatBriefingItems.length === 0) {
       setSelectedBriefingKey(null)
+      setBriefingSelectionInitialized(false)
       return
     }
-    const hasCurrent = selectedBriefingKey
-      ? flatBriefingItems.some((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey)
-      : false
-    if (!hasCurrent) {
+    if (selectedBriefingKey) {
+      const hasCurrent = flatBriefingItems.some((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey)
+      if (hasCurrent) {
+        return
+      }
       const first = flatBriefingItems[0]
       setSelectedBriefingKey(`${first.digest_key}:${first.generated_at}`)
+      setBriefingSelectionInitialized(true)
+      return
     }
-  }, [flatBriefingItems, selectedBriefingKey])
+    if (!briefingSelectionInitialized) {
+      const first = flatBriefingItems[0]
+      setSelectedBriefingKey(`${first.digest_key}:${first.generated_at}`)
+      setBriefingSelectionInitialized(true)
+    }
+  }, [briefingSelectionInitialized, flatBriefingItems, selectedBriefingKey])
 
-  const selectedArticleSummary = useMemo(
-    () => flatArticleItems.find((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey) ?? null,
-    [flatArticleItems, selectedArticleKey],
-  )
-  const selectedFeedBriefing = useMemo(
-    () => flatBriefingItems.find((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey) ?? null,
-    [flatBriefingItems, selectedBriefingKey],
-  )
   const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
+  const toggleArticleSelection = (key: string) => {
+    setArticleSelectionInitialized(true)
+    setSelectedArticleKey((current) => {
+      const next = current === key ? null : key
+      if (next) {
+        setPendingScrollKey(key)
+      }
+      return next
+    })
+  }
+  const toggleBriefingSelection = (key: string) => {
+    setBriefingSelectionInitialized(true)
+    setSelectedBriefingKey((current) => {
+      const next = current === key ? null : key
+      if (next) {
+        setPendingScrollKey(key)
+      }
+      return next
+    })
+  }
+  const isArticleSelected = (item: ArticleSummaryLibraryItem) =>
+    selectedArticleKey === `${item.article_id}:${item.generated_at}`
+  const isBriefingSelected = (item: FeedBriefingLibraryItem) =>
+    selectedBriefingKey === `${item.digest_key}:${item.generated_at}`
+  const attachEntryRef = (key: string) => (node: HTMLElement | null) => {
+    entryRefs.current[key] = node
+  }
+
+  useEffect(() => {
+    if (!pendingScrollKey) {
+      return
+    }
+    const node = entryRefs.current[pendingScrollKey]
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    setPendingScrollKey(null)
+  }, [pendingScrollKey, selectedArticleKey, selectedBriefingKey])
 
   return (
     <main className="ai-library-page">
@@ -335,8 +387,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
                     <article
+                      ref={attachEntryRef(`${item.article_id}:${item.generated_at}`)}
                       key={`article-summary-${item.article_id}-${item.generated_at}`}
-                      className={`ai-library-entry ${selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? 'active' : ''}`}
+                      className={`ai-library-entry ${isArticleSelected(item) ? 'active' : ''}`}
                     >
                       <div className="ai-library-entry-rail" aria-hidden="true">
                         <span className="ai-library-entry-dot" />
@@ -347,7 +400,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                             <button
                               type="button"
                               className="ai-library-entry-select"
-                              onClick={() => setSelectedArticleKey(`${item.article_id}:${item.generated_at}`)}
+                              onClick={() => toggleArticleSelection(`${item.article_id}:${item.generated_at}`)}
                             >
                               <span className="ai-library-entry-title">{item.title}</span>
                             </button>
@@ -363,16 +416,16 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => setSelectedArticleKey(`${item.article_id}:${item.generated_at}`)}
+                              onClick={() => toggleArticleSelection(`${item.article_id}:${item.generated_at}`)}
                             >
-                              {selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? '已展开' : '展开'}
+                              {isArticleSelected(item) ? '收起' : '展开'}
                             </Button>
                             <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
                               打开文章
                             </Button>
                           </div>
                         </div>
-                        {selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? (
+                        {isArticleSelected(item) ? (
                           <div className="ai-library-entry-expanded">
                             <div className="ai-library-detail-body">
                               <MarkdownBlock content={item.summary} />
@@ -414,8 +467,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
                     <article
+                      ref={attachEntryRef(`${item.digest_key}:${item.generated_at}`)}
                       key={`feed-briefing-${item.digest_key}`}
-                      className={`ai-library-entry ai-library-entry-briefing ${selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? 'active' : ''}`}
+                      className={`ai-library-entry ai-library-entry-briefing ${isBriefingSelected(item) ? 'active' : ''}`}
                     >
                       <div className="ai-library-entry-rail" aria-hidden="true">
                         <span className="ai-library-entry-dot" />
@@ -426,7 +480,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                             <button
                               type="button"
                               className="ai-library-entry-select"
-                              onClick={() => setSelectedBriefingKey(`${item.digest_key}:${item.generated_at}`)}
+                              onClick={() => toggleBriefingSelection(`${item.digest_key}:${item.generated_at}`)}
                             >
                               <span className="ai-library-entry-title">{item.scope_label || '当前阅读流'}</span>
                             </button>
@@ -442,16 +496,16 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => setSelectedBriefingKey(`${item.digest_key}:${item.generated_at}`)}
+                              onClick={() => toggleBriefingSelection(`${item.digest_key}:${item.generated_at}`)}
                             >
-                              {selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? '已展开' : '展开'}
+                              {isBriefingSelected(item) ? '收起' : '展开'}
                             </Button>
                             <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
                               打开速览
                             </Button>
                           </div>
                         </div>
-                        {selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? (
+                        {isBriefingSelected(item) ? (
                           <div className="ai-library-entry-expanded">
                             <div className="ai-library-detail-body">
                               <MarkdownBlock content={item.summary} />
