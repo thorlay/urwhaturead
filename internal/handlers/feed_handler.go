@@ -498,7 +498,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	prompt := buildFeedBriefingPrompt(rows)
 	result, err := h.summarizer.CompleteWithModel(
 		c.Request.Context(),
-		"你是一个新闻编辑台 AI，输出中文，每段都要有信息密度和可执行性。",
+		"你是一个中文新闻编辑台 AI。请先在心里合并重复事件，再按重要性输出。优先保留真正新增、多源确认、讨论升温、影响较大的信息；不要把所有条目写成同等重要，也不要重复复述同一事件的背景。",
 		prompt,
 		effectiveModel,
 	)
@@ -874,6 +874,9 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("3) 风险/争议观察（最多4条）\n")
 	builder.WriteString("4) 值得深读（最多6条，格式：标题｜链接URL｜一句理由）\n\n")
 	builder.WriteString("要求：\n")
+	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
+	builder.WriteString("- 优先写真正新增、多源确认、讨论升温或影响较大的信息；信息不足或重复度高的条目可以忽略。\n")
+	builder.WriteString("- 不要把所有主题写成同等重要；真正重要的主题放在前面，次要信息可以压缩。\n")
 	builder.WriteString("- 第4部分每一条都必须包含可访问的原始链接 URL。\n")
 	builder.WriteString("- 链接必须来自下面提供的新闻条目，不要编造新链接。\n\n")
 	builder.WriteString("新闻条目：\n")

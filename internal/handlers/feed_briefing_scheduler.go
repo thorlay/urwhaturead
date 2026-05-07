@@ -159,11 +159,11 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 
 	prompt := buildFeedBriefingPrompt(promptRows)
 	if previous != nil {
-		prompt = "优先总结下面新增的文章，避免重复复述上次已经明确的信息。\n\n" + prompt
+		prompt = "这是一轮增量 AI 速览。只总结相对上次真正新增、出现变化、或值得重新关注的信息。不要重复复述上次已经明确的背景；如果新增较少，宁可更短，也不要硬凑结构。\n\n" + prompt
 	}
 	result, err := s.summarizer.CompleteWithModel(
 		ctx,
-		"你是一个新闻编辑台 AI，输出中文，每段都要有信息密度和可执行性。",
+		"你是一个中文新闻编辑台 AI。请先在心里合并重复事件，再按重要性输出。优先保留真正新增、多源确认、讨论升温、影响较大的信息；不要把所有条目写成同等重要，也不要重复复述同一事件的背景。",
 		prompt,
 		model,
 	)

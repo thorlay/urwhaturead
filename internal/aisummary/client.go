@@ -67,7 +67,7 @@ func (c *Client) DefaultModel() string {
 	return strings.TrimSpace(c.model)
 }
 
-const defaultSummarySystemPrompt = "你是一个新闻/论坛内容摘要助手。输出中文，准确、完整、结构化，优先保留事实、证据与可执行信息。"
+const defaultSummarySystemPrompt = "你是一个中文编辑台摘要助手。你的任务不是复述，而是提炼信息。输出中文，优先保留事实、证据、结论、争议和可执行信息；避免空话、套话、模板化过渡句和无根据延伸。不确定的信息明确写“原文未说明”。"
 
 func NewClient(options Options) *Client {
 	baseURL := strings.TrimSpace(options.BaseURL)
@@ -523,16 +523,17 @@ func buildPrompt(title string, content string) string {
 		builder.WriteString("\n\n")
 	}
 	builder.WriteString("请对下面长文进行“中等长度的详细总结”，输出格式严格为：\n")
-	builder.WriteString("1) TL;DR（3-4句，覆盖背景、结论与影响）\n")
-	builder.WriteString("2) 关键观点与依据（4-6条；每条包含“观点：”和“依据：”）\n")
+	builder.WriteString("1) TL;DR（3-4句，覆盖背景、核心结论与影响）\n")
+	builder.WriteString("2) 核心观点与依据（4-6条；每条包含“观点：”和“依据：”）\n")
 	builder.WriteString("3) 关键事实/数据（2-4条；没有就写“原文未明确给出”）\n")
-	builder.WriteString("4) 风险与争议点（2-4条）\n")
-	builder.WriteString("5) 给读者的可执行建议（2-4条，按优先级）\n")
+	builder.WriteString("4) 争议、风险或局限（2-4条）\n")
+	builder.WriteString("5) 对读者有用的启发/建议（0-3条；如果原文不适合给建议，就写“本篇以信息/观点为主，无直接可执行建议”）\n")
 	builder.WriteString("6) 一句话结论\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 忠于原文，不编造事实；不确定信息请明确标注“原文未说明”。\n")
-	builder.WriteString("- 除非原文极短，整体长度控制在380-650字。\n")
-	builder.WriteString("- 每条尽量精炼，避免过长段落，便于快速扫描。\n\n")
+	builder.WriteString("- 除非原文极短，整体长度控制在320-580字。\n")
+	builder.WriteString("- 每条尽量精炼，避免长段落；优先保留真正新增的信息密度，而不是把背景反复铺开。\n")
+	builder.WriteString("- 如果内容明显更像论坛讨论或博客观点，请保留“谁在主张什么、依据是什么、哪里有争议”。\n\n")
 	builder.WriteString("正文：\n")
 	builder.WriteString(content)
 	return builder.String()
@@ -547,9 +548,9 @@ func buildCompactPrompt(title string, content string) string {
 	}
 	builder.WriteString("请输出紧凑摘要，格式严格为：\n")
 	builder.WriteString("1) 三句话总结\n")
-	builder.WriteString("2) 关键要点（3条）\n")
-	builder.WriteString("3) 一句话结论\n\n")
-	builder.WriteString("要求：忠于原文，不编造；总字数控制在180-320字。\n\n")
+	builder.WriteString("2) 关键信息（最多3条，优先事实、结论、变化）\n")
+	builder.WriteString("3) 为什么值得关注（1条；如果不明显，就写“主要价值在于补充背景信息”）\n\n")
+	builder.WriteString("要求：忠于原文，不编造；不要机械凑结构；总字数控制在160-280字。\n\n")
 	builder.WriteString("正文：\n")
 	builder.WriteString(content)
 	return builder.String()
