@@ -1,11 +1,17 @@
-import { useMemo, useRef, type ChangeEvent, type FormEvent, type RefObject } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import type { BatchCreateResult, BulkSourceAction, SourceHealthFilter } from '../hooks/use-source-management-state'
+import type {
+  BatchCreateResult,
+  BulkSourceAction,
+  SourceHealthFilter,
+  SourceQuickView,
+  SourceSortKey,
+} from '../hooks/use-source-management-state'
 import type { DiscoverSourceCandidate, Source, SourceStatus } from '../types'
 
 type SourceManagementPanelProps = {
@@ -30,6 +36,12 @@ type SourceManagementPanelProps = {
   onSetSourceManageTagFilter: (value: string) => void
   sourceManageHealthFilter: SourceHealthFilter
   onSetSourceManageHealthFilter: (value: SourceHealthFilter) => void
+  sourceManageQuickView: SourceQuickView
+  onSetSourceManageQuickView: (value: SourceQuickView) => void
+  sourceManageSortKey: SourceSortKey
+  onSetSourceManageSortKey: (value: SourceSortKey) => void
+  sourceManageSortDesc: boolean
+  onSetSourceManageSortDesc: (value: boolean) => void
   availableTags: string[]
   onClearSourceManageFilters: () => void
   loadingSources: boolean
@@ -38,9 +50,13 @@ type SourceManagementPanelProps = {
   visibleSourceIDs: number[]
   bulkTagInput: string
   onSetBulkTagInput: (value: string) => void
+  bulkPollSec: string
+  onSetBulkPollSec: (value: string) => void
   bulkSourceAction: BulkSourceAction | null
   hasSelectedSources: boolean
   onRunBulkTagAction: (action: 'add' | 'remove') => Promise<void>
+  onRunBulkPollIntervalUpdate: () => Promise<void>
+  onRunBulkAIBriefingAction: (enabled: boolean, intervalMin?: number) => Promise<void>
   onRunBulkSourceAction: (action: 'enable' | 'disable' | 'refresh' | 'test') => Promise<void>
   onClearSelectedSourceIDs: () => void
   sourcesError: string | null
@@ -139,6 +155,12 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     onSetSourceManageTagFilter,
     sourceManageHealthFilter,
     onSetSourceManageHealthFilter,
+    sourceManageQuickView,
+    onSetSourceManageQuickView,
+    sourceManageSortKey,
+    onSetSourceManageSortKey,
+    sourceManageSortDesc,
+    onSetSourceManageSortDesc,
     availableTags,
     onClearSourceManageFilters,
     loadingSources,
@@ -147,9 +169,13 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     visibleSourceIDs,
     bulkTagInput,
     onSetBulkTagInput,
+    bulkPollSec,
+    onSetBulkPollSec,
     bulkSourceAction,
     hasSelectedSources,
     onRunBulkTagAction,
+    onRunBulkPollIntervalUpdate,
+    onRunBulkAIBriefingAction,
     onRunBulkSourceAction,
     onClearSelectedSourceIDs,
     sourcesError,
@@ -216,6 +242,8 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     onAddDiscoveredSource,
   } = controller
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
+  const [manageTab, setManageTab] = useState<'sources' | 'status'>('sources')
+  const [densityMode, setDensityMode] = useState<'compact' | 'standard' | 'detailed'>('standard')
 
   function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -258,6 +286,63 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
 
     return highlights.slice(0, 4)
   }, [resolveSourceHealth, sourceStatusMap, sources])
+
+  const quickViewCounts = useMemo(() => {
+    const counts: Record<SourceQuickView, number> = {
+      all: sources.length,
+      attention: 0,
+      ai: 0,
+      disabled: 0,
+      thread: 0,
+      active: 0,
+    }
+    for (const source of sources) {
+      const health = resolveSourceHealth(source, sourceStatusMap)
+      if (health === 'error' || health === 'warn' || health === 'stale') counts.attention += 1
+      if (source.ai_briefing_enabled) counts.ai += 1
+      if (!source.enabled) counts.disabled += 1
+      if (source.kind === 'thread') counts.thread += 1
+      if ((source.new_articles_24h ?? 0) >= 5) counts.active += 1
+    }
+    return counts
+  }, [resolveSourceHealth, sourceStatusMap, sources])
+
+  const statusAdvice = useMemo(() => {
+    return filteredSources
+      .map((source) => {
+        const status = sourceStatusMap.get(source.id)
+        const health = resolveSourceHealth(source, sourceStatusMap)
+        if (status?.latest_http_status === 429) {
+          return { source, text: '抓到 HTTP 429，建议拉长抓取间隔或改用更稳的源。' }
+        }
+        if (health === 'stale') {
+          return { source, text: '长时间无新内容，建议检查源是否失效或降低优先级。' }
+        }
+        if (source.ai_briefing_enabled && (source.new_articles_24h ?? 0) < 3) {
+          return { source, text: 'AI 速览开启但最近新增偏少，建议改成更长间隔。' }
+        }
+        if ((source.new_articles_24h ?? 0) >= 12 && sourceClickCount(source) <= 1) {
+          return { source, text: '更新很多但点击很少，可以考虑降权、隐藏或改标签。' }
+        }
+        return null
+      })
+      .filter((item): item is { source: Source; text: string } => Boolean(item))
+      .slice(0, 8)
+  }, [filteredSources, resolveSourceHealth, sourceClickCount, sourceStatusMap])
+
+  const aiEnabledSources = useMemo(
+    () => filteredSources.filter((source) => source.ai_briefing_enabled).slice(0, 10),
+    [filteredSources],
+  )
+
+  const quickViews: Array<{ key: SourceQuickView; label: string }> = [
+    { key: 'all', label: '全部' },
+    { key: 'attention', label: '抓取异常' },
+    { key: 'ai', label: '已开 AI 速览' },
+    { key: 'disabled', label: '已停用' },
+    { key: 'thread', label: '跟踪帖' },
+    { key: 'active', label: '最近新增多' },
+  ]
 
   return (
     <main className="source-management-page">
@@ -350,6 +435,25 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </div>
         </div>
 
+        <div className="source-manage-nav" role="tablist" aria-label="管理页面视图">
+          <Button
+            type="button"
+            variant={manageTab === 'sources' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setManageTab('sources')}
+          >
+            来源管理
+          </Button>
+          <Button
+            type="button"
+            variant={manageTab === 'status' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setManageTab('status')}
+          >
+            运行状态
+          </Button>
+        </div>
+
         <div className="source-toolbar">
           <Input
             value={sourceManageKeyword}
@@ -387,6 +491,39 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </Button>
         </div>
 
+        <div className="source-quickviews">
+          {quickViews.map((view) => (
+            <Button
+              key={view.key}
+              type="button"
+              size="sm"
+              variant={sourceManageQuickView === view.key ? 'secondary' : 'outline'}
+              onClick={() => onSetSourceManageQuickView(view.key)}
+            >
+              {view.label} {quickViewCounts[view.key]}
+            </Button>
+          ))}
+          <div className="source-toolbar-inline-group">
+            <Select value={sourceManageSortKey} onChange={(event) => onSetSourceManageSortKey(event.target.value as SourceSortKey)}>
+              <option value="health">按风险优先</option>
+              <option value="new_articles">按 24h 新增</option>
+              <option value="clicks">按总点击</option>
+              <option value="last_fetched">按最近抓取</option>
+              <option value="last_clicked">按最近点击</option>
+              <option value="ai_generated">按 AI 最近生成</option>
+              <option value="name">按名称</option>
+            </Select>
+            <Button type="button" variant="outline" size="sm" onClick={() => onSetSourceManageSortDesc(!sourceManageSortDesc)}>
+              {sourceManageSortDesc ? '降序' : '升序'}
+            </Button>
+            <Select value={densityMode} onChange={(event) => setDensityMode(event.target.value as 'compact' | 'standard' | 'detailed')}>
+              <option value="compact">紧凑</option>
+              <option value="standard">标准</option>
+              <option value="detailed">详细</option>
+            </Select>
+          </div>
+        </div>
+
         <div className="source-bulkbar">
           <p className="hint">
             已选 {selectedSourceIDs.length} / 当前筛选 {visibleSourceIDs.length} / 全部 {sources.length}
@@ -397,6 +534,13 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               onChange={(event) => onSetBulkTagInput(event.target.value)}
               className="source-bulk-tag-input"
               placeholder="批量标签: tech, forum"
+              disabled={bulkSourceAction !== null}
+            />
+            <Input
+              value={bulkPollSec}
+              onChange={(event) => onSetBulkPollSec(event.target.value)}
+              className="source-bulk-poll-input"
+              placeholder="抓取间隔秒，例如 1800"
               disabled={bulkSourceAction !== null}
             />
             <Button
@@ -416,6 +560,42 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               disabled={!hasSelectedSources || bulkSourceAction !== null}
             >
               {bulkSourceAction === 'remove_tags' ? '移除中...' : '批量移除标签'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onRunBulkPollIntervalUpdate()}
+              disabled={!hasSelectedSources || bulkSourceAction !== null}
+            >
+              {bulkSourceAction === 'set_poll' ? '批量更新中...' : '批量改抓取间隔'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onRunBulkAIBriefingAction(true, 60)}
+              disabled={!hasSelectedSources || bulkSourceAction !== null}
+            >
+              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 1h AI'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onRunBulkAIBriefingAction(true, 180)}
+              disabled={!hasSelectedSources || bulkSourceAction !== null}
+            >
+              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 3h AI'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void onRunBulkAIBriefingAction(false)}
+              disabled={!hasSelectedSources || bulkSourceAction !== null}
+            >
+              {bulkSourceAction === 'disable_ai' ? '批量关闭中...' : '批量关 AI'}
             </Button>
             <Button
               type="button"
@@ -502,11 +682,73 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </div>
         )}
 
+        {manageTab === 'status' && (
+          <section className="source-status-layout">
+            <div className="source-status-grid">
+              <article className="source-status-card">
+                <h4>抓取异常关注</h4>
+                {failingSourceHighlights.length === 0 ? (
+                  <p className="hint">当前没有明显异常来源。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {failingSourceHighlights.map((item) => (
+                      <div key={item.sourceID} className="source-status-item">
+                        <p className="source-status-item-title">
+                          {item.name}
+                          {typeof item.httpStatus === 'number' ? ` · HTTP ${item.httpStatus}` : ''}
+                        </p>
+                        <p className="source-cell-meta">{item.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="source-status-card">
+                <h4>已开启 AI 速览</h4>
+                {aiEnabledSources.length === 0 ? (
+                  <p className="hint">还没有来源开启定时 AI 速览。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {aiEnabledSources.map((source) => (
+                      <div key={source.id} className="source-status-item">
+                        <p className="source-status-item-title">
+                          {source.name} · {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h
+                        </p>
+                        <p className="source-cell-meta">
+                          最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+
+              <article className="source-status-card">
+                <h4>建议动作</h4>
+                {statusAdvice.length === 0 ? (
+                  <p className="hint">当前没有明显需要处理的来源建议。</p>
+                ) : (
+                  <div className="source-status-list">
+                    {statusAdvice.map((item) => (
+                      <div key={item.source.id} className="source-status-item">
+                        <p className="source-status-item-title">{item.source.name}</p>
+                        <p className="source-cell-meta">{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </div>
+          </section>
+        )}
+
+        {manageTab === 'sources' && (
         <div className="source-table-wrap">
           {!loadingSources && sources.length === 0 && <p className="hint">暂无来源</p>}
           {!loadingSources && sources.length > 0 && filteredSources.length === 0 && <p className="hint">当前筛选下没有来源</p>}
           {sources.length > 0 && filteredSources.length > 0 && (
-            <table className="source-table">
+            <table className={cn('source-table', `source-table-${densityMode}`)}>
               <thead>
                 <tr>
                   <th className="source-checkbox-col">
@@ -520,11 +762,11 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                   </th>
                   <th>ID</th>
                   <th>来源</th>
-                  <th>标签</th>
+                  {densityMode !== 'compact' && <th>标签</th>}
                   <th>点击</th>
                   <th>健康状态</th>
-                  <th>抓取配置</th>
-                  <th>RSS URL</th>
+                  {densityMode !== 'compact' && <th>抓取配置</th>}
+                  {densityMode === 'detailed' && <th>RSS URL</th>}
                   <th className="source-actions-col">操作</th>
                 </tr>
               </thead>
@@ -565,14 +807,20 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                           <Input value={editSourceName} onChange={(event) => onSetEditSourceName(event.target.value)} />
                         ) : (
                           <div className="source-cell-main">
-                            <p className="source-title">{source.name}</p>
+                            <div className="source-title-row">
+                              <p className="source-title">{source.name}</p>
+                              {source.ai_briefing_enabled && (
+                                <Badge variant="outline">AI {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h</Badge>
+                              )}
+                              {hasFetchError && <Badge variant="outline" className={cn('health-badge', healthToneClass('error'))}>异常</Badge>}
+                            </div>
                             <p className="source-cell-meta">
                               {siteKey} · {source.enabled ? '启用' : '停用'} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}
                             </p>
                           </div>
                         )}
                       </td>
-                      <td>
+                      {densityMode !== 'compact' && <td>
                         {isEditing ? (
                           <Input
                             value={editSourceTags}
@@ -582,13 +830,18 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                         ) : (
                           <div className="source-tag-list">
                             {sourceTagList(source).map((tag) => (
-                              <Badge key={`${source.id}-${tag}`} variant="outline">
+                              <Badge
+                                key={`${source.id}-${tag}`}
+                                variant="outline"
+                                className="source-tag-badge"
+                                onClick={() => onSetSourceManageTagFilter(tag)}
+                              >
                                 {tag}
                               </Badge>
                             ))}
                           </div>
                         )}
-                      </td>
+                      </td>}
                       <td>
                         <div className="source-cell-main">
                           <p className="source-cell-meta">24h 新增 {source.new_articles_24h ?? 0}</p>
@@ -630,7 +883,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                           )}
                         </div>
                       </td>
-                      <td>
+                      {densityMode !== 'compact' && <td>
                         {isEditing ? (
                           <Input value={editSourcePollSec} onChange={(event) => onSetEditSourcePollSec(event.target.value)} />
                         ) : (
@@ -643,14 +896,14 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                             </p>
                           </div>
                         )}
-                      </td>
-                      <td>
+                      </td>}
+                      {densityMode === 'detailed' && <td>
                         {isEditing ? (
                           <Input value={editSourceURL} onChange={(event) => onSetEditSourceURL(event.target.value)} />
                         ) : (
                           <p className="source-url">{source.rss_url}</p>
                         )}
-                      </td>
+                      </td>}
                       <td className="source-actions-col">
                         {isEditing ? (
                           <div className="source-row-actions">
@@ -666,33 +919,50 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                             <Button type="button" variant="secondary" size="sm" onClick={() => void onTestSource(source.id)} disabled={rowBusy}>
                               测试
                             </Button>
-                            <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshSource(source.id)} disabled={rowBusy}>
-                              强制刷新
-                            </Button>
                             <Button type="button" variant="ghost" size="sm" onClick={() => onStartEdit(source)} disabled={rowBusy}>
                               编辑
                             </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void onToggleSourceEnabled(source)}
-                              disabled={rowBusy}
-                            >
-                              {source.enabled ? '停用' : '启用'}
-                            </Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => onToggleSiteMuted(siteKey)} disabled={rowBusy}>
-                              {mutedSiteSet.has(siteKey) ? '恢复展示' : '隐藏站点'}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => void onDeleteSource(source)}
-                              disabled={rowBusy}
-                            >
-                              删除
-                            </Button>
+                            <details className="source-row-more">
+                              <summary className="button button-outline button-sm">更多</summary>
+                              <div className="source-row-more-menu">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void onRefreshSource(source.id)}
+                                  disabled={rowBusy}
+                                >
+                                  强制刷新
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void onToggleSourceEnabled(source)}
+                                  disabled={rowBusy}
+                                >
+                                  {source.enabled ? '停用' : '启用'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => onToggleSiteMuted(siteKey)}
+                                  disabled={rowBusy}
+                                >
+                                  {mutedSiteSet.has(siteKey) ? '恢复展示' : '隐藏站点'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void onDeleteSource(source)}
+                                  disabled={rowBusy}
+                                >
+                                  删除
+                                </Button>
+                              </div>
+                            </details>
                           </div>
                         )}
                       </td>
@@ -704,6 +974,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           )}
           {loadingSources && <p className="hint">加载来源中...</p>}
         </div>
+        )}
       </section>
 
       <section className="panel source-manage-forms">

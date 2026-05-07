@@ -79,7 +79,16 @@ type UseSourceManagementSectionParams = {
     normalizeSourceTags: (values?: string[]) => string[]
     equalStringList: (left: string[], right: string[]) => boolean
     bulkActionLabel: (
-      action: 'enable' | 'disable' | 'refresh' | 'test' | 'add_tags' | 'remove_tags',
+      action:
+        | 'enable'
+        | 'disable'
+        | 'refresh'
+        | 'test'
+        | 'add_tags'
+        | 'remove_tags'
+        | 'set_poll'
+        | 'enable_ai'
+        | 'disable_ai',
     ) => string
     toErrorMessage: (error: unknown) => string
     resolveSourceSiteKey: (source: Pick<Source, 'site_key' | 'rss_url'>) => string

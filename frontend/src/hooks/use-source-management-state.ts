@@ -2,7 +2,18 @@ import { useCallback, useMemo, useState } from 'react'
 import type { DiscoverSourceCandidate, Source, SourceStatus } from '../types'
 
 export type SourceHealthFilter = 'all' | SourceStatus['health']
-export type BulkSourceAction = 'enable' | 'disable' | 'refresh' | 'test' | 'add_tags' | 'remove_tags'
+export type SourceQuickView = 'all' | 'attention' | 'ai' | 'disabled' | 'thread' | 'active'
+export type SourceSortKey = 'health' | 'name' | 'new_articles' | 'clicks' | 'last_fetched' | 'last_clicked' | 'ai_generated'
+export type BulkSourceAction =
+  | 'enable'
+  | 'disable'
+  | 'refresh'
+  | 'test'
+  | 'add_tags'
+  | 'remove_tags'
+  | 'set_poll'
+  | 'enable_ai'
+  | 'disable_ai'
 export type BatchCreateResult = {
   success: string[]
   failed: Array<{ url: string; error: string }>
@@ -33,9 +44,13 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
   const [sourceManageKeyword, setSourceManageKeyword] = useState('')
   const [sourceManageTagFilter, setSourceManageTagFilter] = useState('')
   const [sourceManageHealthFilter, setSourceManageHealthFilter] = useState<SourceHealthFilter>('all')
+  const [sourceManageQuickView, setSourceManageQuickView] = useState<SourceQuickView>('all')
+  const [sourceManageSortKey, setSourceManageSortKey] = useState<SourceSortKey>('health')
+  const [sourceManageSortDesc, setSourceManageSortDesc] = useState(true)
   const [selectedSourceIDsState, setSelectedSourceIDsState] = useState<number[]>([])
   const [bulkSourceAction, setBulkSourceAction] = useState<BulkSourceAction | null>(null)
   const [bulkTagInput, setBulkTagInput] = useState('')
+  const [bulkPollSec, setBulkPollSec] = useState('1800')
 
   const [editingSourceID, setEditingSourceID] = useState<number | null>(null)
   const [editSourceName, setEditSourceName] = useState('')
@@ -87,6 +102,36 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
         return false
       }
 
+      switch (sourceManageQuickView) {
+        case 'attention':
+          if (!(health === 'error' || health === 'warn' || health === 'stale')) {
+            return false
+          }
+          break
+        case 'ai':
+          if (!source.ai_briefing_enabled) {
+            return false
+          }
+          break
+        case 'disabled':
+          if (source.enabled) {
+            return false
+          }
+          break
+        case 'thread':
+          if (source.kind !== 'thread') {
+            return false
+          }
+          break
+        case 'active':
+          if ((source.new_articles_24h ?? 0) < 5) {
+            return false
+          }
+          break
+        default:
+          break
+      }
+
       if (!normalizedKeyword) {
         return true
       }
@@ -97,16 +142,61 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
     })
 
     filtered.sort((left, right) => {
-      const healthGap =
-        sourceHealthPriority(resolveSourceHealth(right, sourceStatusMap)) -
-        sourceHealthPriority(resolveSourceHealth(left, sourceStatusMap))
-      if (healthGap !== 0) {
-        return healthGap
+      const leftHealth = resolveSourceHealth(left, sourceStatusMap)
+      const rightHealth = resolveSourceHealth(right, sourceStatusMap)
+      const compareNumber = (leftValue: number, rightValue: number) =>
+        sourceManageSortDesc ? rightValue - leftValue : leftValue - rightValue
+      const compareString = (leftValue: string, rightValue: string) =>
+        sourceManageSortDesc ? rightValue.localeCompare(leftValue) : leftValue.localeCompare(rightValue)
+      const compareTime = (leftValue?: string, rightValue?: string) =>
+        compareNumber(Date.parse(leftValue ?? '') || 0, Date.parse(rightValue ?? '') || 0)
+
+      switch (sourceManageSortKey) {
+        case 'name': {
+          const byName = compareString(left.name, right.name)
+          if (byName !== 0) return byName
+          break
+        }
+        case 'new_articles': {
+          const byNew = compareNumber(left.new_articles_24h ?? 0, right.new_articles_24h ?? 0)
+          if (byNew !== 0) return byNew
+          break
+        }
+        case 'clicks': {
+          const byClicks = compareNumber(left.click_count ?? 0, right.click_count ?? 0)
+          if (byClicks !== 0) return byClicks
+          break
+        }
+        case 'last_fetched': {
+          const byFetched = compareTime(left.last_fetched_at, right.last_fetched_at)
+          if (byFetched !== 0) return byFetched
+          break
+        }
+        case 'last_clicked': {
+          const byClicked = compareTime(left.last_clicked_at, right.last_clicked_at)
+          if (byClicked !== 0) return byClicked
+          break
+        }
+        case 'ai_generated': {
+          const byGenerated = compareTime(left.ai_briefing_last_generated_at, right.ai_briefing_last_generated_at)
+          if (byGenerated !== 0) return byGenerated
+          break
+        }
+        default: {
+          const healthGap =
+            sourceHealthPriority(rightHealth) -
+            sourceHealthPriority(leftHealth)
+          if (healthGap !== 0) {
+            return sourceManageSortDesc ? healthGap : -healthGap
+          }
+          break
+        }
       }
+
       if (left.enabled !== right.enabled) {
         return left.enabled ? -1 : 1
       }
-      return right.id - left.id
+      return sourceManageSortDesc ? right.id - left.id : left.id - right.id
     })
     return filtered
   }, [
@@ -114,6 +204,9 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
     sourceHealthPriority,
     sourceManageHealthFilter,
     sourceManageKeyword,
+    sourceManageQuickView,
+    sourceManageSortDesc,
+    sourceManageSortKey,
     sourceManageTagFilter,
     sourceSiteKeyMap,
     sourceStatusMap,
@@ -196,6 +289,12 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
     setSourceManageTagFilter,
     sourceManageHealthFilter,
     setSourceManageHealthFilter,
+    sourceManageQuickView,
+    setSourceManageQuickView,
+    sourceManageSortKey,
+    setSourceManageSortKey,
+    sourceManageSortDesc,
+    setSourceManageSortDesc,
     sourceHealthCounts,
     filteredSources,
     selectedSourceIDs,
@@ -208,6 +307,8 @@ export function useSourceManagementState(params: UseSourceManagementStateParams)
     setBulkSourceAction,
     bulkTagInput,
     setBulkTagInput,
+    bulkPollSec,
+    setBulkPollSec,
     editingSourceID,
     editSourceName,
     setEditSourceName,

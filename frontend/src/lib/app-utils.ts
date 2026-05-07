@@ -690,6 +690,12 @@ export function bulkActionLabel(action: BulkSourceAction): string {
       return '停用'
     case 'refresh':
       return '强制刷新'
+    case 'set_poll':
+      return '更新抓取间隔'
+    case 'enable_ai':
+      return '开启 AI 速览'
+    case 'disable_ai':
+      return '关闭 AI 速览'
     case 'add_tags':
       return '添加标签'
     case 'remove_tags':

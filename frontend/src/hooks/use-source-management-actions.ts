@@ -42,6 +42,7 @@ export type UseSourceManagementActionsParams = {
   editingSourceID: number | null
   selectedSourceIDs: number[]
   bulkTagInput: string
+  bulkPollSec: string
   sourceProfileSource: Source | null
   sourceProfileTags: string[]
   pendingDeleteSource: Source | null
@@ -513,6 +514,82 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
     }
   }
 
+  async function onRunBulkPollIntervalUpdate() {
+    if (params.selectedSourceIDs.length === 0) {
+      params.setNotice({ kind: 'error', text: '请先勾选至少一个来源。' })
+      return
+    }
+
+    const pollIntervalSec = Number.parseInt(params.bulkPollSec, 10)
+    if (Number.isNaN(pollIntervalSec) || pollIntervalSec <= 0) {
+      params.setNotice({ kind: 'error', text: '批量抓取间隔必须是正整数秒。' })
+      return
+    }
+
+    params.setBulkSourceAction('set_poll')
+    try {
+      const results = await Promise.all(
+        params.selectedSourceIDs.map(async (sourceID) => {
+          try {
+            await updateSource(sourceID, { poll_interval_sec: pollIntervalSec })
+            return { ok: true as const }
+          } catch (error) {
+            return { ok: false as const, error: params.toErrorMessage(error) }
+          }
+        }),
+      )
+      const succeeded = results.filter((item) => item.ok).length
+      const failed = results.length - succeeded
+      await Promise.allSettled([params.loadSources(), params.refreshStatusIfVisible()])
+      params.setNotice({
+        kind: failed > 0 ? 'error' : 'info',
+        text: `批量${params.bulkActionLabel('set_poll')}完成：成功 ${succeeded}，失败 ${failed}`,
+      })
+    } finally {
+      params.setBulkSourceAction(null)
+    }
+  }
+
+  async function onRunBulkAIBriefingAction(enabled: boolean, intervalMin?: number) {
+    if (params.selectedSourceIDs.length === 0) {
+      params.setNotice({ kind: 'error', text: '请先勾选至少一个来源。' })
+      return
+    }
+
+    const action: BulkSourceAction = enabled ? 'enable_ai' : 'disable_ai'
+    params.setBulkSourceAction(action)
+    try {
+      const results = await Promise.all(
+        params.selectedSourceIDs.map(async (sourceID) => {
+          const source = params.sourceByID.get(sourceID)
+          if (!source) {
+            return { ok: true as const, skipped: true as const }
+          }
+          try {
+            const nextInterval = intervalMin ?? source.ai_briefing_interval_min ?? 180
+            await updateSource(sourceID, {
+              ai_briefing_enabled: enabled,
+              ai_briefing_interval_min: nextInterval,
+            })
+            return { ok: true as const, skipped: false as const }
+          } catch (error) {
+            return { ok: false as const, skipped: false as const, error: params.toErrorMessage(error) }
+          }
+        }),
+      )
+      const succeeded = results.filter((item) => item.ok && !item.skipped).length
+      const skipped = results.filter((item) => item.ok && item.skipped).length
+      const failed = results.filter((item) => !item.ok).length
+      await Promise.allSettled([params.loadSources(), params.refreshStatusIfVisible()])
+      params.setNotice({
+        kind: failed > 0 ? 'error' : 'info',
+        text: `批量${params.bulkActionLabel(action)}完成：成功 ${succeeded}，跳过 ${skipped}，失败 ${failed}`,
+      })
+    } finally {
+      params.setBulkSourceAction(null)
+    }
+  }
+
   async function onConfirmDeleteSource() {
     if (!params.pendingDeleteSource) return
     await deleteSourceAndRefresh(params.pendingDeleteSource)
@@ -624,6 +701,8 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
     onReclassifySources,
     onRunBulkSourceAction,
     onRunBulkTagAction,
+    onRunBulkPollIntervalUpdate,
+    onRunBulkAIBriefingAction,
     onConfirmDeleteSource,
     onQuickSetSourceEnabled,
     onRemoveSourceProfileTag,

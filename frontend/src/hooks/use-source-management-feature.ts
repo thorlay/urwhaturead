@@ -40,7 +40,18 @@ type UseSourceManagementFeatureParams = {
   normalizeSourceTags: (values?: string[]) => string[]
   sourceTagList: (source: Pick<Source, 'tags'>) => string[]
   equalStringList: (left: string[], right: string[]) => boolean
-  bulkActionLabel: (action: 'enable' | 'disable' | 'refresh' | 'test' | 'add_tags' | 'remove_tags') => string
+  bulkActionLabel: (
+    action:
+      | 'enable'
+      | 'disable'
+      | 'refresh'
+      | 'test'
+      | 'add_tags'
+      | 'remove_tags'
+      | 'set_poll'
+      | 'enable_ai'
+      | 'disable_ai',
+  ) => string
   toErrorMessage: (error: unknown) => string
 }
 
@@ -124,6 +135,7 @@ export function useSourceManagementFeature({
     editingSourceID: sourceManagementState.editingSourceID,
     selectedSourceIDs: sourceManagementState.selectedSourceIDs,
     bulkTagInput: sourceManagementState.bulkTagInput,
+    bulkPollSec: sourceManagementState.bulkPollSec,
     sourceProfileSource,
     sourceProfileTags,
     pendingDeleteSource,
