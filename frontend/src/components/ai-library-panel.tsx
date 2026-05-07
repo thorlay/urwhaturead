@@ -279,27 +279,35 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   <h3>{section.label}</h3>
                   <span className="hint">{section.items.length} 条</span>
                 </div>
-                <div className="ai-library-list">
+                <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
-                    <article key={`article-summary-${item.article_id}-${item.generated_at}`} className="ai-library-card">
-                      <div className="ai-library-card-head">
-                        <div className="ai-library-card-main">
-                          <p className="ai-library-card-title">{item.title}</p>
-                          <p className="ai-library-card-meta">
-                            <span>{item.source_name}</span>
-                            <span>{formatTimeAgo(item.generated_at)}</span>
-                            <span>{item.model}</span>
-                          </p>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
-                          打开文章
-                        </Button>
+                    <article key={`article-summary-${item.article_id}-${item.generated_at}`} className="ai-library-entry">
+                      <div className="ai-library-entry-rail" aria-hidden="true">
+                        <span className="ai-library-entry-dot" />
                       </div>
-                      <p className="ai-library-card-preview">{previewText(item.summary, 220)}</p>
-                      <p className="ai-library-card-foot hint">
-                        {item.provider} · 输入 {item.input_chars} 字符
-                        {item.truncated ? ' · 已截断' : ''}
-                      </p>
+                      <div className="ai-library-entry-body">
+                        <div className="ai-library-entry-head">
+                          <div className="ai-library-entry-main">
+                            <p className="ai-library-entry-title">{item.title}</p>
+                            <p className="ai-library-entry-meta">
+                              <span className="ai-library-entry-kind">文章摘要</span>
+                              <span>{item.source_name}</span>
+                              <span>{formatTimeAgo(item.generated_at)}</span>
+                              <span>{item.model}</span>
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
+                            打开文章
+                          </Button>
+                        </div>
+                        <div className="ai-library-inset">
+                          <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
+                        </div>
+                        <p className="ai-library-entry-foot hint">
+                          {item.provider} · 输入 {item.input_chars} 字符
+                          {item.truncated ? ' · 已截断' : ''}
+                        </p>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -323,29 +331,37 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   <h3>{section.label}</h3>
                   <span className="hint">{section.items.length} 条</span>
                 </div>
-                <div className="ai-library-list">
+                <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
-                    <article key={`feed-briefing-${item.digest_key}`} className="ai-library-card ai-library-card-briefing">
-                      <div className="ai-library-card-head">
-                        <div className="ai-library-card-main">
-                          <p className="ai-library-card-title">{item.scope_label || '当前阅读流'}</p>
-                          <p className="ai-library-card-meta">
-                            <span>{formatTimeAgo(item.generated_at)}</span>
-                            <span>{item.model}</span>
-                            <span>{item.article_count} 条信息</span>
-                          </p>
-                        </div>
-                        <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
-                          打开速览
-                        </Button>
+                    <article key={`feed-briefing-${item.digest_key}`} className="ai-library-entry ai-library-entry-briefing">
+                      <div className="ai-library-entry-rail" aria-hidden="true">
+                        <span className="ai-library-entry-dot" />
                       </div>
-                      <p className="ai-library-card-preview">{previewText(item.summary, 240)}</p>
-                      <p className="ai-library-card-foot hint">
-                        {item.provider}
-                        {item.tag ? ` · 标签 ${item.tag}` : ''}
-                        {item.keyword ? ` · 关键词 ${item.keyword}` : ''}
-                        {item.truncated ? ' · 已截断' : ''}
-                      </p>
+                      <div className="ai-library-entry-body">
+                        <div className="ai-library-entry-head">
+                          <div className="ai-library-entry-main">
+                            <p className="ai-library-entry-title">{item.scope_label || '当前阅读流'}</p>
+                            <p className="ai-library-entry-meta">
+                              <span className="ai-library-entry-kind">AI 速览</span>
+                              <span>{formatTimeAgo(item.generated_at)}</span>
+                              <span>{item.model}</span>
+                              <span>{item.article_count} 条信息</span>
+                            </p>
+                          </div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
+                            打开速览
+                          </Button>
+                        </div>
+                        <div className="ai-library-inset ai-library-inset-briefing">
+                          <p className="ai-library-entry-preview">{previewText(item.summary, 240)}</p>
+                        </div>
+                        <p className="ai-library-entry-foot hint">
+                          {item.provider}
+                          {item.tag ? ` · 标签 ${item.tag}` : ''}
+                          {item.keyword ? ` · 关键词 ${item.keyword}` : ''}
+                          {item.truncated ? ' · 已截断' : ''}
+                        </p>
+                      </div>
                     </article>
                   ))}
                 </div>
