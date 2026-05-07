@@ -2067,28 +2067,37 @@
 .detail-signals {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.42rem;
+  gap: 0.34rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .detail-signal {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.4rem;
-  padding: 0 0.52rem;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.03);
-  color: #5b5b5b;
-  font-size: 0.73rem;
-  line-height: 1;
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.detail-signal::before {
+  content: '•';
+  margin-right: 0.34rem;
+  color: #9a9a9a;
 }
 
 .detail-hero-image {
   margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .detail-hero-image img {
