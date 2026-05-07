@@ -594,6 +594,20 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                           <p className="source-cell-meta">24h 新增 {source.new_articles_24h ?? 0}</p>
                           <p className="source-cell-meta">总点击 {sourceClickCount(source)}</p>
                           <p className="source-cell-meta">最近点击 {source.last_clicked_at ? formatTimeAgo(source.last_clicked_at) : '-'}</p>
+                          <p
+                            className={cn(
+                              'source-cell-meta',
+                              source.ai_briefing_enabled && 'source-cell-meta-accent',
+                            )}
+                          >
+                            AI 速览{' '}
+                            {source.ai_briefing_enabled
+                              ? `${Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h`
+                              : '关闭'}
+                          </p>
+                          <p className="source-cell-meta">
+                            最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
+                          </p>
                         </div>
                       </td>
                       <td>

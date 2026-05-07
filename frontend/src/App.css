@@ -723,6 +723,11 @@
   font-size: 0.75rem;
 }
 
+.source-cell-meta-accent {
+  color: #1d4d8b;
+  font-weight: 600;
+}
+
 .source-cell-error {
   margin: 0;
   color: #b42318;
