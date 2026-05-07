@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
-import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem } from '../types'
+import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -17,6 +17,7 @@ type AILibraryPanelProps = {
   sourceFilter: string
   articleSummaries: ArticleSummaryLibraryItem[]
   feedBriefings: FeedBriefingLibraryItem[]
+  sources: Source[]
   formatTimeAgo: (input: string) => string
   onChangeSearch: (value: string) => void
   onApplySearch: () => void
@@ -105,6 +106,13 @@ function groupByRecency<T extends { generated_at: string }>(items: T[]): Library
   return buckets.filter((bucket) => bucket.items.length > 0)
 }
 
+function parseIDList(input: string): number[] {
+  return input
+    .split(',')
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value > 0)
+}
+
 export function AILibraryPanel(props: AILibraryPanelProps) {
   const {
     aiModel,
@@ -116,6 +124,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     sourceFilter,
     articleSummaries,
     feedBriefings,
+    sources,
     formatTimeAgo,
     onChangeSearch,
     onApplySearch,
@@ -198,6 +207,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const selectedFeedBriefing = useMemo(
     () => flatBriefingItems.find((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey) ?? null,
     [flatBriefingItems, selectedBriefingKey],
+  )
+  const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
+  const selectedBriefingSourceIDs = useMemo(
+    () => (selectedFeedBriefing ? parseIDList(selectedFeedBriefing.source_ids) : []),
+    [selectedFeedBriefing],
+  )
+  const selectedBriefingArticleIDs = useMemo(
+    () => (selectedFeedBriefing ? parseIDList(selectedFeedBriefing.article_ids) : []),
+    [selectedFeedBriefing],
+  )
+  const selectedBriefingSourceNames = useMemo(
+    () =>
+      selectedBriefingSourceIDs.map((sourceID) => sourceNameByID.get(sourceID) ?? `来源 ${sourceID}`),
+    [selectedBriefingSourceIDs, sourceNameByID],
   )
 
   return (
@@ -481,6 +504,30 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
                 <div className="ai-library-detail-body">
                   <MarkdownBlock content={selectedFeedBriefing.summary} />
+                </div>
+                <div className="ai-library-detail-context">
+                  <div className="ai-library-detail-stats">
+                    <div className="ai-library-detail-stat">
+                      <span className="ai-library-detail-stat-label">关联来源</span>
+                      <strong>{selectedBriefingSourceIDs.length}</strong>
+                    </div>
+                    <div className="ai-library-detail-stat">
+                      <span className="ai-library-detail-stat-label">关联文章</span>
+                      <strong>{selectedFeedBriefing.article_count || selectedBriefingArticleIDs.length}</strong>
+                    </div>
+                  </div>
+                  {selectedBriefingSourceNames.length > 0 && (
+                    <div className="ai-library-detail-source-list">
+                      <p className="hint">来源明细</p>
+                      <div className="ai-library-detail-source-pills">
+                        {selectedBriefingSourceNames.map((sourceName) => (
+                          <span key={sourceName} className="ai-library-detail-source-pill">
+                            {sourceName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <p className="ai-library-entry-foot hint">
                   {selectedFeedBriefing.provider}

@@ -516,6 +516,7 @@ function App() {
             sourceFilter={aiLibrarySection.sourceFilter}
             articleSummaries={aiLibrarySection.articleSummaries}
             feedBriefings={aiLibrarySection.feedBriefings}
+            sources={sources}
             formatTimeAgo={formatTimeAgo}
             onChangeSearch={aiLibrarySection.setSearch}
             onApplySearch={aiLibrarySection.applySearch}
