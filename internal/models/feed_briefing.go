@@ -15,6 +15,7 @@ type FeedBriefing struct {
 	Provider    string    `json:"provider" gorm:"column:provider;not null"`
 	InputChars  int       `json:"input_chars" gorm:"column:input_chars;not null"`
 	Truncated   bool      `json:"truncated" gorm:"column:truncated;not null;default:false"`
+	StopReason  string    `json:"stop_reason" gorm:"column:stop_reason;not null;default:''"`
 	GeneratedAt time.Time `json:"generated_at" gorm:"column:generated_at;not null"`
 	CreatedAt   time.Time `json:"created_at" gorm:"column:created_at;not null"`
 	UpdatedAt   time.Time `json:"updated_at" gorm:"column:updated_at;not null"`

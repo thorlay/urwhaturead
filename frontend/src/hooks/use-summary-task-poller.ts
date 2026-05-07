@@ -3,7 +3,7 @@ import { getArticleSummary, getArticleSummaryStatus } from '../api'
 import type { ArticleSummaryResponse } from '../types'
 import type { Notice, SummaryTask, SummaryTaskStatus } from '../lib/app-domain'
 import { isSameModel, normalizeSummaryTaskStatus } from '../lib/summary-task-utils'
-import { toErrorMessage } from '../lib/app-utils'
+import { formatAIStopReason, toErrorMessage } from '../lib/app-utils'
 
 type SummaryTaskIdentity = {
   title: string
@@ -148,7 +148,9 @@ export function useSummaryTaskPoller(params: UseSummaryTaskPollerParams) {
           if (selectedArticleID === articleID && isSameModel(result.task.model, aiModel)) {
             setArticleSummary(result.cached.data.summary)
             setArticleSummaryMeta(
-              `${result.cached.data.cache_hit ? '缓存命中' : '新生成'} · ${result.cached.data.provider} · ${result.cached.data.model}`,
+              `${result.cached.data.cache_hit ? '缓存命中' : '新生成'} · ${result.cached.data.provider} · ${
+                result.cached.data.model
+              } · ${formatAIStopReason(result.cached.data.stop_reason, result.cached.data.truncated)}`,
             )
             setArticleSummaryError(null)
           }

@@ -129,6 +129,7 @@ type articleSummaryPayload struct {
 	Model       string    `json:"model"`
 	InputChars  int       `json:"input_chars"`
 	Truncated   bool      `json:"truncated"`
+	StopReason  string    `json:"stop_reason"`
 	Provider    string    `json:"provider"`
 	GeneratedAt time.Time `json:"generated_at"`
 	CacheHit    bool      `json:"cache_hit"`
@@ -154,6 +155,7 @@ type articleSummaryListItem struct {
 	Provider    string     `json:"provider"`
 	InputChars  int        `json:"input_chars"`
 	Truncated   bool       `json:"truncated"`
+	StopReason  string     `json:"stop_reason"`
 	GeneratedAt time.Time  `json:"generated_at"`
 }
 
@@ -197,6 +199,7 @@ func (h *ArticleHandler) ListSummaries(c *gin.Context) {
 			sm.provider,
 			sm.input_chars,
 			sm.truncated,
+			sm.stop_reason,
 			sm.generated_at
 		`).
 		Joins("JOIN articles AS a ON a.id = sm.article_id").
@@ -712,6 +715,7 @@ func toArticleSummaryPayload(payload articlesummary.SummaryPayload) articleSumma
 		Model:       payload.Model,
 		InputChars:  payload.InputChars,
 		Truncated:   payload.Truncated,
+		StopReason:  payload.StopReason,
 		Provider:    payload.Provider,
 		GeneratedAt: payload.GeneratedAt,
 		CacheHit:    payload.CacheHit,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
+import { formatAIStopReason } from '../lib/app-utils'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
 
 type AILibraryView = 'articles' | 'briefings'
@@ -438,7 +439,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                         )}
                         <p className="ai-library-entry-foot hint">
                           {item.provider} · 输入 {item.input_chars} 字符
-                          {item.truncated ? ' · 已截断' : ''}
+                          {` · ${formatAIStopReason(item.stop_reason, item.truncated)}`}
                         </p>
                       </div>
                     </article>
@@ -544,7 +545,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           {item.provider}
                           {item.tag ? ` · 标签 ${item.tag}` : ''}
                           {item.keyword ? ` · 关键词 ${item.keyword}` : ''}
-                          {item.truncated ? ' · 已截断' : ''}
+                          {` · ${formatAIStopReason(item.stop_reason, item.truncated)}`}
                         </p>
                       </div>
                     </article>

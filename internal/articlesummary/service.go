@@ -43,6 +43,7 @@ type SummaryPayload struct {
 	Model       string    `json:"model"`
 	InputChars  int       `json:"input_chars"`
 	Truncated   bool      `json:"truncated"`
+	StopReason  string    `json:"stop_reason"`
 	Provider    string    `json:"provider"`
 	GeneratedAt time.Time `json:"generated_at"`
 	CacheHit    bool      `json:"cache_hit"`
@@ -192,6 +193,7 @@ func (s *Service) GenerateAndSave(
 		Provider:    result.ProviderName,
 		InputChars:  result.InputChars,
 		Truncated:   result.Truncated,
+		StopReason:  result.StopReason,
 		GeneratedAt: result.GeneratedAt,
 	}
 	if err := s.db.WithContext(ctx).
@@ -207,6 +209,7 @@ func (s *Service) GenerateAndSave(
 		Model:       result.Model,
 		InputChars:  result.InputChars,
 		Truncated:   result.Truncated,
+		StopReason:  result.StopReason,
 		Provider:    result.ProviderName,
 		GeneratedAt: result.GeneratedAt,
 		CacheHit:    false,
@@ -255,6 +258,7 @@ func (s *Service) GetCachedPayload(ctx context.Context, articleID uint64, reques
 		Model:       cached.Model,
 		InputChars:  cached.InputChars,
 		Truncated:   cached.Truncated,
+		StopReason:  cached.StopReason,
 		Provider:    cached.Provider,
 		GeneratedAt: cached.GeneratedAt,
 		CacheHit:    true,

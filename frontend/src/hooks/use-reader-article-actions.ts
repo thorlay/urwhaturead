@@ -2,7 +2,13 @@ import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
 import { getArticle, summarizeArticle, trackArticleThread } from '../api'
 import type { Notice, ReaderSession, SummaryTask } from '../lib/app-domain'
-import { isTrackableForumLink, normalizeSourceKind, resolveReadDwellThresholdMs, toErrorMessage } from '../lib/app-utils'
+import {
+  formatAIStopReason,
+  isTrackableForumLink,
+  normalizeSourceKind,
+  resolveReadDwellThresholdMs,
+  toErrorMessage,
+} from '../lib/app-utils'
 import {
   buildSummaryTaskKey,
   isArticleSummaryReadyResponse,
@@ -182,7 +188,10 @@ export function useReaderArticleActions({
         if (isArticleSummaryReadyResponse(response)) {
           setArticleSummary(response.data.summary)
           setArticleSummaryMeta(
-            `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model}`,
+            `${response.data.cache_hit ? '缓存命中' : '新生成'} · ${response.data.provider} · ${response.data.model} · ${formatAIStopReason(
+              response.data.stop_reason,
+              response.data.truncated,
+            )}`,
           )
           setNotice({ kind: 'info', text: response.data.cache_hit ? '已加载缓存摘要。' : 'AI 摘要已生成。' })
           return

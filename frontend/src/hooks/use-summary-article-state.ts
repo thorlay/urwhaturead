@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { getArticleSummary } from '../api'
 import { isSummaryTaskPending, summaryTaskStatusLabel } from '../lib/summary-task-utils'
+import { formatAIStopReason } from '../lib/app-utils'
 import type { SummaryTask } from '../lib/app-domain'
 import type { ArticleDetail, FeedItem } from '../types'
 
@@ -48,7 +49,12 @@ export function useSummaryArticleState({
         }
         if (cachedSummary?.data?.summary) {
           setArticleSummary(cachedSummary.data.summary)
-          setArticleSummaryMeta(`缓存命中 · ${cachedSummary.data.provider} · ${cachedSummary.data.model}`)
+          setArticleSummaryMeta(
+            `缓存命中 · ${cachedSummary.data.provider} · ${cachedSummary.data.model} · ${formatAIStopReason(
+              cachedSummary.data.stop_reason,
+              cachedSummary.data.truncated,
+            )}`,
+          )
           setArticleSummaryError(null)
         }
       } catch (error) {

@@ -184,6 +184,7 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		Provider:    result.ProviderName,
 		InputChars:  result.InputChars,
 		Truncated:   result.Truncated,
+		StopReason:  result.StopReason,
 		GeneratedAt: result.GeneratedAt,
 	}
 	if err := s.db.WithContext(ctx).

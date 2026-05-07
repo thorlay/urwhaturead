@@ -214,6 +214,20 @@ export function normalizeImageURL(rawURL?: string): string | null {
   }
 }
 
+export function formatAIStopReason(reason?: string, truncated?: boolean): string {
+  const normalized = reason?.trim().toLowerCase() ?? ''
+  if (normalized === 'max_tokens' || normalized === 'length' || normalized === 'max_output_tokens') {
+    return '输出触顶'
+  }
+  if (normalized === 'stop' || normalized === 'end_turn') {
+    return '正常结束'
+  }
+  if (normalized) {
+    return normalized
+  }
+  return truncated ? '可能截断' : '已完成'
+}
+
 const allowedRichHTMLTags = new Set([
   'a',
   'p',

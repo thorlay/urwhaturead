@@ -233,3 +233,38 @@ func TestSummarize_RetryOnMaxTokensEmpty(t *testing.T) {
 		t.Fatalf("expected compact retry prompt, got=%q", secondCallUserContent)
 	}
 }
+
+func TestSummarize_MarksPartialMaxTokensAsTruncated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"gemini-3.1-pro-preview","choices":[{"message":{"content":"half done summary"},"finish_reason":"max_tokens"}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{
+		BaseURL:         server.URL + "/v1/chat/completions",
+		APIKey:          "secret",
+		Model:           "gemini-3.1-pro-preview",
+		Timeout:         2 * time.Second,
+		MaxInputChars:   8000,
+		MaxOutputTokens: 1200,
+		APIStyle:        "openai_chat",
+	})
+	if client == nil {
+		t.Fatalf("client should not be nil")
+	}
+
+	result, err := client.Summarize(context.Background(), "title", "body text")
+	if err != nil {
+		t.Fatalf("summarize failed: %v", err)
+	}
+	if result.Summary != "half done summary" {
+		t.Fatalf("unexpected summary: %q", result.Summary)
+	}
+	if !result.Truncated {
+		t.Fatalf("expected truncated=true")
+	}
+	if result.StopReason != "max_tokens" {
+		t.Fatalf("unexpected stop reason: %q", result.StopReason)
+	}
+}

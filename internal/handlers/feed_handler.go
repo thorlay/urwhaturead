@@ -120,6 +120,7 @@ type feedBriefingPayload struct {
 	Provider     string                  `json:"provider"`
 	InputChars   int                     `json:"input_chars"`
 	Truncated    bool                    `json:"truncated"`
+	StopReason   string                  `json:"stop_reason"`
 	GeneratedAt  time.Time               `json:"generated_at"`
 	CacheHit     bool                    `json:"cache_hit"`
 	ArticleCount int                     `json:"article_count"`
@@ -139,6 +140,7 @@ type feedBriefingListItem struct {
 	Provider     string    `json:"provider"`
 	InputChars   int       `json:"input_chars"`
 	Truncated    bool      `json:"truncated"`
+	StopReason   string    `json:"stop_reason"`
 	GeneratedAt  time.Time `json:"generated_at"`
 	ArticleCount int       `json:"article_count"`
 }
@@ -205,6 +207,7 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 			Provider:     row.Provider,
 			InputChars:   row.InputChars,
 			Truncated:    row.Truncated,
+			StopReason:   row.StopReason,
 			GeneratedAt:  row.GeneratedAt,
 			ArticleCount: countCSVEntries(row.ArticleIDs),
 		})
@@ -457,6 +460,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 					Provider:     cached.Provider,
 					InputChars:   cached.InputChars,
 					Truncated:    cached.Truncated,
+					StopReason:   cached.StopReason,
 					GeneratedAt:  cached.GeneratedAt,
 					CacheHit:     true,
 					ArticleCount: len(rows),
@@ -520,6 +524,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		Provider:    result.ProviderName,
 		InputChars:  result.InputChars,
 		Truncated:   result.Truncated,
+		StopReason:  result.StopReason,
 		GeneratedAt: result.GeneratedAt,
 	}
 	if err := h.db.WithContext(c.Request.Context()).
@@ -539,6 +544,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 			Provider:     result.ProviderName,
 			InputChars:   result.InputChars,
 			Truncated:    result.Truncated,
+			StopReason:   result.StopReason,
 			GeneratedAt:  result.GeneratedAt,
 			CacheHit:     false,
 			ArticleCount: len(rows),

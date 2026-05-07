@@ -187,6 +187,7 @@ export type ArticleSummaryResponse = {
     model: string
     input_chars: number
     truncated: boolean
+    stop_reason: string
     provider: string
     generated_at: string
     cache_hit: boolean
@@ -205,6 +206,7 @@ export type ArticleSummaryLibraryItem = {
   provider: string
   input_chars: number
   truncated: boolean
+  stop_reason: string
   generated_at: string
 }
 
@@ -230,6 +232,7 @@ export type FeedBriefingLibraryItem = {
   provider: string
   input_chars: number
   truncated: boolean
+  stop_reason: string
   generated_at: string
   article_count: number
 }
@@ -317,6 +320,7 @@ export type FeedBriefingResponse = {
     provider: string
     input_chars: number
     truncated: boolean
+    stop_reason: string
     generated_at: string
     cache_hit: boolean
     article_count: number

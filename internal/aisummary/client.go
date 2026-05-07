@@ -44,6 +44,7 @@ type Result struct {
 	Model        string
 	InputChars   int
 	Truncated    bool
+	StopReason   string
 	GeneratedAt  time.Time
 	ProviderName string
 }
@@ -232,15 +233,15 @@ func (c *Client) complete(
 		return Result{}, fmt.Errorf("parse ai response failed: %w", err)
 	}
 	summary := strings.TrimSpace(extractResponseText(parsed))
+	stopReason := extractStopReason(parsed)
+	if isOutputTruncatedStopReason(stopReason) {
+		truncated = true
+	}
 	if summary == "" {
 		if apiErr := extractAPIError(parsed); apiErr != "" {
 			return Result{}, fmt.Errorf("ai api error: %s", apiErr)
 		}
-		stopReason := firstNonEmpty(
-			anyString(parsed["stop_reason"]),
-			anyString(parsed["finish_reason"]),
-			anyString(parsed["status"]),
-		)
+		stopReason = firstNonEmpty(stopReason, anyString(parsed["status"]))
 		if stopReason != "" {
 			return Result{}, fmt.Errorf("ai summary is empty (stop_reason=%s)", stopReason)
 		}
@@ -257,6 +258,7 @@ func (c *Client) complete(
 		Model:        resultModel,
 		InputChars:   inputChars,
 		Truncated:    truncated,
+		StopReason:   stopReason,
 		GeneratedAt:  time.Now().UTC(),
 		ProviderName: "geminicli2api",
 	}, nil
@@ -437,6 +439,51 @@ func extractAPIError(payload map[string]any) string {
 	return ""
 }
 
+func extractStopReason(payload map[string]any) string {
+	if reason := firstNonEmpty(
+		anyString(payload["stop_reason"]),
+		anyString(payload["finish_reason"]),
+	); reason != "" {
+		return reason
+	}
+
+	if choices, ok := payload["choices"].([]any); ok && len(choices) > 0 {
+		first := mapValue(choices[0])
+		if reason := firstNonEmpty(
+			anyString(first["finish_reason"]),
+			anyString(first["stop_reason"]),
+		); reason != "" {
+			return reason
+		}
+	}
+
+	if output, ok := payload["output"].([]any); ok && len(output) > 0 {
+		for _, item := range output {
+			itemMap := mapValue(item)
+			if len(itemMap) == 0 {
+				continue
+			}
+			if reason := firstNonEmpty(
+				anyString(itemMap["finish_reason"]),
+				anyString(itemMap["stop_reason"]),
+			); reason != "" {
+				return reason
+			}
+		}
+	}
+
+	if message := mapValue(payload["message"]); len(message) > 0 {
+		if reason := firstNonEmpty(
+			anyString(message["finish_reason"]),
+			anyString(message["stop_reason"]),
+		); reason != "" {
+			return reason
+		}
+	}
+
+	return ""
+}
+
 func anyText(value any) string {
 	switch typed := value.(type) {
 	case string:
@@ -491,6 +538,11 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func isOutputTruncatedStopReason(reason string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(reason))
+	return normalized == "max_tokens" || normalized == "length" || normalized == "max_output_tokens"
 }
 
 func shouldRetryForMaxTokens(err error) bool {
