@@ -483,6 +483,13 @@
   gap: 1rem;
 }
 
+.ai-library-master-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
 .ai-library-group {
   display: grid;
   gap: 0.7rem;
@@ -508,6 +515,10 @@
   gap: 0.85rem;
   padding: 0.95rem 0;
   border-bottom: 1px solid var(--line);
+}
+
+.ai-library-entry.active {
+  background: rgba(15, 62, 120, 0.025);
 }
 
 .ai-library-entry-briefing {
@@ -554,12 +565,24 @@
   gap: 0.34rem;
 }
 
+.ai-library-entry-select {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
 .ai-library-entry-title {
   margin: 0;
   color: #17212d;
   font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.ai-library-entry-select:hover .ai-library-entry-title {
+  color: #0f3e78;
 }
 
 .ai-library-entry-meta {
@@ -597,6 +620,48 @@
   margin: 0;
 }
 
+.ai-library-detail-pane {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--line);
+}
+
+.ai-library-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.ai-library-detail-head h3 {
+  margin: 0.1rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.35;
+}
+
+.ai-library-detail-kicker {
+  margin: 0;
+  color: #47617d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-library-detail-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ai-library-detail-body {
+  padding-top: 0.1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .ai-library-empty {
   display: grid;
   gap: 0.45rem;
@@ -622,6 +687,10 @@
     padding: 0.1rem 0 0.8rem;
   }
 
+  .ai-library-master-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .ai-library-entry {
     grid-template-columns: 0.85rem minmax(0, 1fr);
     gap: 0.7rem;
@@ -634,6 +703,29 @@
 
   .ai-library-entry-head .button,
   .ai-library-entry-head button {
+    width: 100%;
+  }
+
+  .ai-library-detail-pane {
+    position: static;
+    top: auto;
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    padding-top: 0.9rem;
+  }
+
+  .ai-library-detail-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ai-library-detail-actions {
+    width: 100%;
+  }
+
+  .ai-library-detail-actions .button,
+  .ai-library-detail-actions button {
     width: 100%;
   }
 }

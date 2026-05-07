@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MarkdownBlock } from '@/components/rich-content-blocks'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem } from '../types'
 
 type AILibraryView = 'articles' | 'briefings'
@@ -156,6 +158,47 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const activeCount = activeView === 'articles' ? filteredArticles.length : filteredBriefings.length
   const sourceOptions = activeView === 'articles' ? articleSourceOptions : briefingScopeOptions
   const sourceLabel = activeView === 'articles' ? '来源' : '范围'
+  const flatArticleItems = useMemo(() => articleSections.flatMap((section) => section.items), [articleSections])
+  const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
+  const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
+  const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (flatArticleItems.length === 0) {
+      setSelectedArticleKey(null)
+      return
+    }
+    const hasCurrent = selectedArticleKey
+      ? flatArticleItems.some((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
+      : false
+    if (!hasCurrent) {
+      const first = flatArticleItems[0]
+      setSelectedArticleKey(`${first.article_id}:${first.generated_at}`)
+    }
+  }, [flatArticleItems, selectedArticleKey])
+
+  useEffect(() => {
+    if (flatBriefingItems.length === 0) {
+      setSelectedBriefingKey(null)
+      return
+    }
+    const hasCurrent = selectedBriefingKey
+      ? flatBriefingItems.some((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey)
+      : false
+    if (!hasCurrent) {
+      const first = flatBriefingItems[0]
+      setSelectedBriefingKey(`${first.digest_key}:${first.generated_at}`)
+    }
+  }, [flatBriefingItems, selectedBriefingKey])
+
+  const selectedArticleSummary = useMemo(
+    () => flatArticleItems.find((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey) ?? null,
+    [flatArticleItems, selectedArticleKey],
+  )
+  const selectedFeedBriefing = useMemo(
+    () => flatBriefingItems.find((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey) ?? null,
+    [flatBriefingItems, selectedBriefingKey],
+  )
 
   return (
     <main className="ai-library-page">
@@ -265,7 +308,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         </div>
 
         {activeView === 'articles' && (
-          <div className="ai-library-stack">
+          <div className="ai-library-master-detail">
+            <div className="ai-library-stack">
             {articleSections.length === 0 && !loading && (
               <div className="ai-library-empty">
                 <h3>还没有可回看的文章摘要</h3>
@@ -281,14 +325,23 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
                 <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
-                    <article key={`article-summary-${item.article_id}-${item.generated_at}`} className="ai-library-entry">
+                    <article
+                      key={`article-summary-${item.article_id}-${item.generated_at}`}
+                      className={`ai-library-entry ${selectedArticleSummary?.article_id === item.article_id && selectedArticleSummary.generated_at === item.generated_at ? 'active' : ''}`}
+                    >
                       <div className="ai-library-entry-rail" aria-hidden="true">
                         <span className="ai-library-entry-dot" />
                       </div>
                       <div className="ai-library-entry-body">
                         <div className="ai-library-entry-head">
                           <div className="ai-library-entry-main">
-                            <p className="ai-library-entry-title">{item.title}</p>
+                            <button
+                              type="button"
+                              className="ai-library-entry-select"
+                              onClick={() => setSelectedArticleKey(`${item.article_id}:${item.generated_at}`)}
+                            >
+                              <span className="ai-library-entry-title">{item.title}</span>
+                            </button>
                             <p className="ai-library-entry-meta">
                               <span className="ai-library-entry-kind">文章摘要</span>
                               <span>{item.source_name}</span>
@@ -313,11 +366,41 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
               </section>
             ))}
+            </div>
+
+            {selectedArticleSummary && (
+              <aside className="ai-library-detail-pane">
+                <div className="ai-library-detail-head">
+                  <div>
+                    <p className="ai-library-detail-kicker">文章摘要</p>
+                    <h3>{selectedArticleSummary.title}</h3>
+                    <p className="ai-library-entry-meta">
+                      <span>{selectedArticleSummary.source_name}</span>
+                      <span>{formatTimeAgo(selectedArticleSummary.generated_at)}</span>
+                      <span>{selectedArticleSummary.model}</span>
+                    </p>
+                  </div>
+                  <div className="ai-library-detail-actions">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(selectedArticleSummary.article_id)}>
+                      打开文章
+                    </Button>
+                  </div>
+                </div>
+                <div className="ai-library-detail-body">
+                  <MarkdownBlock content={selectedArticleSummary.summary} />
+                </div>
+                <p className="ai-library-entry-foot hint">
+                  {selectedArticleSummary.provider} · 输入 {selectedArticleSummary.input_chars} 字符
+                  {selectedArticleSummary.truncated ? ' · 已截断' : ''}
+                </p>
+              </aside>
+            )}
           </div>
         )}
 
         {activeView === 'briefings' && (
-          <div className="ai-library-stack">
+          <div className="ai-library-master-detail">
+            <div className="ai-library-stack">
             {briefingSections.length === 0 && !loading && (
               <div className="ai-library-empty">
                 <h3>还没有可回看的 AI 速览</h3>
@@ -333,14 +416,23 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
                 <div className="ai-library-list ai-library-timeline">
                   {section.items.map((item) => (
-                    <article key={`feed-briefing-${item.digest_key}`} className="ai-library-entry ai-library-entry-briefing">
+                    <article
+                      key={`feed-briefing-${item.digest_key}`}
+                      className={`ai-library-entry ai-library-entry-briefing ${selectedFeedBriefing?.digest_key === item.digest_key && selectedFeedBriefing.generated_at === item.generated_at ? 'active' : ''}`}
+                    >
                       <div className="ai-library-entry-rail" aria-hidden="true">
                         <span className="ai-library-entry-dot" />
                       </div>
                       <div className="ai-library-entry-body">
                         <div className="ai-library-entry-head">
                           <div className="ai-library-entry-main">
-                            <p className="ai-library-entry-title">{item.scope_label || '当前阅读流'}</p>
+                            <button
+                              type="button"
+                              className="ai-library-entry-select"
+                              onClick={() => setSelectedBriefingKey(`${item.digest_key}:${item.generated_at}`)}
+                            >
+                              <span className="ai-library-entry-title">{item.scope_label || '当前阅读流'}</span>
+                            </button>
                             <p className="ai-library-entry-meta">
                               <span className="ai-library-entry-kind">AI 速览</span>
                               <span>{formatTimeAgo(item.generated_at)}</span>
@@ -367,6 +459,37 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
               </section>
             ))}
+            </div>
+
+            {selectedFeedBriefing && (
+              <aside className="ai-library-detail-pane">
+                <div className="ai-library-detail-head">
+                  <div>
+                    <p className="ai-library-detail-kicker">AI 速览</p>
+                    <h3>{selectedFeedBriefing.scope_label || '当前阅读流'}</h3>
+                    <p className="ai-library-entry-meta">
+                      <span>{formatTimeAgo(selectedFeedBriefing.generated_at)}</span>
+                      <span>{selectedFeedBriefing.model}</span>
+                      <span>{selectedFeedBriefing.article_count} 条信息</span>
+                    </p>
+                  </div>
+                  <div className="ai-library-detail-actions">
+                    <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(selectedFeedBriefing)}>
+                      打开速览
+                    </Button>
+                  </div>
+                </div>
+                <div className="ai-library-detail-body">
+                  <MarkdownBlock content={selectedFeedBriefing.summary} />
+                </div>
+                <p className="ai-library-entry-foot hint">
+                  {selectedFeedBriefing.provider}
+                  {selectedFeedBriefing.tag ? ` · 标签 ${selectedFeedBriefing.tag}` : ''}
+                  {selectedFeedBriefing.keyword ? ` · 关键词 ${selectedFeedBriefing.keyword}` : ''}
+                  {selectedFeedBriefing.truncated ? ' · 已截断' : ''}
+                </p>
+              </aside>
+            )}
           </div>
         )}
       </section>
