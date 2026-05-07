@@ -445,9 +445,14 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		badRequest(c, "no feed items available for briefing")
 		return
 	}
+	promptRows := dedupeFeedBriefingRows(rows)
+	if len(promptRows) == 0 {
+		badRequest(c, "no feed items available for briefing")
+		return
+	}
 
-	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, effectiveModel, req.SourceIDs, rows)
-	inputItems := buildFeedBriefingInputItems(rows, maxBriefingInputItems)
+	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, effectiveModel, req.SourceIDs, promptRows)
+	inputItems := buildFeedBriefingInputItems(promptRows, maxBriefingInputItems)
 
 	if !req.Refresh {
 		var cached models.FeedBriefing
@@ -464,7 +469,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 					StopReason:   cached.StopReason,
 					GeneratedAt:  cached.GeneratedAt,
 					CacheHit:     true,
-					ArticleCount: len(rows),
+					ArticleCount: len(promptRows),
 					InputItems:   inputItems,
 				},
 			})
@@ -500,7 +505,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		}
 	}
 
-	prompt := buildFeedBriefingPrompt(rows)
+	prompt := buildFeedBriefingPrompt(promptRows)
 	result, err := h.summarizer.CompleteWithModel(
 		c.Request.Context(),
 		feedBriefingSystemPrompt,
@@ -548,7 +553,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 			StopReason:   result.StopReason,
 			GeneratedAt:  result.GeneratedAt,
 			CacheHit:     false,
-			ArticleCount: len(rows),
+			ArticleCount: len(promptRows),
 			InputItems:   inputItems,
 		},
 	})
@@ -773,6 +778,27 @@ func buildFeedBriefingDigest(
 	}, "|")
 	sum := sha1.Sum([]byte(payload))
 	return hex.EncodeToString(sum[:]), articleIDs
+}
+
+func dedupeFeedBriefingRows(rows []feedItem) []feedItem {
+	if len(rows) <= 1 {
+		return rows
+	}
+	result := make([]feedItem, 0, len(rows))
+	seenClusters := make(map[uint64]struct{}, len(rows))
+	for _, row := range rows {
+		if row.ClusterID == nil || *row.ClusterID == 0 {
+			result = append(result, row)
+			continue
+		}
+		clusterID := *row.ClusterID
+		if _, ok := seenClusters[clusterID]; ok {
+			continue
+		}
+		seenClusters[clusterID] = struct{}{}
+		result = append(result, row)
+	}
+	return result
 }
 
 func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {

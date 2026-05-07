@@ -101,6 +101,32 @@ func TestBuildFeedBriefingInputItems(t *testing.T) {
 	}
 }
 
+func TestDedupeFeedBriefingRows(t *testing.T) {
+	clusterA := uint64(9)
+	clusterB := uint64(12)
+	rows := []feedItem{
+		{ID: 101, ClusterID: &clusterA, Title: "A newest"},
+		{ID: 102, ClusterID: &clusterA, Title: "A older"},
+		{ID: 103, ClusterID: nil, Title: "No cluster"},
+		{ID: 104, ClusterID: &clusterB, Title: "B newest"},
+		{ID: 105, ClusterID: &clusterB, Title: "B older"},
+	}
+
+	got := dedupeFeedBriefingRows(rows)
+	if len(got) != 3 {
+		t.Fatalf("len(got)=%d, want 3", len(got))
+	}
+	if got[0].ID != 101 {
+		t.Fatalf("got[0].ID=%d, want 101", got[0].ID)
+	}
+	if got[1].ID != 103 {
+		t.Fatalf("got[1].ID=%d, want 103", got[1].ID)
+	}
+	if got[2].ID != 104 {
+		t.Fatalf("got[2].ID=%d, want 104", got[2].ID)
+	}
+}
+
 func TestBriefingRateLimiter_AllowAndBlock(t *testing.T) {
 	limiter := newBriefingRateLimiter(2, 10*time.Minute)
 	now := time.Now().UTC()

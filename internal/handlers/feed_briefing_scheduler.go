@@ -146,6 +146,10 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		}
 		promptRows = selectedRows
 	}
+	promptRows = dedupeFeedBriefingRows(promptRows)
+	if len(promptRows) == 0 {
+		return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+	}
 
 	digestKey, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, promptRows)
 
