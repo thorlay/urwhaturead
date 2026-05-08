@@ -7,6 +7,7 @@ import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from 
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
+type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
 
 type AILibraryPanelProps = {
   aiModel: string
@@ -16,6 +17,8 @@ type AILibraryPanelProps = {
   activeView: AILibraryView
   timeRange: AILibraryRange
   sourceFilter: string
+  statusFilter: AILibraryStatusFilter
+  pinnedKeys: string[]
   articleSummaries: ArticleSummaryLibraryItem[]
   feedBriefings: FeedBriefingLibraryItem[]
   sources: Source[]
@@ -26,6 +29,8 @@ type AILibraryPanelProps = {
   onChangeView: (view: AILibraryView) => void
   onChangeTimeRange: (range: AILibraryRange) => void
   onChangeSourceFilter: (value: string) => void
+  onChangeStatusFilter: (value: AILibraryStatusFilter) => void
+  onTogglePinnedKey: (key: string) => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
   onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
@@ -114,6 +119,23 @@ function parseIDList(input: string): number[] {
     .filter((value) => Number.isFinite(value) && value > 0)
 }
 
+function splitPinnedSections<T extends { generated_at: string }>(
+  items: T[],
+  isPinned: (item: T) => boolean,
+): LibrarySection<T>[] {
+  const pinnedItems = items.filter(isPinned)
+  const regularItems = items.filter((item) => !isPinned(item))
+  const sections: LibrarySection<T>[] = []
+  if (pinnedItems.length > 0) {
+    sections.push({
+      key: 'pinned',
+      label: '已固定',
+      items: pinnedItems,
+    })
+  }
+  return sections.concat(groupByRecency(regularItems))
+}
+
 export function AILibraryPanel(props: AILibraryPanelProps) {
   const {
     aiModel,
@@ -123,6 +145,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     activeView,
     timeRange,
     sourceFilter,
+    statusFilter,
+    pinnedKeys,
     articleSummaries,
     feedBriefings,
     sources,
@@ -133,6 +157,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onChangeView,
     onChangeTimeRange,
     onChangeSourceFilter,
+    onChangeStatusFilter,
+    onTogglePinnedKey,
     onOpenArticleSummary,
     onOpenFeedBriefing,
   } = props
@@ -144,11 +170,18 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     a.localeCompare(b, 'zh-Hans-CN'),
   )
 
+  const pinnedKeySet = useMemo(() => new Set(pinnedKeys), [pinnedKeys])
   const filteredArticles = articleSummaries.filter((item) => {
     if (!withinRange(item.generated_at, timeRange)) {
       return false
     }
     if (sourceFilter !== 'all' && item.source_name !== sourceFilter) {
+      return false
+    }
+    if (statusFilter === 'complete' && item.truncated) {
+      return false
+    }
+    if (statusFilter === 'truncated' && !item.truncated) {
       return false
     }
     return true
@@ -161,10 +194,19 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     if (sourceFilter !== 'all' && scope !== sourceFilter) {
       return false
     }
+    if (statusFilter === 'complete' && item.truncated) {
+      return false
+    }
+    if (statusFilter === 'truncated' && !item.truncated) {
+      return false
+    }
     return true
   })
-  const articleSections = groupByRecency(filteredArticles)
-  const briefingSections = groupByRecency(filteredBriefings)
+  const articleSections = splitPinnedSections(filteredArticles, (item) => pinnedKeySet.has(`article:${item.article_id}:${item.generated_at}`))
+  const briefingSections = splitPinnedSections(
+    filteredBriefings,
+    (item) => pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`),
+  )
   const activeCount = activeView === 'articles' ? filteredArticles.length : filteredBriefings.length
   const sourceOptions = activeView === 'articles' ? articleSourceOptions : briefingScopeOptions
   const sourceLabel = activeView === 'articles' ? '来源' : '范围'
@@ -250,6 +292,23 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     selectedBriefingKey === `${item.digest_key}:${item.generated_at}`
   const attachEntryRef = (key: string) => (node: HTMLElement | null) => {
     entryRefs.current[key] = node
+  }
+
+  const selectedArticleIndex = flatArticleItems.findIndex((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
+  const selectedBriefingIndex = flatBriefingItems.findIndex((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey)
+
+  const selectAdjacentArticle = (offset: -1 | 1) => {
+    if (selectedArticleIndex < 0) return
+    const next = flatArticleItems[selectedArticleIndex + offset]
+    if (!next) return
+    toggleArticleSelection(`${next.article_id}:${next.generated_at}`)
+  }
+
+  const selectAdjacentBriefing = (offset: -1 | 1) => {
+    if (selectedBriefingIndex < 0) return
+    const next = flatBriefingItems[selectedBriefingIndex + offset]
+    if (!next) return
+    toggleBriefingSelection(`${next.digest_key}:${next.generated_at}`)
   }
 
   useEffect(() => {
@@ -351,6 +410,14 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   ))}
                 </select>
               </label>
+              <label className="ai-library-select-label">
+                <span>状态</span>
+                <select className="ai-library-select" value={statusFilter} onChange={(event) => onChangeStatusFilter(event.target.value as AILibraryStatusFilter)}>
+                  <option value="all">全部</option>
+                  <option value="complete">正常结束</option>
+                  <option value="truncated">输出触顶/截断</option>
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -366,7 +433,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
             当前视图共 {activeCount} 条
             {timeRange !== 'all' ? ` · 已按 ${timeRange} 过滤` : ''}
             {sourceFilter !== 'all' ? ` · ${sourceLabel} ${sourceFilter}` : ''}
+            {statusFilter !== 'all' ? ` · ${statusFilter === 'truncated' ? '只看输出触顶/截断' : '只看正常结束'}` : ''}
             {search.trim() ? ` · 关键词 “${search.trim()}”` : ''}
+            {pinnedKeys.length > 0 ? ` · 已固定 ${pinnedKeys.length} 条` : ''}
           </p>
         </div>
 
@@ -417,6 +486,14 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               type="button"
                               variant="ghost"
                               size="sm"
+                              onClick={() => onTogglePinnedKey(`article:${item.article_id}:${item.generated_at}`)}
+                            >
+                              {pinnedKeySet.has(`article:${item.article_id}:${item.generated_at}`) ? '取消固定' : '固定'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => toggleArticleSelection(`${item.article_id}:${item.generated_at}`)}
                             >
                               {isArticleSelected(item) ? '收起' : '展开'}
@@ -428,6 +505,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                         </div>
                         {isArticleSelected(item) ? (
                           <div className="ai-library-entry-expanded">
+                            <div className="ai-library-entry-nav">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentArticle(-1)} disabled={selectedArticleIndex <= 0}>
+                                上一条
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => selectAdjacentArticle(1)}
+                                disabled={selectedArticleIndex < 0 || selectedArticleIndex >= flatArticleItems.length - 1}
+                              >
+                                下一条
+                              </Button>
+                            </div>
                             <div className="ai-library-detail-body">
                               <MarkdownBlock content={item.summary} />
                             </div>
@@ -497,6 +588,14 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               type="button"
                               variant="ghost"
                               size="sm"
+                              onClick={() => onTogglePinnedKey(`briefing:${item.digest_key}:${item.generated_at}`)}
+                            >
+                              {pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`) ? '取消固定' : '固定'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => toggleBriefingSelection(`${item.digest_key}:${item.generated_at}`)}
                             >
                               {isBriefingSelected(item) ? '收起' : '展开'}
@@ -508,6 +607,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                         </div>
                         {isBriefingSelected(item) ? (
                           <div className="ai-library-entry-expanded">
+                            <div className="ai-library-entry-nav">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentBriefing(-1)} disabled={selectedBriefingIndex <= 0}>
+                                上一条
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => selectAdjacentBriefing(1)}
+                                disabled={selectedBriefingIndex < 0 || selectedBriefingIndex >= flatBriefingItems.length - 1}
+                              >
+                                下一条
+                              </Button>
+                            </div>
                             <div className="ai-library-detail-body">
                               <MarkdownBlock content={item.summary} />
                             </div>
