@@ -647,6 +647,28 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                   </div>
                                 </div>
                               )}
+                              {item.article_refs.length > 0 && (
+                                <div className="ai-library-detail-article-list">
+                                  <p className="hint">关联文章</p>
+                                  <div className="ai-library-detail-article-items">
+                                    {item.article_refs.map((article) => (
+                                      <div key={`${item.digest_key}-${article.id}`} className="ai-library-detail-article-item">
+                                        <button
+                                          type="button"
+                                          className="ai-library-detail-article-link"
+                                          onClick={() => void onOpenArticleSummary(article.id)}
+                                        >
+                                          {article.title}
+                                        </button>
+                                        <p className="ai-library-detail-article-meta">
+                                          <span>{article.source_name || `来源 ${article.source_id}`}</span>
+                                          {article.published_at ? <span>{formatTimeAgo(article.published_at)}</span> : null}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (

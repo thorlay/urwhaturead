@@ -135,6 +135,7 @@ type feedBriefingListItem struct {
 	Keyword      string    `json:"keyword"`
 	SourceIDs    string    `json:"source_ids"`
 	ArticleIDs   string    `json:"article_ids"`
+	ArticleRefs  []feedBriefingInputItem `json:"article_refs"`
 	Limit        int       `json:"limit"`
 	Summary      string    `json:"summary"`
 	Model        string    `json:"model"`
@@ -192,6 +193,11 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 		internalServerError(c, "query feed briefing source names failed", err)
 		return
 	}
+	articleRefsByDigest, err := h.loadArticleRefsForBriefings(c.Request.Context(), rows, sourceNameByID)
+	if err != nil {
+		internalServerError(c, "query feed briefing article refs failed", err)
+		return
+	}
 
 	items := make([]feedBriefingListItem, 0, len(rows))
 	for _, row := range rows {
@@ -202,6 +208,7 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 			Keyword:      row.Keyword,
 			SourceIDs:    row.SourceIDs,
 			ArticleIDs:   row.ArticleIDs,
+			ArticleRefs:  articleRefsByDigest[row.DigestKey],
 			Limit:        row.Limit,
 			Summary:      row.Summary,
 			Model:        row.Model,
@@ -858,6 +865,71 @@ func (h *FeedHandler) loadSourceNamesForBriefings(ctx context.Context, rows []mo
 	result := make(map[uint64]string, len(sources))
 	for _, source := range sources {
 		result[source.ID] = strings.TrimSpace(source.Name)
+	}
+	return result, nil
+}
+
+func (h *FeedHandler) loadArticleRefsForBriefings(
+	ctx context.Context,
+	rows []models.FeedBriefing,
+	sourceNameByID map[uint64]string,
+) (map[string][]feedBriefingInputItem, error) {
+	articleIDs := make([]uint64, 0)
+	for _, row := range rows {
+		articleIDs = append(articleIDs, parseCSVUint64Loose(row.ArticleIDs)...)
+	}
+	articleIDs = uniqueSortedUint64(articleIDs)
+	if len(articleIDs) == 0 {
+		return map[string][]feedBriefingInputItem{}, nil
+	}
+
+	var articles []struct {
+		ID          uint64
+		SourceID    uint64
+		Title       string
+		Link        string
+		PublishedAt *time.Time
+	}
+	if err := h.db.WithContext(ctx).
+		Table("articles").
+		Select("id, source_id, title, link, published_at").
+		Where("id IN ?", articleIDs).
+		Scan(&articles).Error; err != nil {
+		return nil, err
+	}
+
+	articleByID := make(map[uint64]feedBriefingInputItem, len(articles))
+	for _, article := range articles {
+		title := textclean.NormalizeInline(article.Title)
+		if title == "" {
+			title = fmt.Sprintf("文章 #%d", article.ID)
+		}
+		articleByID[article.ID] = feedBriefingInputItem{
+			ID:          article.ID,
+			SourceID:    article.SourceID,
+			SourceName:  textclean.NormalizeInline(sourceNameByID[article.SourceID]),
+			Title:       title,
+			Link:        strings.TrimSpace(article.Link),
+			PublishedAt: article.PublishedAt,
+		}
+	}
+
+	result := make(map[string][]feedBriefingInputItem, len(rows))
+	for _, row := range rows {
+		ids := parseCSVUint64Loose(row.ArticleIDs)
+		if len(ids) == 0 {
+			result[row.DigestKey] = nil
+			continue
+		}
+		refs := make([]feedBriefingInputItem, 0, len(ids))
+		for _, articleID := range ids {
+			ref, ok := articleByID[articleID]
+			if !ok {
+				continue
+			}
+			refs = append(refs, ref)
+		}
+		result[row.DigestKey] = refs
 	}
 	return result, nil
 }

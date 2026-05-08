@@ -226,6 +226,14 @@ export type FeedBriefingLibraryItem = {
   keyword: string
   source_ids: string
   article_ids: string
+  article_refs: Array<{
+    id: number
+    source_id: number
+    source_name: string
+    title: string
+    link: string
+    published_at?: string
+  }>
   limit: number
   summary: string
   model: string

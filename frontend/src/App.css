@@ -695,6 +695,59 @@
   background: rgba(0, 0, 0, 0.015);
 }
 
+.ai-library-detail-article-list {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.ai-library-detail-article-list .hint {
+  margin: 0;
+}
+
+.ai-library-detail-article-items {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.ai-library-detail-article-item {
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.ai-library-detail-article-items .ai-library-detail-article-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.ai-library-detail-article-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #102235;
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 580;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-library-detail-article-link:hover {
+  color: #0f3e78;
+}
+
+.ai-library-detail-article-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .ai-library-empty {
   display: grid;
   gap: 0.45rem;
