@@ -33,7 +33,7 @@ export function useAILibrarySection({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
-  const [activeView, setActiveView] = useState<AILibraryView>('articles')
+  const [activeView, setActiveView] = useState<AILibraryView>('briefings')
   const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<AILibraryStatusFilter>('all')

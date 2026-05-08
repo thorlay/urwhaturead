@@ -364,19 +364,19 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
             <div className="ai-library-segmented" role="tablist" aria-label="AI 内容分类">
               <button
                 type="button"
-                className={`ai-library-segment ${activeView === 'articles' ? 'active' : ''}`}
-                onClick={() => onChangeView('articles')}
-              >
-                文章摘要
-                <span>{filteredArticles.length}</span>
-              </button>
-              <button
-                type="button"
                 className={`ai-library-segment ${activeView === 'briefings' ? 'active' : ''}`}
                 onClick={() => onChangeView('briefings')}
               >
                 AI 速览
                 <span>{filteredBriefings.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`ai-library-segment ${activeView === 'articles' ? 'active' : ''}`}
+                onClick={() => onChangeView('articles')}
+              >
+                文章摘要
+                <span>{filteredArticles.length}</span>
               </button>
             </div>
 
