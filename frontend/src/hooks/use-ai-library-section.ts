@@ -16,6 +16,7 @@ type UseAILibrarySectionParams = {
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
 type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
+type AILibraryPinnedFilter = 'all' | 'pinned'
 
 const aiLibraryPinnedStorageKey = 'quick_ai_library_pinned_keys'
 
@@ -37,6 +38,7 @@ export function useAILibrarySection({
   const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<AILibraryStatusFilter>('all')
+  const [pinnedFilter, setPinnedFilter] = useState<AILibraryPinnedFilter>('all')
   const [pinnedKeys, setPinnedKeys] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
     try {
@@ -169,6 +171,8 @@ export function useAILibrarySection({
     setSourceFilter,
     statusFilter,
     setStatusFilter,
+    pinnedFilter,
+    setPinnedFilter,
     pinnedKeys,
     togglePinnedKey,
     articleSummaries,

@@ -3549,3 +3549,19 @@ button {
     align-items: stretch;
   }
 }
+
+.ai-library-detail-article-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #0f3e78;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.ai-library-detail-article-toggle:hover {
+  color: #102235;
+}
