@@ -129,22 +129,22 @@ type feedBriefingPayload struct {
 }
 
 type feedBriefingListItem struct {
-	DigestKey    string    `json:"digest_key"`
-	ScopeLabel   string    `json:"scope_label"`
-	Tag          string    `json:"tag"`
-	Keyword      string    `json:"keyword"`
-	SourceIDs    string    `json:"source_ids"`
-	ArticleIDs   string    `json:"article_ids"`
+	DigestKey    string                  `json:"digest_key"`
+	ScopeLabel   string                  `json:"scope_label"`
+	Tag          string                  `json:"tag"`
+	Keyword      string                  `json:"keyword"`
+	SourceIDs    string                  `json:"source_ids"`
+	ArticleIDs   string                  `json:"article_ids"`
 	ArticleRefs  []feedBriefingInputItem `json:"article_refs"`
-	Limit        int       `json:"limit"`
-	Summary      string    `json:"summary"`
-	Model        string    `json:"model"`
-	Provider     string    `json:"provider"`
-	InputChars   int       `json:"input_chars"`
-	Truncated    bool      `json:"truncated"`
-	StopReason   string    `json:"stop_reason"`
-	GeneratedAt  time.Time `json:"generated_at"`
-	ArticleCount int       `json:"article_count"`
+	Limit        int                     `json:"limit"`
+	Summary      string                  `json:"summary"`
+	Model        string                  `json:"model"`
+	Provider     string                  `json:"provider"`
+	InputChars   int                     `json:"input_chars"`
+	Truncated    bool                    `json:"truncated"`
+	StopReason   string                  `json:"stop_reason"`
+	GeneratedAt  time.Time               `json:"generated_at"`
+	ArticleCount int                     `json:"article_count"`
 }
 
 type feedBriefingInputItem struct {
@@ -259,12 +259,10 @@ func (h *FeedHandler) List(c *gin.Context) {
 			a.title,
 			a.link,
 			a.summary,
-			a.content,
 			a.author,
 			a.published_at,
 			a.image_url,
 			a.reply_count,
-			a.raw,
 			1 AS duplicate_count,
 			a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
@@ -307,12 +305,10 @@ func (h *FeedHandler) List(c *gin.Context) {
 				a.title,
 				a.link,
 				a.summary,
-				a.content,
 				a.author,
 				a.published_at,
 				a.image_url,
 				a.reply_count,
-				a.raw,
 				a.created_at,
 				COALESCE(a.published_at, a.created_at) AS sort_time,
 				COUNT(*) OVER (PARTITION BY COALESCE(a.cluster_id, a.id)) AS duplicate_count,
@@ -332,12 +328,10 @@ func (h *FeedHandler) List(c *gin.Context) {
 				ranked.title,
 				ranked.link,
 				ranked.summary,
-				ranked.content,
 				ranked.author,
 				ranked.published_at,
 				ranked.image_url,
 				ranked.reply_count,
-				ranked.raw,
 				ranked.duplicate_count,
 				ranked.created_at,
 				ranked.sort_time
@@ -723,12 +717,10 @@ func (h *FeedHandler) queryBriefingFeedRows(
 			a.title,
 			a.link,
 			a.summary,
-			a.content,
 			a.author,
 			a.published_at,
 			a.image_url,
 			a.reply_count,
-			a.raw,
 			a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
 		`).

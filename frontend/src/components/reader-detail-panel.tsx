@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
@@ -14,6 +14,83 @@ type ThreadComment = {
 type ReaderSummaryTask = {
   error?: string
 } | null
+
+type DetailView = 'read' | 'summary' | 'comments' | 'capture'
+type ReadingFontSize = 'compact' | 'default' | 'large'
+type ReadingWidth = 'narrow' | 'default' | 'wide'
+type ReadingLineHeight = 'tight' | 'default' | 'loose'
+
+type ReadingPreferences = {
+  fontSize: ReadingFontSize
+  width: ReadingWidth
+  lineHeight: ReadingLineHeight
+}
+
+const READING_PREFERENCES_STORAGE_KEY = 'quick.reader.detail_preferences'
+const READING_SCROLL_STORAGE_KEY = 'quick.reader.detail_scroll_positions'
+const DEFAULT_READING_PREFERENCES: ReadingPreferences = {
+  fontSize: 'default',
+  width: 'default',
+  lineHeight: 'default',
+}
+
+function isReadingFontSize(value: unknown): value is ReadingFontSize {
+  return value === 'compact' || value === 'default' || value === 'large'
+}
+
+function isReadingWidth(value: unknown): value is ReadingWidth {
+  return value === 'narrow' || value === 'default' || value === 'wide'
+}
+
+function isReadingLineHeight(value: unknown): value is ReadingLineHeight {
+  return value === 'tight' || value === 'default' || value === 'loose'
+}
+
+function readStoredReadingPreferences(): ReadingPreferences {
+  if (typeof window === 'undefined') {
+    return DEFAULT_READING_PREFERENCES
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(READING_PREFERENCES_STORAGE_KEY) || '{}') as Partial<ReadingPreferences>
+    return {
+      fontSize: isReadingFontSize(parsed.fontSize) ? parsed.fontSize : DEFAULT_READING_PREFERENCES.fontSize,
+      width: isReadingWidth(parsed.width) ? parsed.width : DEFAULT_READING_PREFERENCES.width,
+      lineHeight: isReadingLineHeight(parsed.lineHeight) ? parsed.lineHeight : DEFAULT_READING_PREFERENCES.lineHeight,
+    }
+  } catch {
+    return DEFAULT_READING_PREFERENCES
+  }
+}
+
+function readStoredScrollPositions(): Record<string, number> {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(READING_SCROLL_STORAGE_KEY) || '{}') as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, value]) => [key, typeof value === 'number' && Number.isFinite(value) ? value : 0] as const)
+        .filter(([, value]) => value > 0),
+    )
+  } catch {
+    return {}
+  }
+}
+
+function writeStoredScrollPosition(articleID: number, scrollTop: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  const positions = readStoredScrollPositions()
+  positions[String(articleID)] = Math.max(0, Math.round(scrollTop))
+  const entries = Object.entries(positions).slice(-200)
+  try {
+    window.localStorage.setItem(READING_SCROLL_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)))
+  } catch {
+    // Ignore storage failures; reading state is an enhancement, not core data.
+  }
+}
 
 export type ReaderDetailPanelProps = {
   floatingDetailRef: RefObject<HTMLElement | null>
@@ -130,7 +207,6 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     hasHiddenThreadComments,
   } = props
 
-  type DetailView = 'read' | 'summary' | 'comments' | 'capture'
   const [detailViewPreference, setDetailViewPreference] = useState<{
     articleID: number | null
     view: DetailView
@@ -138,6 +214,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     articleID: null,
     view: 'read',
   })
+  const [readingPreferences, setReadingPreferences] = useState<ReadingPreferences>(readStoredReadingPreferences)
 
   const hasAIArticleSummary = Boolean(articleSummary.trim())
   const hasThreadCommentsView = Boolean(selectedArticle?.thread)
@@ -176,6 +253,55 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     },
     [activeArticleID],
   )
+  const readingPreferenceClassName =
+    readerView === 'detail'
+      ? `detail-font-${readingPreferences.fontSize} detail-width-${readingPreferences.width} detail-line-${readingPreferences.lineHeight}`
+      : ''
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(READING_PREFERENCES_STORAGE_KEY, JSON.stringify(readingPreferences))
+    } catch {
+      // Ignore storage failures; controls still work for the current session.
+    }
+  }, [readingPreferences])
+
+  useEffect(() => {
+    if (readerView !== 'detail' || !selectedArticle?.id) {
+      return
+    }
+    const panel = floatingDetailRef.current
+    if (!panel) {
+      return
+    }
+
+    const articleID = selectedArticle.id
+    const storedTop = readStoredScrollPositions()[String(articleID)] ?? 0
+    const restoreTimer = window.setTimeout(() => {
+      panel.scrollTop = storedTop
+    }, 0)
+    let animationFrame = 0
+    const savePosition = () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame)
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        writeStoredScrollPosition(articleID, panel.scrollTop)
+      })
+    }
+    panel.addEventListener('scroll', savePosition, { passive: true })
+    return () => {
+      window.clearTimeout(restoreTimer)
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame)
+      }
+      writeStoredScrollPosition(articleID, panel.scrollTop)
+      panel.removeEventListener('scroll', savePosition)
+    }
+  }, [floatingDetailRef, readerView, selectedArticle?.id])
 
   if (!showFloatingReader && readerView !== 'detail') {
     return null
@@ -187,7 +313,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   return (
     <section
       ref={floatingDetailRef}
-      className={`panel detail reader-panel ${readerView === 'detail' ? 'detail-page' : 'detail-floating'}`}
+      className={`panel detail reader-panel ${readerView === 'detail' ? 'detail-page' : 'detail-floating'} ${readingPreferenceClassName}`}
     >
       {!selectedArticle && !selectedFeedBriefing && !loadingArticle && !articleError && (
         <div className="hint-group">
@@ -463,6 +589,62 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                 </button>
               ))}
             </nav>
+          )}
+
+          {readerView === 'detail' && (
+            <div className="detail-reading-controls" aria-label="阅读设置">
+              <div className="detail-reading-control-group">
+                <span>字号</span>
+                {[
+                  ['compact', '小'],
+                  ['default', '中'],
+                  ['large', '大'],
+                ].map(([value, label]) => (
+                  <button
+                    key={`font-${value}`}
+                    type="button"
+                    className={`detail-reading-control ${readingPreferences.fontSize === value ? 'active' : ''}`}
+                    onClick={() => setReadingPreferences((current) => ({ ...current, fontSize: value as ReadingFontSize }))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="detail-reading-control-group">
+                <span>行宽</span>
+                {[
+                  ['narrow', '窄'],
+                  ['default', '中'],
+                  ['wide', '宽'],
+                ].map(([value, label]) => (
+                  <button
+                    key={`width-${value}`}
+                    type="button"
+                    className={`detail-reading-control ${readingPreferences.width === value ? 'active' : ''}`}
+                    onClick={() => setReadingPreferences((current) => ({ ...current, width: value as ReadingWidth }))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="detail-reading-control-group">
+                <span>行距</span>
+                {[
+                  ['tight', '紧'],
+                  ['default', '中'],
+                  ['loose', '松'],
+                ].map(([value, label]) => (
+                  <button
+                    key={`line-${value}`}
+                    type="button"
+                    className={`detail-reading-control ${readingPreferences.lineHeight === value ? 'active' : ''}`}
+                    onClick={() => setReadingPreferences((current) => ({ ...current, lineHeight: value as ReadingLineHeight }))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {detailView === 'read' && hasAIArticleSummary && (

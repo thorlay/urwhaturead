@@ -140,7 +140,29 @@ func (h *SourceHandler) baseSourceListQuery() *gorm.DB {
 	counts := recentArticleCountsSubquery(h.db, 24*time.Hour)
 	return h.db.
 		Model(&models.Source{}).
-		Select("sources.*, COALESCE(article_counts.new_articles_24h, 0) AS new_articles_24h").
+		Select(`
+			sources.id,
+			sources.owner_user_id,
+			sources.name,
+			sources.rss_url,
+			sources.site_key,
+			sources.kind,
+			sources.topic_url,
+			sources.hidden_in_sidebar,
+			sources.tags,
+			sources.click_count,
+			sources.last_clicked_at,
+			sources.ai_briefing_enabled,
+			sources.ai_briefing_interval_min,
+			sources.ai_briefing_last_run_at,
+			sources.ai_briefing_last_generated_at,
+			sources.enabled,
+			sources.poll_interval_sec,
+			sources.last_fetched_at,
+			sources.created_at,
+			sources.updated_at,
+			COALESCE(article_counts.new_articles_24h, 0) AS new_articles_24h
+		`).
 		Joins("LEFT JOIN (?) AS article_counts ON article_counts.source_id = sources.id", counts)
 }
 
