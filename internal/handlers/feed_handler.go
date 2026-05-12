@@ -717,6 +717,7 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		Select(`
 			a.id,
 			a.source_id,
+			a.cluster_id,
 			s.name AS source_name,
 			COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
 			a.title,

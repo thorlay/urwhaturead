@@ -133,7 +133,13 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		return err
 	}
 	if previous != nil {
-		selectedRows, newCount, shouldGenerate := selectSourceBriefingRows(rows, parseCSVUint64Loose(previous.ArticleIDs), s.minNewArticles)
+		previousArticleIDs := parseCSVUint64Loose(previous.ArticleIDs)
+		previousClusterIDs, err := s.loadArticleClusterIDs(ctx, previousArticleIDs)
+		if err != nil {
+			_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+			return err
+		}
+		selectedRows, newCount, shouldGenerate := selectSourceBriefingRows(rows, previousArticleIDs, previousClusterIDs, s.minNewArticles)
 		if !shouldGenerate {
 			log.Printf(
 				"auto ai briefing source=%d name=%q skipped: only %d new articles (threshold=%d)",
@@ -228,11 +234,38 @@ func (s *FeedBriefingScheduler) loadLatestSourceBriefing(ctx context.Context, so
 	return &briefing, nil
 }
 
-func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, minNewArticles int) ([]feedItem, int, bool) {
+func (s *FeedBriefingScheduler) loadArticleClusterIDs(ctx context.Context, articleIDs []uint64) ([]uint64, error) {
+	articleIDs = uniqueSortedUint64(articleIDs)
+	if len(articleIDs) == 0 {
+		return nil, nil
+	}
+
+	var rows []struct {
+		ClusterID *uint64 `gorm:"column:cluster_id"`
+	}
+	if err := s.db.WithContext(ctx).
+		Table("articles").
+		Select("cluster_id").
+		Where("id IN ?", articleIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	clusterIDs := make([]uint64, 0, len(rows))
+	for _, row := range rows {
+		if row.ClusterID == nil || *row.ClusterID == 0 {
+			continue
+		}
+		clusterIDs = append(clusterIDs, *row.ClusterID)
+	}
+	return uniqueSortedUint64(clusterIDs), nil
+}
+
+func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, previousClusterIDs []uint64, minNewArticles int) ([]feedItem, int, bool) {
 	if len(rows) == 0 {
 		return nil, 0, false
 	}
-	if len(previousArticleIDs) == 0 {
+	if len(previousArticleIDs) == 0 && len(previousClusterIDs) == 0 {
 		return rows, len(rows), true
 	}
 	if minNewArticles <= 0 {
@@ -243,11 +276,23 @@ func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, minN
 	for _, articleID := range previousArticleIDs {
 		seen[articleID] = struct{}{}
 	}
+	seenClusters := make(map[uint64]struct{}, len(previousClusterIDs))
+	for _, clusterID := range previousClusterIDs {
+		if clusterID == 0 {
+			continue
+		}
+		seenClusters[clusterID] = struct{}{}
+	}
 
 	newRows := make([]feedItem, 0, len(rows))
 	for _, row := range rows {
 		if _, ok := seen[row.ID]; ok {
 			continue
+		}
+		if row.ClusterID != nil && *row.ClusterID != 0 {
+			if _, ok := seenClusters[*row.ClusterID]; ok {
+				continue
+			}
 		}
 		newRows = append(newRows, row)
 	}

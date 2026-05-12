@@ -8,7 +8,7 @@ func TestSelectSourceBriefingRows_FirstRunUsesAllRows(t *testing.T) {
 		{ID: 12, Title: "B"},
 	}
 
-	selected, newCount, ok := selectSourceBriefingRows(rows, nil, 3)
+	selected, newCount, ok := selectSourceBriefingRows(rows, nil, nil, 3)
 	if !ok {
 		t.Fatalf("expected first run to generate")
 	}
@@ -27,7 +27,7 @@ func TestSelectSourceBriefingRows_SkipsWhenTooFewNewRows(t *testing.T) {
 		{ID: 23, Title: "C"},
 	}
 
-	selected, newCount, ok := selectSourceBriefingRows(rows, []uint64{22, 23}, 2)
+	selected, newCount, ok := selectSourceBriefingRows(rows, []uint64{22, 23}, nil, 2)
 	if ok {
 		t.Fatalf("expected run to skip when new rows are below threshold")
 	}
@@ -47,7 +47,7 @@ func TestSelectSourceBriefingRows_UsesOnlyNewRowsWhenThresholdMet(t *testing.T) 
 		{ID: 34, Title: "D"},
 	}
 
-	selected, newCount, ok := selectSourceBriefingRows(rows, []uint64{31, 32}, 2)
+	selected, newCount, ok := selectSourceBriefingRows(rows, []uint64{31, 32}, nil, 2)
 	if !ok {
 		t.Fatalf("expected run to generate")
 	}
@@ -56,5 +56,24 @@ func TestSelectSourceBriefingRows_UsesOnlyNewRowsWhenThresholdMet(t *testing.T) 
 	}
 	if len(selected) != 2 || selected[0].ID != 33 || selected[1].ID != 34 {
 		t.Fatalf("selected IDs=(%d,%d), want (33,34)", selected[0].ID, selected[1].ID)
+	}
+}
+
+func TestSelectSourceBriefingRows_SkipsRowsFromPreviouslyCoveredCluster(t *testing.T) {
+	clusterID := uint64(77)
+	rows := []feedItem{
+		{ID: 41, ClusterID: &clusterID, Title: "same story new article"},
+		{ID: 42, Title: "brand new no cluster"},
+	}
+
+	selected, newCount, ok := selectSourceBriefingRows(rows, nil, []uint64{clusterID}, 1)
+	if !ok {
+		t.Fatalf("expected run to generate for truly new content")
+	}
+	if newCount != 1 {
+		t.Fatalf("newCount=%d, want 1", newCount)
+	}
+	if len(selected) != 1 || selected[0].ID != 42 {
+		t.Fatalf("selected=%v, want only brand new row", selected)
 	}
 }
