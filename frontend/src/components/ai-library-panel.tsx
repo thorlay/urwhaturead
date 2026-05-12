@@ -122,6 +122,18 @@ function parseIDList(input: string): number[] {
     .filter((value) => Number.isFinite(value) && value > 0)
 }
 
+function visibleAIStopReason(reason?: string, truncated?: boolean): string {
+  const label = formatAIStopReason(reason, truncated)
+  if (label === '正常结束' || label === '已完成') {
+    return ''
+  }
+  return label
+}
+
+function joinMetaParts(parts: Array<string | false | null | undefined>): string {
+  return parts.filter((part): part is string => Boolean(part)).join(' · ')
+}
+
 function splitPinnedSections<T extends { generated_at: string }>(
   items: T[],
   isPinned: (item: T) => boolean,
@@ -597,10 +609,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                             <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
                           </div>
                         )}
-                        <p className="ai-library-entry-foot hint">
-                          {item.provider} · 输入 {item.input_chars} 字符
-                          {` · ${formatAIStopReason(item.stop_reason, item.truncated)}`}
-                        </p>
+                        {visibleAIStopReason(item.stop_reason, item.truncated) && (
+                          <p className="ai-library-entry-foot hint">
+                            {joinMetaParts([`输入 ${item.input_chars} 字符`, visibleAIStopReason(item.stop_reason, item.truncated)])}
+                          </p>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -774,12 +787,19 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <p className="ai-library-entry-preview">{previewText(item.summary, 240)}</p>
                             </div>
                           )}
-                          <p className="ai-library-entry-foot hint">
-                            {item.provider}
-                            {item.tag ? ` · 标签 ${item.tag}` : ''}
-                            {item.keyword ? ` · 关键词 ${item.keyword}` : ''}
-                            {` · ${formatAIStopReason(item.stop_reason, item.truncated)}`}
-                          </p>
+                          {joinMetaParts([
+                            item.tag ? `标签 ${item.tag}` : null,
+                            item.keyword ? `关键词 ${item.keyword}` : null,
+                            visibleAIStopReason(item.stop_reason, item.truncated),
+                          ]) && (
+                            <p className="ai-library-entry-foot hint">
+                              {joinMetaParts([
+                                item.tag ? `标签 ${item.tag}` : null,
+                                item.keyword ? `关键词 ${item.keyword}` : null,
+                                visibleAIStopReason(item.stop_reason, item.truncated),
+                              ])}
+                            </p>
+                          )}
                         </div>
                       </article>
                     )
