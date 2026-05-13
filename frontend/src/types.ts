@@ -82,6 +82,7 @@ export type FeedResponse = {
     limit: number
     count: number
     next_cursor: string
+    elapsed_ms?: number
   }
 }
 
@@ -91,6 +92,7 @@ export type SourcesResponse = {
     limit: number
     offset: number
     count: number
+    elapsed_ms?: number
   }
 }
 

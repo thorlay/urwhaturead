@@ -232,6 +232,7 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 }
 
 func (h *FeedHandler) List(c *gin.Context) {
+	startedAt := time.Now()
 	limit := 20
 	if limitRaw := c.Query("limit"); limitRaw != "" {
 		value, err := strconv.Atoi(limitRaw)
@@ -394,6 +395,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 			"limit":       limit,
 			"count":       len(rows),
 			"next_cursor": nextCursor,
+			"elapsed_ms":  time.Since(startedAt).Milliseconds(),
 		},
 	})
 }

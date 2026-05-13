@@ -1,4 +1,15 @@
-import { Fragment, Suspense, lazy, memo, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
+import {
+  Suspense,
+  lazy,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
@@ -9,6 +20,10 @@ const ReaderFeedFilters = lazy(async () => {
 })
 
 type FeedSummaryTaskStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
+type FeedListRow = { key: string; type: 'briefing' } | { key: string; type: 'article'; item: FeedItem }
+
+const FEED_VIRTUAL_MIN_ROWS = 60
+const FEED_VIRTUAL_OVERSCAN_ROWS = 8
 
 export type ReaderFeedPanelProps = {
   showFloatingReader: boolean
@@ -296,11 +311,9 @@ const FeedArticleListItem = memo(
                   {replyCountText && (
                     <>
                       <span>{replyCountText}</span>
-                    </> 
+                    </>
                   )}
-                  {previewImageURL && (
-                    <span className="feed-item-compact-flag">图</span>
-                  )}
+                  {previewImageURL && <span className="feed-item-compact-flag">图</span>}
                   {summaryTaskStatus && (
                     <>
                       <span className={cn('feed-ai-status', `status-${summaryTaskStatus}`)}>
@@ -469,6 +482,74 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     getSummaryTaskStatus,
     summaryTaskStatusLabel,
   } = props
+
+  const feedListRef = useRef<HTMLDivElement | null>(null)
+  const [virtualRange, setVirtualRange] = useState({ start: 0, end: 0 })
+  const listRows = useMemo<FeedListRow[]>(() => {
+    const rows: FeedListRow[] = []
+    const briefingIndex = Math.max(0, Math.min(feedBriefingInsertIndex, visibleFeed.length))
+    for (let index = 0; index <= visibleFeed.length; index += 1) {
+      if (hasFeedBriefingEntry && index === briefingIndex) {
+        rows.push({ key: 'feed-briefing', type: 'briefing' })
+      }
+      if (index < visibleFeed.length) {
+        const item = visibleFeed[index]
+        rows.push({ key: `feed-row-${item.id}`, type: 'article', item })
+      }
+    }
+    return rows
+  }, [feedBriefingInsertIndex, hasFeedBriefingEntry, visibleFeed])
+  const shouldVirtualizeFeed = listRows.length >= FEED_VIRTUAL_MIN_ROWS
+  const estimatedFeedRowHeight = feedTitleOnlyMode ? 48 : showFeedImages ? 138 : 116
+
+  useEffect(() => {
+    if (!shouldVirtualizeFeed) {
+      setVirtualRange({ start: 0, end: listRows.length })
+      return
+    }
+
+    let animationFrame = 0
+    const updateVirtualRange = () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame)
+      }
+      animationFrame = window.requestAnimationFrame(() => {
+        const list = feedListRef.current
+        if (!list) {
+          return
+        }
+        const rect = list.getBoundingClientRect()
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+        const visibleStart = Math.max(0, -rect.top)
+        const visibleEnd = Math.max(0, viewportHeight - rect.top)
+        const start = Math.max(0, Math.floor(visibleStart / estimatedFeedRowHeight) - FEED_VIRTUAL_OVERSCAN_ROWS)
+        const end = Math.min(
+          listRows.length,
+          Math.ceil(visibleEnd / estimatedFeedRowHeight) + FEED_VIRTUAL_OVERSCAN_ROWS,
+        )
+        setVirtualRange((current) => (current.start === start && current.end === end ? current : { start, end }))
+      })
+    }
+
+    updateVirtualRange()
+    window.addEventListener('scroll', updateVirtualRange, { passive: true })
+    window.addEventListener('resize', updateVirtualRange)
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame)
+      }
+      window.removeEventListener('scroll', updateVirtualRange)
+      window.removeEventListener('resize', updateVirtualRange)
+    }
+  }, [estimatedFeedRowHeight, listRows.length, shouldVirtualizeFeed])
+
+  const virtualStart = shouldVirtualizeFeed ? Math.min(virtualRange.start, listRows.length) : 0
+  const virtualEnd = shouldVirtualizeFeed ? Math.max(virtualStart, Math.min(virtualRange.end, listRows.length)) : listRows.length
+  const renderedRows = shouldVirtualizeFeed ? listRows.slice(virtualStart, virtualEnd) : listRows
+  const virtualTopSpacer = shouldVirtualizeFeed ? virtualStart * estimatedFeedRowHeight : 0
+  const virtualBottomSpacer = shouldVirtualizeFeed
+    ? Math.max(0, (listRows.length - virtualEnd) * estimatedFeedRowHeight)
+    : 0
 
   return (
     <section
@@ -665,7 +746,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
       <p className="feed-shortcuts">快捷键: `j` / `k` 切换，`o` 打开原文，`esc` 关闭浮窗</p>
 
-      <div className={cn('feed-list', loadingFeed && 'is-loading')}>
+      <div ref={feedListRef} className={cn('feed-list', loadingFeed && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}>
         {loadingFeed && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
           <>
             <FeedSkeleton />
@@ -687,61 +768,55 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           <p className="hint">{feed.length > 0 ? '当前网站都被临时隐藏了，可点击“恢复全部”。' : '暂无文章'}</p>
         )}
 
-        {hasFeedBriefingEntry && feedBriefingInsertIndex === 0 && (
-          <FeedBriefingListItem
-            itemKey="feed-briefing"
-            selectedFeedBriefing={selectedFeedBriefing}
-            feedTitleOnlyMode={feedTitleOnlyMode}
-            feedBriefingPreviewText={feedBriefingPreviewText}
-            feedBriefingScopeLabel={feedBriefingScopeLabel}
-            feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
-            feedBriefingNewArticleCount={feedBriefingNewArticleCount}
-            feedBriefingArticleCount={feedBriefingArticleCount}
-            feedBriefingItemsCount={feedBriefingItems.length}
-            onOpenFeedBriefing={onOpenFeedBriefing}
-          />
-        )}
+        {virtualTopSpacer > 0 && <div className="feed-list-spacer" style={{ height: virtualTopSpacer }} aria-hidden="true" />}
 
-        {visibleFeed.map((item, index) => {
-          const summaryTaskStatus = getSummaryTaskStatus(item.id)
-          return (
-            <Fragment key={`feed-row-${item.id}`}>
-              {hasFeedBriefingEntry && feedBriefingInsertIndex === index && feedBriefingInsertIndex > 0 && (
-                <FeedBriefingListItem
-                  itemKey={`feed-briefing-before-${item.id}`}
-                  selectedFeedBriefing={selectedFeedBriefing}
-                  feedTitleOnlyMode={feedTitleOnlyMode}
-                  feedBriefingPreviewText={feedBriefingPreviewText}
-                  feedBriefingScopeLabel={feedBriefingScopeLabel}
-                  feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
-                  feedBriefingNewArticleCount={feedBriefingNewArticleCount}
-                  feedBriefingArticleCount={feedBriefingArticleCount}
-                  feedBriefingItemsCount={feedBriefingItems.length}
-                  onOpenFeedBriefing={onOpenFeedBriefing}
-                />
-              )}
-              <FeedArticleListItem
-                item={item}
-                isActive={selectedArticleID === item.id && !selectedFeedBriefing}
-                isRead={readArticleIDSet.has(item.id)}
-                isFavorite={favoriteArticleIDSet.has(item.id)}
+        {renderedRows.map((row) => {
+          if (row.type === 'briefing') {
+            return (
+              <FeedBriefingListItem
+                key={row.key}
+                itemKey={row.key}
+                selectedFeedBriefing={selectedFeedBriefing}
                 feedTitleOnlyMode={feedTitleOnlyMode}
-                showFeedImages={showFeedImages}
-                summaryTaskStatus={summaryTaskStatus}
-                summaryTaskStatusLabel={summaryTaskStatusLabel}
-                onOpenArticle={onOpenArticle}
-                onToggleFavoriteArticle={onToggleFavoriteArticle}
-                normalizeImageURL={normalizeImageURL}
-                formatTimeAgo={formatTimeAgo}
-                formatTimeAgoCompact={formatTimeAgoCompact}
-                formatReplyCount={formatReplyCount}
-                buildCompactTitleParts={buildCompactTitleParts}
-                plainText={plainText}
-                truncate={truncate}
+                feedBriefingPreviewText={feedBriefingPreviewText}
+                feedBriefingScopeLabel={feedBriefingScopeLabel}
+                feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+                feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+                feedBriefingArticleCount={feedBriefingArticleCount}
+                feedBriefingItemsCount={feedBriefingItems.length}
+                onOpenFeedBriefing={onOpenFeedBriefing}
               />
-            </Fragment>
+            )
+          }
+
+          const summaryTaskStatus = getSummaryTaskStatus(row.item.id)
+          return (
+            <FeedArticleListItem
+              key={row.key}
+              item={row.item}
+              isActive={selectedArticleID === row.item.id && !selectedFeedBriefing}
+              isRead={readArticleIDSet.has(row.item.id)}
+              isFavorite={favoriteArticleIDSet.has(row.item.id)}
+              feedTitleOnlyMode={feedTitleOnlyMode}
+              showFeedImages={showFeedImages}
+              summaryTaskStatus={summaryTaskStatus}
+              summaryTaskStatusLabel={summaryTaskStatusLabel}
+              onOpenArticle={onOpenArticle}
+              onToggleFavoriteArticle={onToggleFavoriteArticle}
+              normalizeImageURL={normalizeImageURL}
+              formatTimeAgo={formatTimeAgo}
+              formatTimeAgoCompact={formatTimeAgoCompact}
+              formatReplyCount={formatReplyCount}
+              buildCompactTitleParts={buildCompactTitleParts}
+              plainText={plainText}
+              truncate={truncate}
+            />
           )
         })}
+
+        {virtualBottomSpacer > 0 && (
+          <div className="feed-list-spacer" style={{ height: virtualBottomSpacer }} aria-hidden="true" />
+        )}
       </div>
 
       <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />

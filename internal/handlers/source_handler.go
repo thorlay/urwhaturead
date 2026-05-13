@@ -167,6 +167,7 @@ func (h *SourceHandler) baseSourceListQuery() *gorm.DB {
 }
 
 func (h *SourceHandler) List(c *gin.Context) {
+	startedAt := time.Now()
 	if err := h.autoHideStaleThreadSources(c.Request.Context(), threadAutoHideAfter); err != nil {
 		internalServerError(c, "auto-hide stale thread sources failed", err)
 		return
@@ -245,9 +246,10 @@ func (h *SourceHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": sources,
 		"meta": gin.H{
-			"limit":  limit,
-			"offset": offset,
-			"count":  len(sources),
+			"limit":      limit,
+			"offset":     offset,
+			"count":      len(sources),
+			"elapsed_ms": time.Since(startedAt).Milliseconds(),
 		},
 	})
 }
