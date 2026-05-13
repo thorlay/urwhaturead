@@ -510,6 +510,18 @@
   border-bottom: 1px solid var(--line);
 }
 
+.ai-library-entry-clickable {
+  cursor: pointer;
+}
+
+.ai-library-entry-clickable .ai-library-entry-expanded {
+  cursor: default;
+}
+
+.ai-library-entry-clickable:hover .ai-library-inset {
+  background: rgba(15, 23, 42, 0.04);
+}
+
 .ai-library-entry.active {
   background: rgba(15, 62, 120, 0.04);
   box-shadow: inset 2px 0 0 rgba(15, 62, 120, 0.68);

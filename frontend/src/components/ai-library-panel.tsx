@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
@@ -132,6 +132,17 @@ function visibleAIStopReason(reason?: string, truncated?: boolean): string {
 
 function joinMetaParts(parts: Array<string | false | null | undefined>): string {
   return parts.filter((part): part is string => Boolean(part)).join(' · ')
+}
+
+function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
+  const target = event.target
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  return Boolean(
+    target.closest('button, a, input, textarea, select, summary, details') ||
+      target.closest('.ai-library-entry-expanded'),
+  )
 }
 
 function splitPinnedSections<T extends { generated_at: string }>(
@@ -536,11 +547,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   <span className="hint">{section.items.length} 条</span>
                 </div>
                 <div className="ai-library-list ai-library-timeline">
-                  {section.items.map((item) => (
+                  {section.items.map((item) => {
+                    const articleKey = `${item.article_id}:${item.generated_at}`
+                    return (
                     <article
-                      ref={attachEntryRef(`${item.article_id}:${item.generated_at}`)}
+                      ref={attachEntryRef(articleKey)}
                       key={`article-summary-${item.article_id}-${item.generated_at}`}
-                      className={`ai-library-entry ${isArticleSelected(item) ? 'active' : ''}`}
+                      className={`ai-library-entry ai-library-entry-clickable ${isArticleSelected(item) ? 'active' : ''}`}
+                      aria-expanded={isArticleSelected(item)}
+                      onClick={(event) => {
+                        if (shouldIgnoreEntryToggle(event)) {
+                          return
+                        }
+                        toggleArticleSelection(articleKey)
+                      }}
                     >
                       <div className="ai-library-entry-rail" aria-hidden="true">
                         <span className="ai-library-entry-dot" />
@@ -551,7 +571,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                             <button
                               type="button"
                               className="ai-library-entry-select"
-                              onClick={() => toggleArticleSelection(`${item.article_id}:${item.generated_at}`)}
+                              onClick={() => toggleArticleSelection(articleKey)}
                             >
                               <span className="ai-library-entry-title">{item.title}</span>
                             </button>
@@ -567,15 +587,15 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => onTogglePinnedKey(`article:${item.article_id}:${item.generated_at}`)}
+                              onClick={() => onTogglePinnedKey(`article:${articleKey}`)}
                             >
-                              {pinnedKeySet.has(`article:${item.article_id}:${item.generated_at}`) ? '取消固定' : '固定'}
+                              {pinnedKeySet.has(`article:${articleKey}`) ? '取消固定' : '固定'}
                             </Button>
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => toggleArticleSelection(`${item.article_id}:${item.generated_at}`)}
+                              onClick={() => toggleArticleSelection(articleKey)}
                             >
                               {isArticleSelected(item) ? '收起' : '展开'}
                             </Button>
@@ -616,7 +636,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                         )}
                       </div>
                     </article>
-                  ))}
+                    )
+                  })}
                 </div>
               </section>
             ))}
