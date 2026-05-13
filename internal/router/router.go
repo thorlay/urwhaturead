@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"time"
 
 	"quick/internal/aisummary"
 	"quick/internal/handlers"
@@ -25,6 +26,7 @@ func New(
 	feedBriefingRateLimitPerHour int,
 	feedBriefingCooldownSec int,
 ) *gin.Engine {
+	startedAt := time.Now().UTC()
 	engine := gin.New()
 	engine.Use(gin.Logger(), gin.Recovery())
 
@@ -64,6 +66,11 @@ func New(
 
 	adminStatusHandler := handlers.NewAdminStatusHandler(db, backoffMaxFactor)
 	adminStatusHandler.RegisterRoutes(adminAPI.Group("/admin"))
+	systemStatusHandler := handlers.NewSystemStatusHandler(db, summaryClient, handlers.SystemStatusOptions{
+		RSSHubBaseURL: rsshubBaseURL,
+		StartedAt:     startedAt,
+	})
+	systemStatusHandler.RegisterRoutes(adminAPI.Group("/system"))
 	feedHandler.RegisterWriteRoutes(adminAPI.Group("/feed"))
 	articleHandler.RegisterWriteRoutes(adminAPI.Group("/articles"))
 	sourceHandler.RegisterWriteRoutes(adminAPI.Group("/sources"))

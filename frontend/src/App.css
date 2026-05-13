@@ -1112,6 +1112,69 @@
   margin-top: 0.85rem;
 }
 
+.system-status-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.78rem 0 0.95rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.system-status-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.system-status-head h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.92rem;
+}
+
+.system-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.system-status-card {
+  display: grid;
+  gap: 0.38rem;
+  min-height: 5.2rem;
+  padding: 0.64rem 0.68rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.system-status-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.84rem;
+}
+
+.system-status-ok {
+  border-color: rgba(22, 101, 52, 0.22);
+}
+
+.system-status-warn {
+  border-color: rgba(180, 83, 9, 0.32);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.system-status-error {
+  border-color: rgba(185, 28, 28, 0.34);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.system-status-disabled,
+.system-status-unknown {
+  background: rgba(0, 0, 0, 0.018);
+}
+
 .source-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3336,6 +3399,7 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 
+  .system-status-grid,
   .source-status-grid {
     grid-template-columns: 1fr;
   }

@@ -182,6 +182,24 @@ export type SourceStatusResponse = {
   }
 }
 
+export type SystemComponentStatus = {
+  status: 'ok' | 'warn' | 'error' | 'disabled' | string
+  detail?: string
+  latency_ms?: number
+}
+
+export type SystemStatusResponse = {
+  data: {
+    api: SystemComponentStatus
+    db: SystemComponentStatus
+    rsshub: SystemComponentStatus
+    ai: SystemComponentStatus
+    version: string
+    uptime_sec: number
+    checked_at: string
+  }
+}
+
 export type ArticleSummaryResponse = {
   data: {
     article_id: number

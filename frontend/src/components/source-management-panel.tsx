@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { getSystemStatus } from '../api'
 import type {
   BatchCreateResult,
   BulkSourceAction,
@@ -12,7 +13,7 @@ import type {
   SourceQuickView,
   SourceSortKey,
 } from '../hooks/use-source-management-state'
-import type { DiscoverSourceCandidate, Source, SourceStatus } from '../types'
+import type { DiscoverSourceCandidate, Source, SourceStatus, SystemComponentStatus, SystemStatusResponse } from '../types'
 
 type SourceManagementPanelProps = {
   aiModel: string
@@ -244,6 +245,29 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
   const [manageTab, setManageTab] = useState<'sources' | 'status'>('sources')
   const [densityMode, setDensityMode] = useState<'compact' | 'standard' | 'detailed'>('standard')
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse['data'] | null>(null)
+  const [loadingSystemStatus, setLoadingSystemStatus] = useState(false)
+  const [systemStatusError, setSystemStatusError] = useState<string | null>(null)
+
+  const loadSystemStatus = useCallback(async () => {
+    try {
+      setLoadingSystemStatus(true)
+      setSystemStatusError(null)
+      const response = await getSystemStatus()
+      setSystemStatus(response.data)
+    } catch (error) {
+      setSystemStatusError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLoadingSystemStatus(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (manageTab !== 'status' || systemStatus || loadingSystemStatus) {
+      return
+    }
+    void loadSystemStatus()
+  }, [loadSystemStatus, loadingSystemStatus, manageTab, systemStatus])
 
   function handleImportFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -402,6 +426,15 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               type="button"
               variant="outline"
               size="sm"
+              onClick={() => void loadSystemStatus()}
+              disabled={loadingSystemStatus}
+            >
+              {loadingSystemStatus ? '检查中...' : '检查系统'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void onReclassifySources()}
               disabled={reclassifyingSources}
             >
@@ -474,6 +507,15 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </div>
         )}
 
+        {systemStatusError && (
+          <div className="inline-error">
+            <span>系统状态加载失败: {systemStatusError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void loadSystemStatus()}>
+              重试
+            </Button>
+          </div>
+        )}
+
         {failingSourceHighlights.length > 0 && (
           <div className="source-failure-banner" role="status" aria-live="polite">
             <div className="source-failure-banner-main">
@@ -495,6 +537,40 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
 
         {manageTab === 'status' && (
           <section className="source-status-layout">
+            <section className="system-status-panel">
+              <div className="system-status-head">
+                <div>
+                  <h4>系统状态</h4>
+                  <p className="hint">
+                    {systemStatus
+                      ? `版本 ${systemStatus.version} · 运行 ${formatUptime(systemStatus.uptime_sec)} · 检查 ${formatTimeAgo(systemStatus.checked_at)}`
+                      : loadingSystemStatus
+                        ? '正在检查 API、数据库、RSSHub 与 AI。'
+                        : '点击检查系统查看运行状态。'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadSystemStatus()}
+                  disabled={loadingSystemStatus}
+                >
+                  {loadingSystemStatus ? '检查中...' : '重新检查'}
+                </Button>
+              </div>
+              <div className="system-status-grid">
+                {[
+                  ['API', systemStatus?.api],
+                  ['数据库', systemStatus?.db],
+                  ['RSSHub', systemStatus?.rsshub],
+                  ['AI API', systemStatus?.ai],
+                ].map(([label, status]) => (
+                  <SystemStatusCard key={label as string} label={label as string} status={status as SystemComponentStatus | undefined} />
+                ))}
+              </div>
+            </section>
+
             <div className="source-status-grid">
               <article className="source-status-card">
                 <h4>抓取异常关注</h4>
@@ -1108,4 +1184,72 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
       </section>
     </main>
   )
+}
+
+function SystemStatusCard({
+  label,
+  status,
+}: {
+  label: string
+  status?: SystemComponentStatus
+}) {
+  const value = status?.status ?? 'unknown'
+  return (
+    <article className={cn('system-status-card', systemStatusToneClass(value))}>
+      <div className="system-status-card-top">
+        <span>{label}</span>
+        <Badge variant="outline">{systemStatusLabel(value)}</Badge>
+      </div>
+      <p className="source-cell-meta">
+        {status?.detail || '尚未检查'}
+        {typeof status?.latency_ms === 'number' ? ` · ${status.latency_ms}ms` : ''}
+      </p>
+    </article>
+  )
+}
+
+function systemStatusLabel(status: string): string {
+  switch (status) {
+    case 'ok':
+      return '正常'
+    case 'warn':
+      return '警告'
+    case 'error':
+      return '异常'
+    case 'disabled':
+      return '未配置'
+    default:
+      return '未知'
+  }
+}
+
+function systemStatusToneClass(status: string): string {
+  switch (status) {
+    case 'ok':
+      return 'system-status-ok'
+    case 'warn':
+      return 'system-status-warn'
+    case 'error':
+      return 'system-status-error'
+    case 'disabled':
+      return 'system-status-disabled'
+    default:
+      return 'system-status-unknown'
+  }
+}
+
+function formatUptime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '-'
+  }
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (days > 0) {
+    return `${days}d ${hours}h`
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  return `${minutes}m`
 }

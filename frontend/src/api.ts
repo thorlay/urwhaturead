@@ -16,6 +16,7 @@ import type {
   SourceImportResponse,
   SourceStatusResponse,
   SourcesResponse,
+  SystemStatusResponse,
   TrackThreadResponse,
 } from './types'
 
@@ -48,6 +49,16 @@ function buildHeaders(init?: RequestInit): Headers {
     }
   }
   return headers
+}
+
+function buildAdminHeaders(): HeadersInit {
+  const token = getAdminToken()
+  if (!token) {
+    return {}
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -95,6 +106,12 @@ async function readErrorMessage(response: Response): Promise<string> {
 export async function listSources(): Promise<Source[]> {
   const data = await request<SourcesResponse>('/api/v1/sources?limit=100')
   return data.data
+}
+
+export async function getSystemStatus(): Promise<SystemStatusResponse> {
+  return request<SystemStatusResponse>('/api/v1/system/status', {
+    headers: buildAdminHeaders(),
+  })
 }
 
 export async function createSource(payload: {

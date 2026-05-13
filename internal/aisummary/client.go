@@ -68,6 +68,43 @@ func (c *Client) DefaultModel() string {
 	return strings.TrimSpace(c.model)
 }
 
+func (c *Client) Probe(ctx context.Context) error {
+	if c == nil {
+		return ErrNotConfigured
+	}
+
+	payload := c.buildPayload("Reply with OK.", "ping", c.model)
+	payload["max_tokens"] = 16
+	payload["max_completion_tokens"] = 16
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpointURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(c.apiKeyHeader, c.apiKeyPrefix+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request ai probe failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	rawRespBody, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return fmt.Errorf("read ai probe response failed: %w", err)
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("ai probe status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(rawRespBody)))
+	}
+	return nil
+}
+
 const defaultSummarySystemPrompt = "你是一个中文编辑台摘要助手。你的任务不是复述，而是提炼信息。输出中文，优先保留事实、证据、结论、争议和可执行信息；避免空话、套话、模板化过渡句和无根据延伸。不确定的信息明确写“原文未说明”。"
 
 func NewClient(options Options) *Client {
