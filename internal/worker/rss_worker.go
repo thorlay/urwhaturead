@@ -251,7 +251,7 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 		return nil
 	}
 
-	feed, err := w.parser.Parse(bytes.NewReader(result.Body))
+	feed, err := w.parser.Parse(bytes.NewReader(feedextract.SanitizeXML10(result.Body)))
 	if err != nil {
 		message := fmt.Sprintf("parse feed failed: %v", err)
 		fetchLog.ErrorMessage = &message

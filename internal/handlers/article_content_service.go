@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"quick/internal/feedextract"
 	"quick/internal/textclean"
 
 	"github.com/PuerkitoBio/goquery"
@@ -482,7 +483,7 @@ func (s *ArticleContentService) fetchThreadFromFeedURL(ctx context.Context, targ
 		return nil, err
 	}
 
-	feed, err := s.parser.Parse(strings.NewReader(string(body)))
+	feed, err := s.parser.Parse(bytes.NewReader(feedextract.SanitizeXML10(body)))
 	if err != nil {
 		return nil, err
 	}
