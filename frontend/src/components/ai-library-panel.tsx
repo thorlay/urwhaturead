@@ -304,11 +304,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const toggleArticleSelection = (key: string) => {
     setArticleSelectionInitialized(true)
     setSelectedArticleKey((current) => {
-      const next = current === key ? null : key
-      if (next) {
-        setPendingScrollKey(key)
-      }
-      return next
+      return current === key ? null : key
     })
   }
   const toggleBriefingSelection = (key: string) => {
