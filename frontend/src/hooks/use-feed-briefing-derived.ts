@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
+import type { AppliedSourceGroupFilter } from '../lib/app-domain'
 import type { Source } from '../types'
 import { buildFeedBriefingTaskKey, resolveFeedBriefingScopeLabel } from '../lib/summary-task-utils'
 
 type UseFeedBriefingDerivedParams = {
   sourceFilter: string
-  sourceGroupFilter: { key: string; label: string } | null
+  sourceGroupFilter: AppliedSourceGroupFilter | null
   readerSources: Source[]
   visibleFeed: Array<{ id: number }>
   aiModel: string
@@ -64,7 +65,10 @@ export function useFeedBriefingDerived({
   }, [sourceFilterIDs, sourceGroupFilter])
   const sourceFilterChipLabel = useMemo(() => {
     if (!sourceFilter) return ''
-    if (sourceGroupFilter) return `标签: ${sourceGroupFilter.label}`
+    if (sourceGroupFilter) {
+      const prefix = sourceGroupFilter.kind === 'site' || sourceGroupFilter.key.startsWith('site:') ? '站点' : '标签'
+      return `${prefix}: ${sourceGroupFilter.label}`
+    }
     if (sourceFilterIDs.length === 1) {
       const matched = readerSources.find((item) => item.id === sourceFilterIDs[0])
       return matched ? `来源: ${matched.name}` : `来源: ${sourceFilterIDs[0]}`

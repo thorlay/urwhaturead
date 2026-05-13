@@ -1,12 +1,7 @@
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
-import type { SidebarTagFilterMode } from '../lib/app-domain'
+import type { AppliedSourceGroupFilter, SidebarTagFilterMode } from '../lib/app-domain'
 import type { ArticleDetail, Source } from '../types'
-
-type AppliedSourceGroupFilter = {
-  key: string
-  label: string
-}
 
 type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
 
@@ -143,6 +138,7 @@ export function useReaderSidebarControls({
     setSourceGroupFilter({
       key: `tags:${mode}:${normalized.join(',')}`,
       label,
+      kind: 'tag',
     })
     setSourceFilter(sourceIDValue)
     setFeedCursor('')
@@ -159,6 +155,35 @@ export function useReaderSidebarControls({
     sidebarTagFilterMode,
     sourceGroups,
     sourceTagList,
+  ])
+
+  const applySourceGroupFilterFromSidebar = useCallback((group: { key: string; label: string; sourceIDs: number[] }) => {
+    cancelSidebarTagFeedReload()
+    resetFeedBriefingState()
+    const sourceIDValue = group.sourceIDs.length > 0 ? [...group.sourceIDs].sort((left, right) => left - right).join(',') : '0'
+    setSourceGroupFilter({
+      key: group.key,
+      label: group.label,
+      kind: 'site',
+    })
+    setSourceFilter(sourceIDValue)
+    setSelectedArticle(null)
+    setSelectedArticleID(null)
+    setFeedCursor('')
+    void loadFeed(false, { sourceID: sourceIDValue, cursor: '' })
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
+      setShowSubscriptionSidebar(false)
+    }
+  }, [
+    cancelSidebarTagFeedReload,
+    loadFeed,
+    resetFeedBriefingState,
+    setFeedCursor,
+    setSelectedArticle,
+    setSelectedArticleID,
+    setShowSubscriptionSidebar,
+    setSourceFilter,
+    setSourceGroupFilter,
   ])
 
   const toggleSidebarTagFilter = useCallback((tagKey: string) => {
@@ -194,6 +219,7 @@ export function useReaderSidebarControls({
 
   return {
     applySourceFilterFromSidebar,
+    applySourceGroupFilterFromSidebar,
     registerSidebarSourceItemRef,
     applySidebarTagFilters,
     toggleSidebarTagFilter,

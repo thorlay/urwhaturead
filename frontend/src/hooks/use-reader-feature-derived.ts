@@ -4,7 +4,7 @@ import { useFeedBriefingDerived } from './use-feed-briefing-derived'
 import { useReaderStream } from './use-reader-stream'
 import { useSummaryTaskView } from './use-summary-task-view'
 import { threadPreviewCommentLimit } from '../lib/app-domain'
-import type { AppTab, SummaryTask } from '../lib/app-domain'
+import type { AppliedSourceGroupFilter, AppTab, SummaryTask } from '../lib/app-domain'
 import {
   formatReplyCount,
   formatTimeAgo,
@@ -28,7 +28,7 @@ type UseReaderFeatureDerivedParams = {
   keyword: string
   tagFilter: string
   sourceFilter: string
-  sourceGroupFilter: { key: string; label: string } | null
+  sourceGroupFilter: AppliedSourceGroupFilter | null
   mutedSiteKeys: string[]
   aiModel: string
   feedBriefing: string

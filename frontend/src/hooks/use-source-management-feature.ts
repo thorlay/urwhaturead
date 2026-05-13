@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { Notice } from '../lib/app-domain'
+import type { AppliedSourceGroupFilter, Notice } from '../lib/app-domain'
 import type { ArticleDetail, Source } from '../types'
 import { useSourceManagementActions } from './use-source-management-actions'
 import type { useSourceManagementState } from './use-source-management-state'
@@ -29,7 +29,7 @@ type UseSourceManagementFeatureParams = {
   setSelectedArticleID: Dispatch<SetStateAction<number | null>>
   setPendingDeleteSource: Dispatch<SetStateAction<Source | null>>
   setSourceFilter: Dispatch<SetStateAction<string>>
-  setSourceGroupFilter: Dispatch<SetStateAction<{ key: string; label: string } | null>>
+  setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
   setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
   loadSources: () => Promise<void>
   loadFeed: (append?: boolean, overrides?: FeedLoadOverrides) => Promise<void>

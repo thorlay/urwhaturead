@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ReaderWorkspaceProps } from '@/components/reader-workspace'
+import type { AppliedSourceGroupFilter } from '../lib/app-domain'
 
 type FeedProps = ReaderWorkspaceProps['feedProps']
 
@@ -71,7 +72,7 @@ type UseReaderWorkspaceFeedPropsParams = {
   setShowFeedImages: Dispatch<SetStateAction<boolean>>
   setShowFeedSearch: Dispatch<SetStateAction<boolean>>
   setShowAdvancedFilters: Dispatch<SetStateAction<boolean>>
-  setSourceGroupFilter: Dispatch<SetStateAction<{ key: string; label: string } | null>>
+  setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
   setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
   setSourceFilter: Dispatch<SetStateAction<string>>
 }

@@ -18,6 +18,7 @@ export type SourceGroup = {
 export type AppliedSourceGroupFilter = {
   key: string
   label: string
+  kind?: 'tag' | 'site'
 }
 
 export type SourceContextMenuState = {

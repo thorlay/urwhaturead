@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
-import type { Notice, SidebarTagFilterMode } from '../lib/app-domain'
+import type { AppliedSourceGroupFilter, Notice, SidebarTagFilterMode } from '../lib/app-domain'
 import type { ArticleDetail } from '../types'
 
 type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
@@ -19,7 +19,7 @@ type UseReaderFilterControlsParams = {
   setSourceFilter: Dispatch<SetStateAction<string>>
   setUnreadOnly: Dispatch<SetStateAction<boolean>>
   setFavoriteOnly: Dispatch<SetStateAction<boolean>>
-  setSourceGroupFilter: Dispatch<SetStateAction<{ key: string; label: string } | null>>
+  setSourceGroupFilter: Dispatch<SetStateAction<AppliedSourceGroupFilter | null>>
   setSidebarTagFilters: Dispatch<SetStateAction<string[]>>
   setSidebarTagFilterMode: Dispatch<SetStateAction<SidebarTagFilterMode>>
   setMutedSiteKeys: Dispatch<SetStateAction<string[]>>

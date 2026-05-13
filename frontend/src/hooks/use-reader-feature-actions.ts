@@ -342,6 +342,7 @@ export function useReaderFeatureActions({
 
   const {
     applySourceFilterFromSidebar,
+    applySourceGroupFilterFromSidebar,
     registerSidebarSourceItemRef,
     applySidebarTagFilters,
     toggleSidebarTagFilter,
@@ -398,6 +399,7 @@ export function useReaderFeatureActions({
     onChangeAIModel,
     toggleSiteMuted,
     applySourceFilterFromSidebar,
+    applySourceGroupFilterFromSidebar,
     registerSidebarSourceItemRef,
     applySidebarTagFilters,
     toggleSidebarTagFilter,

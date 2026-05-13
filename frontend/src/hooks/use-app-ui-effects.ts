@@ -116,6 +116,7 @@ export function useAppUIEffects({
   useEffect(() => {
     if (!sourceGroupFilter) return
     if (sourceGroupFilter.key.startsWith('tags:')) return
+    if (sourceGroupFilter.key.startsWith('site:')) return
     const exists = sourceGroups.some((group) => group.key === sourceGroupFilter.key)
     if (exists) return
     setSourceGroupFilter(null)

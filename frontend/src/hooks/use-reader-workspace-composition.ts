@@ -52,6 +52,7 @@ export function useReaderWorkspaceComposition({
   const {
     sourceFilter,
     applySourceFilterFromSidebar,
+    applySourceGroupFilterFromSidebar,
     switchSidebarTagFilterMode,
     applySidebarTagFilters,
     toggleSidebarTagFilter,
@@ -172,6 +173,7 @@ export function useReaderWorkspaceComposition({
     showAllSidebarTags,
     sidebarTagCollapseCount,
     sidebarVisibleFeedSources,
+    sourceGroupFilterKey: sourceGroupFilter?.key ?? '',
     isSourceGroupFilterActive: Boolean(sourceGroupFilter),
     readerTrackedSources,
     showTrackedSidebar,
@@ -179,6 +181,7 @@ export function useReaderWorkspaceComposition({
     hasMoreTrackedSidebarSources,
     showAllTrackedSidebar,
     onApplySourceFilterFromSidebar: applySourceFilterFromSidebar,
+    onApplySourceGroupFilterFromSidebar: applySourceGroupFilterFromSidebar,
     onSwitchSidebarTagFilterMode: switchSidebarTagFilterMode,
     onApplySidebarTagFilters: applySidebarTagFilters,
     onToggleSidebarTagFilter: toggleSidebarTagFilter,

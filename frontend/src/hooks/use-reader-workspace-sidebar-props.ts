@@ -14,6 +14,7 @@ type UseReaderWorkspaceSidebarPropsParams = {
   showAllSidebarTags: SidebarProps['showAllSidebarTags']
   sidebarTagCollapseCount: SidebarProps['sidebarTagCollapseCount']
   sidebarVisibleFeedSources: SidebarProps['sidebarVisibleFeedSources']
+  sourceGroupFilterKey: SidebarProps['sourceGroupFilterKey']
   isSourceGroupFilterActive: SidebarProps['isSourceGroupFilterActive']
   readerTrackedSources: SidebarProps['readerTrackedSources']
   showTrackedSidebar: SidebarProps['showTrackedSidebar']
@@ -21,6 +22,7 @@ type UseReaderWorkspaceSidebarPropsParams = {
   hasMoreTrackedSidebarSources: SidebarProps['hasMoreTrackedSidebarSources']
   showAllTrackedSidebar: SidebarProps['showAllTrackedSidebar']
   onApplySourceFilterFromSidebar: SidebarProps['onApplySourceFilterFromSidebar']
+  onApplySourceGroupFilterFromSidebar: SidebarProps['onApplySourceGroupFilterFromSidebar']
   onSwitchSidebarTagFilterMode: SidebarProps['onSwitchSidebarTagFilterMode']
   onApplySidebarTagFilters: SidebarProps['onApplySidebarTagFilters']
   onToggleSidebarTagFilter: SidebarProps['onToggleSidebarTagFilter']
@@ -47,6 +49,7 @@ export function useReaderWorkspaceSidebarProps(
     showAllSidebarTags: params.showAllSidebarTags,
     sidebarTagCollapseCount: params.sidebarTagCollapseCount,
     sidebarVisibleFeedSources: params.sidebarVisibleFeedSources,
+    sourceGroupFilterKey: params.sourceGroupFilterKey,
     isSourceGroupFilterActive: params.isSourceGroupFilterActive,
     readerTrackedSources: params.readerTrackedSources,
     showTrackedSidebar: params.showTrackedSidebar,
@@ -55,6 +58,7 @@ export function useReaderWorkspaceSidebarProps(
     showAllTrackedSidebar: params.showAllTrackedSidebar,
     onToggleSubscriptionSidebar: () => params.setShowSubscriptionSidebar((value) => !value),
     onApplySourceFilterFromSidebar: params.onApplySourceFilterFromSidebar,
+    onApplySourceGroupFilterFromSidebar: params.onApplySourceGroupFilterFromSidebar,
     onSwitchSidebarTagFilterMode: params.onSwitchSidebarTagFilterMode,
     onApplySidebarTagFilters: params.onApplySidebarTagFilters,
     onToggleShowAllSidebarTags: () => params.setShowAllSidebarTags((value) => !value),

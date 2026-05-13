@@ -1,6 +1,7 @@
-import { memo, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { resolveSourceSiteKey } from '../lib/app-utils'
 import type { Source } from '../types'
 
 export type SidebarTagFilterMode = 'or' | 'and'
@@ -9,6 +10,14 @@ type SidebarSourceGroup = {
   key: string
   label: string
   sources: Source[]
+}
+
+type SidebarSiteGroup = {
+  key: string
+  label: string
+  sources: Source[]
+  newCount: number
+  clickTotal: number
 }
 
 export type ReaderSubscriptionSidebarProps = {
@@ -22,6 +31,7 @@ export type ReaderSubscriptionSidebarProps = {
   showAllSidebarTags: boolean
   sidebarTagCollapseCount: number
   sidebarVisibleFeedSources: Source[]
+  sourceGroupFilterKey: string
   isSourceGroupFilterActive: boolean
   readerTrackedSources: Source[]
   showTrackedSidebar: boolean
@@ -30,6 +40,7 @@ export type ReaderSubscriptionSidebarProps = {
   showAllTrackedSidebar: boolean
   onToggleSubscriptionSidebar: () => void
   onApplySourceFilterFromSidebar: (sourceID: string, options?: { preserveSidebarTags?: boolean }) => void
+  onApplySourceGroupFilterFromSidebar: (group: { key: string; label: string; sourceIDs: number[] }) => void
   onSwitchSidebarTagFilterMode: (mode: SidebarTagFilterMode) => void
   onApplySidebarTagFilters: (keys: string[]) => void
   onToggleShowAllSidebarTags: () => void
@@ -39,6 +50,28 @@ export type ReaderSubscriptionSidebarProps = {
   onOpenSourceContextMenuAt: (source: Source, x: number, y: number) => void
   onToggleShowTrackedSidebar: () => void
   onToggleShowAllTrackedSidebar: () => void
+}
+
+function sourceNewCount(source: Source): number {
+  return source.new_articles_24h ?? 0
+}
+
+function sourceClickCount(source: Source): number {
+  return source.click_count ?? 0
+}
+
+function parseSourceIDSet(value: string): Set<number> {
+  return new Set(
+    value
+      .split(',')
+      .map((item) => Number.parseInt(item.trim(), 10))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  )
+}
+
+function sameSourceIDSet(selectedIDs: Set<number>, sources: Source[]): boolean {
+  if (selectedIDs.size !== sources.length) return false
+  return sources.every((source) => selectedIDs.has(source.id))
 }
 
 type SubscriptionSourceRowProps = {
@@ -131,6 +164,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
     showAllSidebarTags,
     sidebarTagCollapseCount,
     sidebarVisibleFeedSources,
+    sourceGroupFilterKey,
     isSourceGroupFilterActive,
     readerTrackedSources,
     showTrackedSidebar,
@@ -139,6 +173,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
     showAllTrackedSidebar,
     onToggleSubscriptionSidebar,
     onApplySourceFilterFromSidebar,
+    onApplySourceGroupFilterFromSidebar,
     onSwitchSidebarTagFilterMode,
     onApplySidebarTagFilters,
     onToggleShowAllSidebarTags,
@@ -149,6 +184,66 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
     onToggleShowTrackedSidebar,
     onToggleShowAllTrackedSidebar,
   } = props
+
+  const [expandedSiteGroups, setExpandedSiteGroups] = useState<Set<string>>(() => new Set())
+
+  const selectedSourceIDs = useMemo(() => parseSourceIDSet(sourceFilter), [sourceFilter])
+
+  const sidebarSiteGroups = useMemo<SidebarSiteGroup[]>(() => {
+    const groupMap = new Map<string, SidebarSiteGroup>()
+    for (const source of sidebarVisibleFeedSources) {
+      const siteKey = resolveSourceSiteKey(source)
+      const key = `site:${siteKey}`
+      const bucket = groupMap.get(key)
+      if (bucket) {
+        bucket.sources.push(source)
+        bucket.newCount += sourceNewCount(source)
+        bucket.clickTotal += sourceClickCount(source)
+        continue
+      }
+      groupMap.set(key, {
+        key,
+        label: siteKey,
+        sources: [source],
+        newCount: sourceNewCount(source),
+        clickTotal: sourceClickCount(source),
+      })
+    }
+    const groups = Array.from(groupMap.values()).map((group) => ({
+      ...group,
+      sources: [...group.sources].sort((left, right) => {
+        const byNew = sourceNewCount(right) - sourceNewCount(left)
+        if (byNew !== 0) return byNew
+        const byClick = sourceClickCount(right) - sourceClickCount(left)
+        if (byClick !== 0) return byClick
+        return left.name.localeCompare(right.name)
+      }),
+    }))
+    groups.sort((left, right) => {
+      const byNew = right.newCount - left.newCount
+      if (byNew !== 0) return byNew
+      const byCount = right.sources.length - left.sources.length
+      if (byCount !== 0) return byCount
+      const byClick = right.clickTotal - left.clickTotal
+      if (byClick !== 0) return byClick
+      return left.label.localeCompare(right.label)
+    })
+    return groups
+  }, [sidebarVisibleFeedSources])
+
+  const toggleSiteGroup = useCallback((event: ReactMouseEvent<HTMLButtonElement>, groupKey: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setExpandedSiteGroups((previous) => {
+      const next = new Set(previous)
+      if (next.has(groupKey)) {
+        next.delete(groupKey)
+      } else {
+        next.add(groupKey)
+      }
+      return next
+    })
+  }, [])
 
   return (
     <aside className={`panel subscription-sidebar ${showSubscriptionSidebar ? 'open' : 'collapsed'}`}>
@@ -257,17 +352,76 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
               <p className="hint">当前标签下无来源</p>
             ) : (
               <div className="subscription-items">
-                {sidebarVisibleFeedSources.map((source) => (
-                  <SubscriptionSourceRow
-                    key={source.id}
-                    source={source}
-                    active={!isSourceGroupFilterActive && sourceFilter === String(source.id)}
-                    registerRef={onRegisterSidebarSourceItemRef}
-                    onApplySourceFilterFromSidebar={onApplySourceFilterFromSidebar}
-                    onOpenSourceContextMenu={onOpenSourceContextMenu}
-                    onOpenSourceContextMenuAt={onOpenSourceContextMenuAt}
-                  />
-                ))}
+                {sidebarSiteGroups.map((group) => {
+                  if (group.sources.length === 1) {
+                    const source = group.sources[0]
+                    return (
+                      <SubscriptionSourceRow
+                        key={source.id}
+                        source={source}
+                        active={!isSourceGroupFilterActive && sourceFilter === String(source.id)}
+                        registerRef={onRegisterSidebarSourceItemRef}
+                        onApplySourceFilterFromSidebar={onApplySourceFilterFromSidebar}
+                        onOpenSourceContextMenu={onOpenSourceContextMenu}
+                        onOpenSourceContextMenuAt={onOpenSourceContextMenuAt}
+                      />
+                    )
+                  }
+
+                  const expanded = expandedSiteGroups.has(group.key)
+                  const active = sourceGroupFilterKey === group.key || sameSourceIDSet(selectedSourceIDs, group.sources)
+                  const sourceIDs = group.sources.map((source) => source.id)
+
+                  return (
+                    <section key={group.key} className="subscription-group">
+                      <div className={cn('subscription-group-head', active && 'active')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="subscription-group-title"
+                          onClick={() =>
+                            onApplySourceGroupFilterFromSidebar({
+                              key: group.key,
+                              label: group.label,
+                              sourceIDs,
+                            })
+                          }
+                        >
+                          <span className="subscription-group-name">{group.label}</span>
+                          <span className="subscription-group-meta">
+                            {group.sources.length} 源
+                            {group.newCount > 0 ? ` · ${group.newCount}/24h` : ''}
+                          </span>
+                        </Button>
+                        <button
+                          type="button"
+                          className="subscription-group-toggle"
+                          aria-label={`${expanded ? '收起' : '展开'} ${group.label} 的订阅源`}
+                          aria-expanded={expanded}
+                          onClick={(event) => toggleSiteGroup(event, group.key)}
+                        >
+                          {expanded ? '−' : '+'}
+                        </button>
+                      </div>
+                      {expanded && (
+                        <div className="subscription-group-items">
+                          {group.sources.map((source) => (
+                            <SubscriptionSourceRow
+                              key={source.id}
+                              source={source}
+                              active={!isSourceGroupFilterActive && sourceFilter === String(source.id)}
+                              registerRef={onRegisterSidebarSourceItemRef}
+                              onApplySourceFilterFromSidebar={onApplySourceFilterFromSidebar}
+                              onOpenSourceContextMenu={onOpenSourceContextMenu}
+                              onOpenSourceContextMenuAt={onOpenSourceContextMenuAt}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )
+                })}
               </div>
             )}
           </div>
