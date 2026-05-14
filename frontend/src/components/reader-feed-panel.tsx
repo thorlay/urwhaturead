@@ -10,6 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from 'react'
+import { ChevronDown, MoreHorizontal, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
@@ -305,7 +306,7 @@ const FeedArticleListItem = memo(
                     aria-pressed={isFavorite}
                     onClick={handleToggleFavorite}
                   >
-                    {isFavorite ? '★' : '☆'}
+                    <Star aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
                   </button>
                   {duplicateCountText && <span className="feed-item-compact-burst">{duplicateCountText}</span>}
                   {replyCountText && (
@@ -334,7 +335,8 @@ const FeedArticleListItem = memo(
                     aria-pressed={isFavorite}
                     onClick={handleToggleFavorite}
                   >
-                    {isFavorite ? '已收藏' : '收藏'}
+                    <Star aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                    <span>{isFavorite ? '已收藏' : '收藏'}</span>
                   </button>
                   <span className="feed-sep">·</span>
                   <span>{item.source_tag}</span>
@@ -576,6 +578,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               }}
               disabled={loadingFeedBriefing}
             >
+              <Sparkles aria-hidden="true" />
               {loadingFeedBriefing ? '生成中...' : 'AI 速览'}
             </Button>
             <div ref={feedAIMoreRef} className="feed-ai-more">
@@ -588,7 +591,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 onClick={onToggleFeedAIMoreMenu}
                 disabled={loadingFeedBriefing}
               >
-                更多
+                <MoreHorizontal aria-hidden="true" />
+                <span>更多</span>
               </Button>
               {showFeedAIMoreMenu && (
                 <div className="feed-ai-more-menu" role="menu" aria-label="AI 速览更多操作">
@@ -602,6 +606,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                     }}
                     disabled={loadingFeedBriefing}
                   >
+                    <RotateCcw aria-hidden="true" />
                     重算
                   </button>
                   <button
@@ -710,6 +715,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
       <div className="feed-filter-toggle-row">
         <Button type="button" variant={showFeedSearch || hasActiveFilters ? 'outline' : 'ghost'} size="sm" onClick={onToggleFeedSearch}>
+          <Search aria-hidden="true" />
           {showFeedSearch ? '收起搜索与筛选' : hasActiveFilters ? '搜索与筛选（已启用）' : '搜索与筛选'}
         </Button>
         {hasActiveFilters && !showFeedSearch && <p className="hint">已启用筛选，点击可快速调整。</p>}
@@ -759,6 +765,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           <div className="inline-error">
             <span>聚合流加载失败: {feedError}</span>
             <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoadFeed()}>
+              <RotateCcw aria-hidden="true" />
               重试
             </Button>
           </div>
@@ -823,6 +830,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
       <div className="feed-footer">
         <Button type="button" onClick={onLoadMore} disabled={!hasMoreFeed || loadingFeed}>
+          {hasMoreFeed && !loadingFeed && <ChevronDown aria-hidden="true" />}
           {loadingFeed ? '加载中...' : hasMoreFeed ? '加载更多' : '没有更多了'}
         </Button>
       </div>

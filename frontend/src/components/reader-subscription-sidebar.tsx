@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { resolveSourceSiteKey } from '../lib/app-utils'
@@ -136,7 +137,7 @@ const SubscriptionSourceRow = memo(function SubscriptionSourceRow(props: Subscri
         aria-label={`更多操作：${source.name}`}
         onClick={handleOpenMore}
       >
-        ⋯
+        <MoreHorizontal aria-hidden="true" />
       </button>
     </div>
   )
@@ -256,6 +257,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
           className="subscription-sidebar-toggle"
           onClick={onToggleSubscriptionSidebar}
         >
+          {showSubscriptionSidebar ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
           {showSubscriptionSidebar ? '收起' : '展开'}
         </Button>
       </div>
@@ -318,6 +320,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                       className="subscription-tag-expand"
                       onClick={onToggleShowAllSidebarTags}
                     >
+                      {showAllSidebarTags ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                       {showAllSidebarTags ? '收起标签' : '展开标签'}
                     </Button>
                   )}
@@ -401,7 +404,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                           aria-expanded={expanded}
                           onClick={(event) => toggleSiteGroup(event, group.key)}
                         >
-                          {expanded ? '−' : '+'}
+                          {expanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                         </button>
                       </div>
                       {expanded && (
@@ -462,6 +465,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                       className="tracked-thread-more"
                       onClick={onToggleShowAllTrackedSidebar}
                     >
+                      {showAllTrackedSidebar ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                       {showAllTrackedSidebar ? '仅显示 Top 10' : `显示全部 (${readerTrackedSources.length})`}
                     </Button>
                   )}

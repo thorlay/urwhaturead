@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
+import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
@@ -356,14 +357,17 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <div className="detail-mode-actions">
                 {readerView === 'detail' ? (
                   <Button type="button" variant="outline" size="sm" onClick={handleReturn}>
+                    <ArrowLeft aria-hidden="true" />
                     {returnLabel}
                   </Button>
                 ) : (
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={closeFloatingReader}>
+                      <X aria-hidden="true" />
                       关闭
                     </Button>
                     <Button type="button" variant="outline" size="sm" onClick={openImmersiveReader}>
+                      <Maximize2 aria-hidden="true" />
                       沉浸阅读
                     </Button>
                   </>
@@ -378,6 +382,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   onClick={() => void onGenerateFeedBriefing(false)}
                   disabled={loadingFeedBriefing}
                 >
+                  <Sparkles aria-hidden="true" />
                   {loadingFeedBriefing ? '生成中...' : '更新速览'}
                 </Button>
                 <Button
@@ -387,6 +392,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   onClick={() => void onGenerateFeedBriefing(true)}
                   disabled={loadingFeedBriefing}
                 >
+                  <RotateCcw aria-hidden="true" />
                   强制重算
                 </Button>
               </div>
@@ -471,11 +477,13 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <div className="detail-mode-actions">
                 {readerView === 'detail' ? (
                   <Button type="button" variant="outline" size="sm" onClick={handleReturn}>
+                    <ArrowLeft aria-hidden="true" />
                     {returnLabel}
                   </Button>
                 ) : (
                   <>
                     <Button type="button" variant="outline" size="sm" onClick={closeFloatingReader}>
+                      <X aria-hidden="true" />
                       关闭
                     </Button>
                     <Button
@@ -485,6 +493,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                       onClick={openImmersiveReader}
                       disabled={!selectedArticleID}
                     >
+                      <Maximize2 aria-hidden="true" />
                       沉浸阅读
                     </Button>
                   </>
@@ -492,6 +501,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               </div>
               <Button asChild variant="outline" size="sm" className="detail-open-link">
                 <a href={selectedArticle.link} target="_blank" rel="noreferrer">
+                  <ExternalLink aria-hidden="true" />
                   打开原文
                 </a>
               </Button>
@@ -502,6 +512,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   size="sm"
                   onClick={() => onToggleFavoriteArticle(selectedArticleID)}
                 >
+                  <Star aria-hidden="true" fill={isFavoriteArticle ? 'currentColor' : 'none'} />
                   {isFavoriteArticle ? '已收藏' : '收藏'}
                 </Button>
               )}
@@ -518,6 +529,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                     }}
                     disabled={loadingArticleSummary}
                   >
+                    <Sparkles aria-hidden="true" />
                     {loadingArticleSummary ? '生成中...' : '生成 AI 摘要'}
                   </Button>
                   {hasDetailMoreActions && (
@@ -530,6 +542,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                         aria-expanded={showDetailMoreMenu}
                         onClick={toggleDetailMoreMenu}
                       >
+                        <MoreHorizontal aria-hidden="true" />
                         更多
                       </Button>
                       {showDetailMoreMenu && (
@@ -558,6 +571,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                               }}
                               disabled={loadingArticleSummary}
                             >
+                              <RotateCcw aria-hidden="true" />
                               强制重算
                             </button>
                           )}
@@ -652,6 +666,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <div className="detail-section-head">
                 <h4>阅读前摘要</h4>
                 <Button type="button" variant="ghost" size="sm" onClick={() => setDetailView('summary')}>
+                  <ChevronDown aria-hidden="true" />
                   展开全文摘要
                 </Button>
               </div>
@@ -708,6 +723,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                 <h4>抓取原文</h4>
                 <Button asChild variant="outline" size="sm" className="detail-open-link">
                   <a href={selectedArticle.external.url} target="_blank" rel="noreferrer">
+                    <ExternalLink aria-hidden="true" />
                     打开抓取原文
                   </a>
                 </Button>
@@ -761,6 +777,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                       className="comment-toggle"
                       onClick={onToggleExpandedThreadComments}
                     >
+                      {expandedThreadComments ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                       {expandedThreadComments ? '收起评论' : `查看全部评论（${threadComments.length}）`}
                     </Button>
                   )}

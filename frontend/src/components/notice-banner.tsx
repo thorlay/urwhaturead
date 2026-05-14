@@ -1,6 +1,7 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { X } from 'lucide-react'
 
 type Notice = {
   kind: 'info' | 'error'
@@ -23,8 +24,9 @@ export function NoticeBanner(props: NoticeBannerProps) {
     <Alert className={cn('notice', notice.kind === 'error' && 'border-destructive/60 bg-destructive/5')}>
       <div className="flex items-center justify-between gap-3">
         <AlertDescription className={notice.kind === 'error' ? 'text-destructive' : undefined}>{notice.text}</AlertDescription>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          关闭
+        <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭通知">
+          <X aria-hidden="true" />
+          <span className="sr-only">关闭</span>
         </Button>
       </div>
     </Alert>

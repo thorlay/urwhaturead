@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { ReaderFeedPanel, type ReaderFeedPanelProps } from '@/components/reader-feed-panel'
 import { ReaderSubscriptionSidebar, type ReaderSubscriptionSidebarProps } from '@/components/reader-subscription-sidebar'
 import type { ReaderDetailPanelProps } from '@/components/reader-detail-panel'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 
 const ReaderDetailPanel = lazy(async () => {
   const module = await import('@/components/reader-detail-panel')
@@ -42,6 +43,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           aria-label={showSubscriptionSidebar ? '收起来源与标签' : '打开来源与标签'}
           onClick={onToggleSubscriptionSidebar}
         >
+          {showSubscriptionSidebar ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
           {showSubscriptionSidebar ? '收起来源' : '来源'}
         </Button>
       </div>

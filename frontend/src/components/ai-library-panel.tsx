@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason } from '../lib/app-utils'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, ExternalLink, Pin, PinOff, RefreshCw, Search } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -433,9 +434,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
               }}
             />
             <Button type="button" onClick={onApplySearch} disabled={loading}>
+              <Search aria-hidden="true" />
               搜索
             </Button>
             <Button type="button" variant="outline" onClick={onRefresh} disabled={loading}>
+              <RefreshCw aria-hidden="true" />
               {loading ? '更新中...' : '刷新'}
             </Button>
           </div>
@@ -585,6 +588,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               size="sm"
                               onClick={() => onTogglePinnedKey(`article:${articleKey}`)}
                             >
+                              {pinnedKeySet.has(`article:${articleKey}`) ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
                               {pinnedKeySet.has(`article:${articleKey}`) ? '取消固定' : '固定'}
                             </Button>
                             <Button
@@ -593,9 +597,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               size="sm"
                               onClick={() => toggleArticleSelection(articleKey)}
                             >
+                              {isArticleSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                               {isArticleSelected(item) ? '收起' : '展开'}
                             </Button>
                             <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
+                              <ExternalLink aria-hidden="true" />
                               打开文章
                             </Button>
                           </div>
@@ -604,6 +610,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           <div className="ai-library-entry-expanded">
                             <div className="ai-library-entry-nav">
                               <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentArticle(-1)} disabled={selectedArticleIndex <= 0}>
+                                <ArrowLeft aria-hidden="true" />
                                 上一条
                               </Button>
                               <Button
@@ -613,6 +620,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 onClick={() => selectAdjacentArticle(1)}
                                 disabled={selectedArticleIndex < 0 || selectedArticleIndex >= flatArticleItems.length - 1}
                               >
+                                <ArrowRight aria-hidden="true" />
                                 下一条
                               </Button>
                             </div>
@@ -693,12 +701,15 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 size="sm"
                                 onClick={() => onTogglePinnedKey(`briefing:${item.digest_key}:${item.generated_at}`)}
                               >
+                                {pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`) ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
                                 {pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`) ? '取消固定' : '固定'}
                               </Button>
                               <Button type="button" variant="ghost" size="sm" onClick={() => toggleBriefingSelection(briefingKey)}>
+                                {isBriefingSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                                 {isBriefingSelected(item) ? '收起' : '展开'}
                               </Button>
                               <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
+                                <ExternalLink aria-hidden="true" />
                                 打开速览
                               </Button>
                             </div>
@@ -707,6 +718,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                             <div className="ai-library-entry-expanded">
                               <div className="ai-library-entry-nav">
                                 <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentBriefing(-1)} disabled={selectedBriefingIndex <= 0}>
+                                  <ArrowLeft aria-hidden="true" />
                                   上一条
                                 </Button>
                                 <Button
@@ -716,6 +728,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                   onClick={() => selectAdjacentBriefing(1)}
                                   disabled={selectedBriefingIndex < 0 || selectedBriefingIndex >= flatBriefingItems.length - 1}
                                 >
+                                  <ArrowRight aria-hidden="true" />
                                   下一条
                                 </Button>
                               </div>
@@ -792,6 +805,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                           }))
                                         }
                                       >
+                                        {articleRefsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                                         {articleRefsExpanded ? '收起关联文章' : `展开全部 ${item.article_refs.length} 条关联文章`}
                                       </button>
                                     )}
