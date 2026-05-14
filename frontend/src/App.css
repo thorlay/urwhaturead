@@ -135,7 +135,7 @@
 
 .view-tab.active {
   color: var(--text);
-  border-bottom-color: rgba(15, 62, 120, 0.72);
+  border-bottom-color: rgba(0, 0, 0, 0.72);
 }
 
 .notice {
@@ -903,7 +903,7 @@
 
 .source-manage-nav-tab.active {
   color: var(--text);
-  border-bottom-color: rgba(15, 62, 120, 0.72);
+  border-bottom-color: rgba(0, 0, 0, 0.72);
 }
 
 .source-toolbar {
@@ -947,9 +947,9 @@
 }
 
 .source-quickview-pill.active {
-  color: #0f3e78;
-  border-color: rgba(15, 62, 120, 0.22);
-  background: rgba(15, 62, 120, 0.05);
+  color: var(--text);
+  border-color: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.045);
 }
 
 .source-toolbar-inline-group {
@@ -2720,7 +2720,7 @@
 .detail-page .detail-section-tab.active {
   background: transparent;
   box-shadow: none;
-  border-bottom-color: rgba(15, 62, 120, 0.72);
+  border-bottom-color: rgba(0, 0, 0, 0.72);
 }
 
 .detail-reading-controls {
@@ -2763,8 +2763,8 @@
 }
 
 .detail-reading-control.active {
-  background: rgba(15, 62, 120, 0.09);
-  color: #0f3e78;
+  background: rgba(0, 0, 0, 0.07);
+  color: var(--text);
 }
 
 .ai-model-hint {
@@ -4029,7 +4029,7 @@ button {
   padding: 0;
   border: none;
   background: transparent;
-  color: #0f3e78;
+  color: var(--text);
   font: inherit;
   font-size: 0.8rem;
   font-weight: 560;
@@ -4037,5 +4037,5 @@ button {
 }
 
 .ai-library-detail-article-toggle:hover {
-  color: #102235;
+  color: #333;
 }
