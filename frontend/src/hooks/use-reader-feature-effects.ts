@@ -30,6 +30,8 @@ type UseReaderFeatureEffectsParams = {
   setArticleSummaryError: Dispatch<SetStateAction<string | null>>
   setNotice: (notice: Notice) => void
   activeTab: AppTab
+  unreadOnly: boolean
+  favoriteOnly: boolean
   loadingFeed: boolean
   loadingFeedBriefing: boolean
   activeFeedBriefingAnchorArticleIDs: number[]
@@ -89,6 +91,8 @@ export function useReaderFeatureEffects({
   setArticleSummaryError,
   setNotice,
   activeTab,
+  unreadOnly,
+  favoriteOnly,
   loadingFeed,
   loadingFeedBriefing,
   activeFeedBriefingAnchorArticleIDs,
@@ -181,6 +185,7 @@ export function useReaderFeatureEffects({
 
   useReaderRuntimeEffects({
     activeTab,
+    canAutoLoadFeed: !unreadOnly && !favoriteOnly,
     hasMoreFeed,
     loadingFeed,
     feedCursor,

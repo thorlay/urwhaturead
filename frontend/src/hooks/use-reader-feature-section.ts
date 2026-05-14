@@ -292,6 +292,8 @@ export function useReaderFeatureSection({
     setArticleSummaryError,
     setNotice: (notice) => setNotice(notice),
     activeTab,
+    unreadOnly,
+    favoriteOnly,
     loadingFeed,
     loadingFeedBriefing,
     activeFeedBriefingAnchorArticleIDs,

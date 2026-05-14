@@ -4,6 +4,7 @@ import type { AppTab, ReaderSession, ReaderView } from '../lib/app-domain'
 
 type UseReaderRuntimeEffectsParams = {
   activeTab: AppTab
+  canAutoLoadFeed: boolean
   hasMoreFeed: boolean
   loadingFeed: boolean
   feedCursor: string
@@ -21,6 +22,7 @@ type UseReaderRuntimeEffectsParams = {
 
 export function useReaderRuntimeEffects({
   activeTab,
+  canAutoLoadFeed,
   hasMoreFeed,
   loadingFeed,
   feedCursor,
@@ -38,7 +40,7 @@ export function useReaderRuntimeEffects({
   useEffect(() => {
     const target = feedAutoLoadRef.current
     if (!target) return
-    if (activeTab !== 'reader' || !hasMoreFeed) return
+    if (activeTab !== 'reader' || !canAutoLoadFeed || !hasMoreFeed) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -63,6 +65,7 @@ export function useReaderRuntimeEffects({
     return () => observer.disconnect()
   }, [
     activeTab,
+    canAutoLoadFeed,
     hasMoreFeed,
     loadingFeed,
     feedCursor,

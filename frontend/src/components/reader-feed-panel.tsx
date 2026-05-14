@@ -552,6 +552,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
   const virtualBottomSpacer = shouldVirtualizeFeed
     ? Math.max(0, (listRows.length - virtualEnd) * estimatedFeedRowHeight)
     : 0
+  const isInitialFeedLoading = loadingFeed && feed.length === 0
+  const emptyFeedMessage = favoriteOnly
+    ? '还没有收藏文章。点击文章旁边的星标后会出现在这里。'
+    : unreadOnly
+      ? '当前没有未读文章。'
+      : feed.length > 0
+        ? '当前筛选下没有文章，可清空筛选或恢复隐藏的网站。'
+        : '暂无文章'
 
   return (
     <section
@@ -752,8 +760,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
       <p className="feed-shortcuts">快捷键: `j` / `k` 切换，`o` 打开原文，`esc` 关闭浮窗</p>
 
-      <div ref={feedListRef} className={cn('feed-list', loadingFeed && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}>
-        {loadingFeed && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+      <div ref={feedListRef} className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}>
+        {isInitialFeedLoading && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
           <>
             <FeedSkeleton />
             <FeedSkeleton />
@@ -761,7 +769,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </>
         )}
 
-        {feedError && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+        {feedError && feed.length === 0 && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
           <div className="inline-error">
             <span>聚合流加载失败: {feedError}</span>
             <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoadFeed()}>
@@ -771,8 +779,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </div>
         )}
 
-        {!loadingFeed && !feedError && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
-          <p className="hint">{feed.length > 0 ? '当前网站都被临时隐藏了，可点击“恢复全部”。' : '暂无文章'}</p>
+        {!isInitialFeedLoading && !feedError && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+          <p className="hint">{emptyFeedMessage}</p>
         )}
 
         {virtualTopSpacer > 0 && <div className="feed-list-spacer" style={{ height: virtualTopSpacer }} aria-hidden="true" />}
