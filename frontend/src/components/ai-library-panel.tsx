@@ -408,9 +408,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         <div className="ai-library-hero">
           <div className="ai-library-head">
             <div>
-              <p className="ai-library-kicker">AI Archive</p>
-              <h2>AI 内容库</h2>
-              <p className="hint">回看你已经生成过的文章摘要和聚合速览。这里更像阅读档案馆，不是任务日志。</p>
+              <p className="ai-library-kicker">AI Reading</p>
+              <h2>AI 速览与摘要</h2>
+              <p className="hint">回看已经生成过的聚合速览和文章摘要，按阅读流的方式继续浏览。</p>
             </div>
             <div className="ai-library-head-meta">
               <span className="topbar-model-chip" title={aiModel}>
