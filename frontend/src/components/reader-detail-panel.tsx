@@ -16,7 +16,7 @@ type ReaderSummaryTask = {
   error?: string
 } | null
 
-type DetailView = 'read' | 'summary' | 'comments' | 'capture'
+type DetailView = 'main' | 'comments' | 'capture'
 type ReadingFontSize = 'compact' | 'default' | 'large'
 type ReadingWidth = 'narrow' | 'default' | 'wide'
 type ReadingLineHeight = 'tight' | 'default' | 'loose'
@@ -213,33 +213,25 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
     view: DetailView
   }>({
     articleID: null,
-    view: 'read',
+    view: 'main',
   })
   const [readingPreferences, setReadingPreferences] = useState<ReadingPreferences>(readStoredReadingPreferences)
 
   const hasAIArticleSummary = Boolean(articleSummary.trim())
   const hasThreadCommentsView = Boolean(selectedArticle?.thread)
   const hasCapturedExternal = Boolean(selectedArticle?.external?.content)
-  const hasArticleBody = Boolean(
-    (isThreadArticle && threadPrimaryBody) ||
-      selectedArticle?.content_html ||
-      selectedArticle?.content ||
-      selectedArticle?.summary,
-  )
-
   const detailViewOptions = useMemo(
     () =>
       [
-        { key: 'summary' as const, label: hasAIArticleSummary ? 'AI 摘要' : '摘要', enabled: true },
-        { key: 'read' as const, label: '正文', enabled: hasArticleBody },
+        { key: 'main' as const, label: '阅读', enabled: true },
         { key: 'comments' as const, label: '评论', enabled: hasThreadCommentsView },
         { key: 'capture' as const, label: '抓取原文', enabled: hasCapturedExternal },
       ].filter((item) => item.enabled),
-    [hasAIArticleSummary, hasArticleBody, hasCapturedExternal, hasThreadCommentsView],
+    [hasCapturedExternal, hasThreadCommentsView],
   )
   const activeArticleID = selectedArticle?.id ?? null
   const detailView = useMemo<DetailView>(() => {
-    const defaultView = detailViewOptions.find((item) => item.key === 'summary')?.key ?? detailViewOptions[0]?.key ?? 'read'
+    const defaultView = detailViewOptions.find((item) => item.key === 'main')?.key ?? detailViewOptions[0]?.key ?? 'main'
     const requestedView = detailViewPreference.articleID === activeArticleID ? detailViewPreference.view : defaultView
     if (detailViewOptions.some((item) => item.key === requestedView)) {
       return requestedView
@@ -662,80 +654,64 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             </div>
           )}
 
-          {detailView === 'read' && hasAIArticleSummary && (
-            <section className="ai-summary detail-summary-rail">
-              <div className="detail-section-head">
-                <h4>阅读前摘要</h4>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setDetailView('summary')}>
-                  <ChevronDown aria-hidden="true" />
-                  展开全文摘要
-                </Button>
-              </div>
-              {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
-              <div className="detail-summary-preview">
-                <MarkdownBlock content={articleSummary} />
-              </div>
-            </section>
-          )}
-
-          {detailView === 'read' && (
-            <section className="detail-section detail-reading-section">
-              <div className="detail-section-head">
-                <h4>{isThreadArticle ? '主帖正文' : '正文'}</h4>
-                {selectedArticle.summary && !selectedArticle.content && !selectedArticle.content_html && !threadPrimaryBody && (
-                  <span className="hint">当前展示原始摘要</span>
-                )}
-              </div>
-              {isThreadArticle && threadPrimaryBody ? (
-                <PlainTextBlock content={threadPrimaryBody} className="reading-block prose" />
-              ) : selectedArticle.content_html ? (
-                <SafeHTMLBlock content={selectedArticle.content_html} baseURL={selectedArticle.link} />
-              ) : selectedArticle.content ? (
-                <PlainTextBlock content={selectedArticle.content} className="reading-block prose" />
-              ) : selectedArticle.summary ? (
-                <PlainTextBlock content={selectedArticle.summary} className="reading-block" />
-              ) : (
-                <p className="hint">暂无可展示正文。</p>
-              )}
-            </section>
-          )}
-
-          {detailView === 'summary' && (
-            <section className="ai-summary-card detail-section">
-              <div className="ai-summary-card-head">
-                <div>
-                  <p className="ai-summary-card-kicker">
-                    <Sparkles aria-hidden="true" />
-                    AI Inspector
-                  </p>
-                  <h4>{hasAIArticleSummary ? '阅读前判断' : '先生成阅读判断'}</h4>
-                </div>
-                <span className="ai-summary-card-model">{aiModel || 'AI'}</span>
-              </div>
-              {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
-              {articleSummary ? (
-                <MarkdownBlock content={articleSummary} />
-              ) : (
-                <div className="ai-summary-empty">
-                  <p className="hint">
-                    {loadingArticleSummary
-                      ? '摘要正在生成中。'
-                      : articleSummaryError || selectedSummaryTask?.error || '还没有可展示的 AI 摘要。'}
-                  </p>
-                  {selectedArticleID && selectedArticleID > 0 && !loadingArticleSummary && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void onSummarizeArticle(false)}
-                    >
+          {detailView === 'main' && (
+            <>
+              <section className="ai-summary-card detail-section">
+                <div className="ai-summary-card-head">
+                  <div>
+                    <p className="ai-summary-card-kicker">
                       <Sparkles aria-hidden="true" />
-                      生成 AI 摘要
-                    </Button>
+                      AI Inspector
+                    </p>
+                    <h4>{hasAIArticleSummary ? '阅读前判断' : '先生成阅读判断'}</h4>
+                  </div>
+                  <span className="ai-summary-card-model">{aiModel || 'AI'}</span>
+                </div>
+                {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
+                {articleSummary ? (
+                  <MarkdownBlock content={articleSummary} />
+                ) : (
+                  <div className="ai-summary-empty">
+                    <p className="hint">
+                      {loadingArticleSummary
+                        ? '摘要正在生成中。'
+                        : articleSummaryError || selectedSummaryTask?.error || '还没有可展示的 AI 摘要。'}
+                    </p>
+                    {selectedArticleID && selectedArticleID > 0 && !loadingArticleSummary && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void onSummarizeArticle(false)}
+                      >
+                        <Sparkles aria-hidden="true" />
+                        生成 AI 摘要
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              <section className="detail-section detail-reading-section">
+                <div className="detail-section-head">
+                  <h4>{isThreadArticle ? '主帖正文' : '正文'}</h4>
+                  {selectedArticle.summary && !selectedArticle.content && !selectedArticle.content_html && !threadPrimaryBody && (
+                    <span className="hint">当前展示原始摘要</span>
                   )}
                 </div>
-              )}
-            </section>
+                {isThreadArticle && threadPrimaryBody ? (
+                  <PlainTextBlock content={threadPrimaryBody} className="reading-block prose" />
+                ) : selectedArticle.content_html ? (
+                  <SafeHTMLBlock content={selectedArticle.content_html} baseURL={selectedArticle.link} />
+                ) : selectedArticle.content ? (
+                  <PlainTextBlock content={selectedArticle.content} className="reading-block prose" />
+                ) : selectedArticle.summary ? (
+                  <PlainTextBlock content={selectedArticle.summary} className="reading-block" />
+                ) : (
+                  <p className="hint">暂无可展示正文。</p>
+                )}
+              </section>
+            </>
           )}
 
           {detailView === 'capture' && selectedArticle.external?.content && (
@@ -815,7 +791,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             </section>
           )}
 
-          {detailView === 'read' && (hasCapturedExternal || hasThreadCommentsView) && (
+          {detailView === 'main' && (hasCapturedExternal || hasThreadCommentsView) && (
             <section className="detail-section detail-supporting-section">
               <div className="detail-section-head">
                 <h4>继续阅读</h4>
