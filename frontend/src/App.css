@@ -2513,7 +2513,8 @@
 .detail-page .detail-section-nav,
 .detail-page .detail-hero-image,
 .detail-page .detail-section,
-.detail-page .ai-summary {
+.detail-page .ai-summary,
+.detail-page .ai-summary-card {
   width: min(var(--detail-reader-html-width), 100%);
   max-width: var(--detail-reader-html-width);
   margin-left: auto;
@@ -2586,7 +2587,7 @@
 
 .detail-hero-image img {
   width: 100%;
-  max-height: min(46vh, 520px);
+  max-height: min(36vh, 320px);
   object-fit: cover;
   display: block;
 }
@@ -2861,6 +2862,69 @@
   padding-left: 0.1rem;
 }
 
+.ai-summary-card {
+  display: grid;
+  gap: 0.9rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-left: 3px solid rgba(159, 132, 58, 0.5);
+  padding: 0.9rem 0.95rem;
+  background:
+    linear-gradient(135deg, rgba(159, 132, 58, 0.08), transparent 38%),
+    rgba(255, 255, 255, 0.72);
+}
+
+.detail-page .ai-summary-card {
+  padding: 1.05rem 1.1rem;
+}
+
+.ai-summary-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-summary-card-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  margin: 0 0 0.24rem;
+  color: #6f5a22;
+  font-size: 0.72rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-summary-card-kicker svg {
+  width: 0.88rem;
+  height: 0.88rem;
+}
+
+.ai-summary-card h4 {
+  margin: 0;
+  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+}
+
+.ai-summary-card-model {
+  max-width: 18rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-summary-empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.58rem;
+  padding-top: 0.12rem;
+}
+
 .detail-section {
   display: grid;
   gap: var(--section-gap);
@@ -2873,6 +2937,19 @@
 
 .detail-page .detail-section {
   padding: 1.18rem 0;
+}
+
+.ai-summary-card.detail-section {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-left: 3px solid rgba(159, 132, 58, 0.5);
+  padding: 0.9rem 0.95rem;
+  background:
+    linear-gradient(135deg, rgba(159, 132, 58, 0.08), transparent 38%),
+    rgba(255, 255, 255, 0.72);
+}
+
+.detail-page .ai-summary-card.detail-section {
+  padding: 1.05rem 1.1rem;
 }
 
 .detail-content h4 {
@@ -3740,6 +3817,7 @@ button {
   .detail-page .detail-hero-image,
   .detail-page .detail-section,
   .detail-page .ai-summary,
+  .detail-page .ai-summary-card,
   .detail-page .detail-reading-controls {
     width: 100%;
     max-width: 100%;

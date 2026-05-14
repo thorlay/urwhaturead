@@ -230,8 +230,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   const detailViewOptions = useMemo(
     () =>
       [
-        { key: 'read' as const, label: '正文', enabled: hasArticleBody },
         { key: 'summary' as const, label: hasAIArticleSummary ? 'AI 摘要' : '摘要', enabled: true },
+        { key: 'read' as const, label: '正文', enabled: hasArticleBody },
         { key: 'comments' as const, label: '评论', enabled: hasThreadCommentsView },
         { key: 'capture' as const, label: '抓取原文', enabled: hasCapturedExternal },
       ].filter((item) => item.enabled),
@@ -239,11 +239,12 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   )
   const activeArticleID = selectedArticle?.id ?? null
   const detailView = useMemo<DetailView>(() => {
-    const requestedView = detailViewPreference.articleID === activeArticleID ? detailViewPreference.view : 'read'
+    const defaultView = detailViewOptions.find((item) => item.key === 'summary')?.key ?? detailViewOptions[0]?.key ?? 'read'
+    const requestedView = detailViewPreference.articleID === activeArticleID ? detailViewPreference.view : defaultView
     if (detailViewOptions.some((item) => item.key === requestedView)) {
       return requestedView
     }
-    return detailViewOptions[0]?.key ?? 'read'
+    return defaultView
   }, [activeArticleID, detailViewOptions, detailViewPreference.articleID, detailViewPreference.view])
   const setDetailView = useCallback(
     (view: DetailView) => {
@@ -700,19 +701,39 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
           )}
 
           {detailView === 'summary' && (
-            <section className="ai-summary detail-section">
-              <div className="detail-section-head">
-                <h4>AI 摘要</h4>
-                {articleSummaryMeta && <span className="hint">{articleSummaryMeta}</span>}
+            <section className="ai-summary-card detail-section">
+              <div className="ai-summary-card-head">
+                <div>
+                  <p className="ai-summary-card-kicker">
+                    <Sparkles aria-hidden="true" />
+                    AI Inspector
+                  </p>
+                  <h4>{hasAIArticleSummary ? '阅读前判断' : '先生成阅读判断'}</h4>
+                </div>
+                <span className="ai-summary-card-model">{aiModel || 'AI'}</span>
               </div>
+              {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
               {articleSummary ? (
                 <MarkdownBlock content={articleSummary} />
               ) : (
-                <p className="hint">
-                  {loadingArticleSummary
-                    ? '摘要正在生成中。'
-                    : articleSummaryError || selectedSummaryTask?.error || '还没有可展示的 AI 摘要。'}
-                </p>
+                <div className="ai-summary-empty">
+                  <p className="hint">
+                    {loadingArticleSummary
+                      ? '摘要正在生成中。'
+                      : articleSummaryError || selectedSummaryTask?.error || '还没有可展示的 AI 摘要。'}
+                  </p>
+                  {selectedArticleID && selectedArticleID > 0 && !loadingArticleSummary && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void onSummarizeArticle(false)}
+                    >
+                      <Sparkles aria-hidden="true" />
+                      生成 AI 摘要
+                    </Button>
+                  )}
+                </div>
               )}
             </section>
           )}
