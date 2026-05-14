@@ -411,7 +411,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
             <div>
               <p className="ai-library-kicker">AI Reading</p>
               <h2>AI 速览与摘要</h2>
-              <p className="hint">回看已经生成过的聚合速览和文章摘要，按阅读流的方式继续浏览。</p>
+              <p className="hint">优先回看 AI 对阅读流做出的判断，再展开详情。</p>
             </div>
             <div className="ai-library-head-meta">
               <span className="topbar-model-chip" title={aiModel}>
@@ -421,93 +421,95 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
             </div>
           </div>
 
-          <div className="ai-library-toolbar">
-            <Input
-              value={search}
-              onChange={(event) => onChangeSearch(event.target.value)}
-              placeholder="搜索标题、来源、摘要内容"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  onApplySearch()
-                }
-              }}
-            />
-            <Button type="button" onClick={onApplySearch} disabled={loading}>
-              <Search aria-hidden="true" />
-              搜索
-            </Button>
-            <Button type="button" variant="outline" onClick={onRefresh} disabled={loading}>
-              <RefreshCw aria-hidden="true" />
-              {loading ? '更新中...' : '刷新'}
-            </Button>
-          </div>
-
-          <div className="ai-library-controls">
-            <div className="ai-library-segmented" role="tablist" aria-label="AI 内容分类">
-              <button
-                type="button"
-                className={`ai-library-segment ${activeView === 'briefings' ? 'active' : ''}`}
-                onClick={() => onChangeView('briefings')}
-              >
-                AI 速览
-                <span>{filteredBriefings.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`ai-library-segment ${activeView === 'articles' ? 'active' : ''}`}
-                onClick={() => onChangeView('articles')}
-              >
-                文章摘要
-                <span>{filteredArticles.length}</span>
-              </button>
+          <div className="ai-library-compact-controls">
+            <div className="ai-library-toolbar">
+              <Input
+                value={search}
+                onChange={(event) => onChangeSearch(event.target.value)}
+                placeholder="搜索摘要、来源、主题..."
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    onApplySearch()
+                  }
+                }}
+              />
+              <Button type="button" onClick={onApplySearch} disabled={loading}>
+                <Search aria-hidden="true" />
+                搜索
+              </Button>
+              <Button type="button" variant="outline" onClick={onRefresh} disabled={loading}>
+                <RefreshCw aria-hidden="true" />
+                {loading ? '更新中...' : '刷新'}
+              </Button>
             </div>
 
-            <div className="ai-library-range-pills" role="tablist" aria-label="时间范围">
-              {[
-                ['24h', '24h'],
-                ['7d', '7 天'],
-                ['30d', '30 天'],
-                ['all', '全部'],
-              ].map(([value, label]) => (
+            <div className="ai-library-controls">
+              <div className="ai-library-segmented" role="tablist" aria-label="AI 内容分类">
                 <button
-                  key={value}
                   type="button"
-                  className={`ai-library-pill ${timeRange === value ? 'active' : ''}`}
-                  onClick={() => onChangeTimeRange(value as AILibraryRange)}
+                  className={`ai-library-segment ${activeView === 'briefings' ? 'active' : ''}`}
+                  onClick={() => onChangeView('briefings')}
                 >
-                  {label}
+                  AI 速览
+                  <span>{filteredBriefings.length}</span>
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  className={`ai-library-segment ${activeView === 'articles' ? 'active' : ''}`}
+                  onClick={() => onChangeView('articles')}
+                >
+                  文章摘要
+                  <span>{filteredArticles.length}</span>
+                </button>
+              </div>
 
-            <div className="ai-library-filter-row">
-              <label className="ai-library-select-label">
-                <span>{sourceLabel}</span>
-                <select className="ai-library-select" value={sourceFilter} onChange={(event) => onChangeSourceFilter(event.target.value)}>
-                  <option value="all">全部{sourceLabel}</option>
-                  {sourceOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="ai-library-select-label">
-                <span>状态</span>
-                <select className="ai-library-select" value={statusFilter} onChange={(event) => onChangeStatusFilter(event.target.value as AILibraryStatusFilter)}>
-                  <option value="all">全部</option>
-                  <option value="complete">正常结束</option>
-                  <option value="truncated">输出触顶/截断</option>
-                </select>
-              </label>
-              <label className="ai-library-select-label">
-                <span>固定</span>
-                <select className="ai-library-select" value={pinnedFilter} onChange={(event) => onChangePinnedFilter(event.target.value as AILibraryPinnedFilter)}>
-                  <option value="all">全部</option>
-                  <option value="pinned">只看固定</option>
-                </select>
-              </label>
+              <div className="ai-library-range-pills" role="tablist" aria-label="时间范围">
+                {[
+                  ['24h', '24h'],
+                  ['7d', '7 天'],
+                  ['30d', '30 天'],
+                  ['all', '全部'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`ai-library-pill ${timeRange === value ? 'active' : ''}`}
+                    onClick={() => onChangeTimeRange(value as AILibraryRange)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ai-library-filter-row">
+                <label className="ai-library-select-label">
+                  <span>{sourceLabel}</span>
+                  <select className="ai-library-select" value={sourceFilter} onChange={(event) => onChangeSourceFilter(event.target.value)}>
+                    <option value="all">全部{sourceLabel}</option>
+                    {sourceOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="ai-library-select-label">
+                  <span>状态</span>
+                  <select className="ai-library-select" value={statusFilter} onChange={(event) => onChangeStatusFilter(event.target.value as AILibraryStatusFilter)}>
+                    <option value="all">全部</option>
+                    <option value="complete">正常结束</option>
+                    <option value="truncated">输出触顶/截断</option>
+                  </select>
+                </label>
+                <label className="ai-library-select-label">
+                  <span>固定</span>
+                  <select className="ai-library-select" value={pinnedFilter} onChange={(event) => onChangePinnedFilter(event.target.value as AILibraryPinnedFilter)}>
+                    <option value="all">全部</option>
+                    <option value="pinned">只看固定</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -580,8 +582,12 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <span>{formatTimeAgo(item.generated_at)}</span>
                               <span>{item.model}</span>
                             </p>
+                            <div className="ai-library-entry-chips" aria-label="摘要属性">
+                              <span>输入 {item.input_chars} 字符</span>
+                              {item.truncated && <span>输出触顶</span>}
+                            </div>
                           </div>
-                          <div className="ai-library-entry-actions">
+                            <div className="ai-library-entry-actions">
                             <Button
                               type="button"
                               variant="ghost"
@@ -693,8 +699,15 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 <span>{item.model}</span>
                                 <span>{item.article_count} 条信息</span>
                               </p>
+                              <div className="ai-library-entry-chips" aria-label="速览属性">
+                                <span>{item.article_count || parseIDList(item.article_ids).length} 条文章</span>
+                                <span>{parseIDList(item.source_ids).length} 个来源</span>
+                                {item.tag && <span>{item.tag}</span>}
+                                {item.keyword && <span>关键词 {item.keyword}</span>}
+                                {item.truncated && <span>输出触顶</span>}
+                              </div>
                             </div>
-                            <div className="ai-library-entry-actions">
+                          <div className="ai-library-entry-actions">
                               <Button
                                 type="button"
                                 variant="ghost"
