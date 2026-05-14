@@ -3737,44 +3737,51 @@ button {
 
   .feed-header-tools {
     width: 100%;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.34rem;
-    align-items: stretch;
+    display: flex;
+    align-items: center;
+    gap: 0.32rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.08rem;
+    scrollbar-width: none;
+  }
+
+  .feed-header-tools::-webkit-scrollbar {
+    display: none;
   }
 
   .feed-ai-actions {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    flex: 0 0 auto;
+    display: inline-flex;
     gap: 0.28rem;
   }
 
   .feed-read-actions {
-    width: 100%;
+    flex: 0 0 auto;
   }
 
   .feed-read-toggle,
   .feed-density-actions {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0;
-    padding: 0;
-    overflow: hidden;
-    border-radius: 10px;
+    width: auto;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.08rem;
+    padding: 0.1rem;
+    overflow: visible;
+    border-radius: 999px;
   }
 
   .feed-read-toggle button,
   .feed-density-actions button {
-    min-width: 0;
-    width: 100%;
-    border-radius: 0;
+    min-width: max-content;
+    width: auto;
+    border-radius: 999px;
+    white-space: nowrap;
   }
 
   .feed-read-toggle button + button,
   .feed-density-actions button + button {
-    border-left: 1px solid var(--line);
+    border-left: none;
   }
 
   .detail-floating {
@@ -4038,6 +4045,25 @@ button {
 
   .feed-filter-toggle-row {
     display: none;
+  }
+
+  .filter-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.08rem;
+    scrollbar-width: none;
+  }
+
+  .filter-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    flex: 0 0 auto;
+    max-width: min(78vw, 22rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .feed-ai-actions button,
