@@ -212,20 +212,20 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
     const groups = Array.from(groupMap.values()).map((group) => ({
       ...group,
       sources: [...group.sources].sort((left, right) => {
-        const byNew = sourceNewCount(right) - sourceNewCount(left)
-        if (byNew !== 0) return byNew
         const byClick = sourceClickCount(right) - sourceClickCount(left)
         if (byClick !== 0) return byClick
+        const byNew = sourceNewCount(right) - sourceNewCount(left)
+        if (byNew !== 0) return byNew
         return left.name.localeCompare(right.name)
       }),
     }))
     groups.sort((left, right) => {
+      const byClick = right.clickTotal - left.clickTotal
+      if (byClick !== 0) return byClick
       const byNew = right.newCount - left.newCount
       if (byNew !== 0) return byNew
       const byCount = right.sources.length - left.sources.length
       if (byCount !== 0) return byCount
-      const byClick = right.clickTotal - left.clickTotal
-      if (byClick !== 0) return byClick
       return left.label.localeCompare(right.label)
     })
     return groups
