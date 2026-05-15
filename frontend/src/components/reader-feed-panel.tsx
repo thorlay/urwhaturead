@@ -24,7 +24,10 @@ const ReaderFeedFilters = lazy(async () => {
 type FeedSummaryTaskStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
 type FeedListRow = { key: string; type: 'briefing' } | { key: string; type: 'article'; item: FeedItem }
 
-const FEED_VIRTUAL_MIN_ROWS = 60
+// Feed rows have variable height because summaries, images, and AI states differ.
+// Keep infinite loading, but avoid early virtualization because fixed-height estimates
+// can create visible blank gaps while scrolling.
+const FEED_VIRTUAL_MIN_ROWS = 1000
 const FEED_VIRTUAL_OVERSCAN_ROWS = 8
 
 export type ReaderFeedPanelProps = {
