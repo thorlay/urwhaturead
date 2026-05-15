@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -30,7 +31,8 @@
 
 @theme inline {
   --font-sans: 'IBM Plex Sans', sans-serif;
-  --font-heading: 'Crimson Pro', serif;
+  --font-heading: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  --font-reader: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -69,6 +71,13 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -83,5 +92,5 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
 }

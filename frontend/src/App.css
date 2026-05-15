@@ -21,7 +21,8 @@
   min-height: 100vh;
   min-height: 100dvh;
   color: var(--text);
-  overflow-x: clip;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .app-shell {
@@ -34,7 +35,8 @@
   padding-right: max(1rem, env(safe-area-inset-right));
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
   padding-left: max(1rem, env(safe-area-inset-left));
-  overflow-x: clip;
+  max-width: min(1480px, 100%);
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -51,7 +53,7 @@
 
 .topbar h1 {
   margin: 0;
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-size: clamp(1.42rem, 1.6vw + 1rem, 2.16rem);
   font-weight: 600;
   line-height: 0.98;
@@ -372,7 +374,7 @@
 .ai-library-section-head h3,
 .ai-library-group-head h3 {
   margin: 0;
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
@@ -599,7 +601,7 @@
 .ai-library-entry-title {
   margin: 0;
   color: var(--text);
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 1.16rem;
   font-weight: 600;
   line-height: 1.25;
@@ -2313,7 +2315,7 @@
 
 .feed-item-title {
   margin: 0.24rem 0 0.42rem 0;
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 1.16rem;
   font-weight: 600;
   line-height: 1.28;
@@ -2682,7 +2684,7 @@
 
 .detail-title {
   margin: 0;
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-size: clamp(1.32rem, 1.25vw + 0.9rem, 1.85rem);
   font-weight: 600;
   line-height: 1.16;
@@ -2986,7 +2988,7 @@
 
 .ai-summary-card h4 {
   margin: 0;
-  font-family: 'Crimson Pro', serif;
+  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
   font-size: 1.2rem;
   letter-spacing: -0.018em;
 }
@@ -3131,7 +3133,7 @@
   white-space: pre-line;
   line-height: 1.78;
   color: var(--text);
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
   font-size: 1.1rem;
 }
 
@@ -3159,7 +3161,7 @@
   margin-right: auto;
   line-height: 1.82;
   color: var(--text);
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
   font-size: 1.1rem;
 }
 
@@ -3249,7 +3251,7 @@
   margin-right: auto;
   line-height: 1.8;
   color: var(--text);
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
   font-size: 1.06rem;
 }
 
@@ -3880,6 +3882,7 @@ button[data-slot='button'],
     border-radius: 0;
     background: #fff;
     overflow-y: auto;
+    overflow-x: hidden;
     overscroll-behavior: contain;
     padding: max(0.85rem, env(safe-area-inset-top)) max(0.85rem, env(safe-area-inset-right))
       max(1.1rem, env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
@@ -3906,7 +3909,14 @@ button[data-slot='button'],
     padding: max(0.9rem, env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right))
       max(1.3rem, env(safe-area-inset-bottom)) max(0.9rem, env(safe-area-inset-left));
     -webkit-overflow-scrolling: touch;
-    overflow-x: clip;
+    overflow-x: hidden;
+  }
+
+  .detail-toolbar-sticky,
+  .detail-page .detail-toolbar-sticky {
+    margin-inline: 0;
+    padding-right: 0;
+    padding-left: 0;
   }
 
   .detail-content,
