@@ -133,7 +133,8 @@
   color: var(--text);
 }
 
-.view-tab.active {
+.view-tab.active,
+.view-tab[data-state='active'] {
   color: var(--text);
   border-bottom-color: rgba(0, 0, 0, 0.72);
 }
@@ -1980,6 +1981,12 @@
   animation: menu-pop-in 130ms ease-out;
 }
 
+.feed-ai-more-menu[data-slot='dropdown-menu-content'] {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
 .feed-ai-more-item {
   width: 100%;
   display: flex;
@@ -2711,6 +2718,12 @@
   display: grid;
   gap: 0.12rem;
   animation: menu-pop-in 130ms ease-out;
+}
+
+.detail-more-menu[data-slot='dropdown-menu-content'] {
+  position: static;
+  top: auto;
+  right: auto;
 }
 
 .detail-more-item {

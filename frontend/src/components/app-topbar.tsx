@@ -1,6 +1,6 @@
 import { Fragment } from 'react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type AppTopbarProps = {
   activeTab: 'reader' | 'ai' | 'sources'
@@ -47,37 +47,28 @@ export function AppTopbar(props: AppTopbarProps) {
           <h1>摸摸又鱼鱼</h1>
         </div>
         <div className="topbar-actions">
-          <div className="view-tabs" role="tablist" aria-label="页面">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'reader'}
-              className={cn('view-tab', activeTab === 'reader' && 'active')}
-              onClick={onOpenReaderTab}
-            >
-              阅读流
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'ai'}
-              className={cn('view-tab', activeTab === 'ai' && 'active')}
-              onClick={onOpenAITab}
-            >
-              AI
-            </button>
-            {canAccessManagement && (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'sources'}
-                className={cn('view-tab', activeTab === 'sources' && 'active')}
-                onClick={onOpenSourcesTab}
-              >
-                管理 ({sourcesCount})
-              </button>
-            )}
-          </div>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value === 'reader') onOpenReaderTab()
+              if (value === 'ai') onOpenAITab()
+              if (value === 'sources') onOpenSourcesTab()
+            }}
+          >
+            <TabsList className="view-tabs" aria-label="页面">
+              <TabsTrigger className="view-tab" value="reader">
+                阅读流
+              </TabsTrigger>
+              <TabsTrigger className="view-tab" value="ai">
+                AI
+              </TabsTrigger>
+              {canAccessManagement && (
+                <TabsTrigger className="view-tab" value="sources">
+                  管理 ({sourcesCount})
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </Tabs>
           <span className="topbar-model-chip" title={aiModel}>
             <span className="topbar-model-label">模型</span>
             <span className="topbar-model-value">{aiModel || '-'}</span>

@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { ChevronDown, MoreHorizontal, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
 
@@ -590,70 +591,69 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               {loadingFeedBriefing ? '生成中...' : 'AI 速览'}
             </Button>
             <div ref={feedAIMoreRef} className="feed-ai-more">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-haspopup="menu"
-                aria-expanded={showFeedAIMoreMenu}
-                onClick={onToggleFeedAIMoreMenu}
-                disabled={loadingFeedBriefing}
+              <DropdownMenu
+                open={showFeedAIMoreMenu}
+                onOpenChange={(open) => {
+                  if (open) {
+                    onToggleFeedAIMoreMenu()
+                    return
+                  }
+                  onCloseFeedAIMoreMenu()
+                }}
               >
-                <MoreHorizontal aria-hidden="true" />
-                <span>更多</span>
-              </Button>
-              {showFeedAIMoreMenu && (
-                <div className="feed-ai-more-menu" role="menu" aria-label="AI 速览更多操作">
-                  <button
-                    type="button"
+                <DropdownMenuTrigger asChild disabled={loadingFeedBriefing}>
+                  <Button type="button" variant="ghost" size="sm" aria-expanded={showFeedAIMoreMenu}>
+                    <MoreHorizontal aria-hidden="true" />
+                    <span>更多</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="feed-ai-more-menu" aria-label="AI 速览更多操作">
+                  <DropdownMenuItem
                     className="feed-ai-more-item"
-                    role="menuitem"
-                    onClick={() => {
+                    disabled={loadingFeedBriefing}
+                    onSelect={(event) => {
+                      event.preventDefault()
                       onCloseFeedAIMoreMenu()
                       void onGenerateFeedBriefing(true)
                     }}
-                    disabled={loadingFeedBriefing}
                   >
                     <RotateCcw aria-hidden="true" />
                     重算
-                  </button>
-                  <button
-                    type="button"
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     className="feed-ai-more-item"
-                    role="menuitem"
-                    onClick={() => {
+                    onSelect={(event) => {
+                      event.preventDefault()
                       onCloseFeedAIMoreMenu()
                       onToggleFeedSearch()
                     }}
                   >
                     {showFeedSearch ? '收起搜索与筛选' : '打开搜索与筛选'}
-                  </button>
-                  <button
-                    type="button"
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     className="feed-ai-more-item"
-                    role="menuitem"
-                    onClick={() => {
+                    onSelect={(event) => {
+                      event.preventDefault()
                       onCloseFeedAIMoreMenu()
                       onToggleFeedTitleOnlyMode()
                     }}
                   >
                     {feedTitleOnlyMode ? '切换到标准模式' : '切换到仅标题'}
-                  </button>
-                  <button
-                    type="button"
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     className="feed-ai-more-item"
-                    role="menuitem"
                     disabled={feedTitleOnlyMode}
-                    onClick={() => {
+                    onSelect={(event) => {
+                      event.preventDefault()
                       onCloseFeedAIMoreMenu()
                       if (feedTitleOnlyMode) return
                       onToggleFeedImages()
                     }}
                   >
                     {feedTitleOnlyMode ? '仅标题模式下不可显示图片' : showFeedImages ? '关闭图片' : '显示图片'}
-                  </button>
-                </div>
-              )}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           <div className="feed-read-actions">

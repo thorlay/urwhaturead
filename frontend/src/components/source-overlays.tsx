@@ -1,7 +1,9 @@
 import type { RefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import type { Source, SourceStatus } from '../types'
 
@@ -121,20 +123,22 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
   }
 
   return (
-    <div className="source-profile-overlay" onClick={onCloseSourceProfile}>
-      <section
+    <Dialog open={Boolean(sourceProfileSource)} onOpenChange={(open) => !open && onCloseSourceProfile()}>
+      <DialogContent
         className="source-profile-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="source-profile-title"
-        onClick={(event) => event.stopPropagation()}
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <div className="source-profile-header">
-          <h3 id="source-profile-title">订阅源属性</h3>
+          <DialogHeader>
+            <DialogTitle id="source-profile-title">订阅源属性</DialogTitle>
+            <DialogDescription className="sr-only">查看订阅源基础信息、抓取状态和 AI 速览设置</DialogDescription>
+          </DialogHeader>
           <Button type="button" variant="ghost" size="sm" onClick={onCloseSourceProfile}>
             关闭
           </Button>
         </div>
+        <Separator />
 
         <dl className="source-profile-grid">
           <div className="source-profile-section">基础信息</div>
@@ -294,6 +298,8 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
         </dl>
 
         {canManageSources && (
+          <>
+          <Separator />
           <div className="source-profile-actions">
             <div className="source-profile-inline-actions">
               <Button
@@ -352,9 +358,10 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
               永久删除
             </Button>
           </div>
+          </>
         )}
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -372,18 +379,18 @@ export function SourceDeleteConfirmDialog(props: SourceDeleteConfirmDialogProps)
   }
 
   return (
-    <div className="source-delete-overlay" onClick={onCloseDeleteConfirm}>
-      <section
+    <Dialog open={Boolean(pendingDeleteSource)} onOpenChange={(open) => !open && onCloseDeleteConfirm()}>
+      <DialogContent
         className="source-delete-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="source-delete-title"
-        onClick={(event) => event.stopPropagation()}
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
-        <h3 id="source-delete-title">确认永久删除</h3>
-        <p>
-          你将永久删除订阅源「{pendingDeleteSource.name}」。该操作不可恢复，是否继续？
-        </p>
+        <DialogHeader>
+          <DialogTitle id="source-delete-title">确认永久删除</DialogTitle>
+          <DialogDescription>
+            你将永久删除订阅源「{pendingDeleteSource.name}」。该操作不可恢复，是否继续？
+          </DialogDescription>
+        </DialogHeader>
         <div className="source-delete-actions">
           <Button type="button" variant="outline" size="sm" onClick={onCloseDeleteConfirm}>
             取消
@@ -398,7 +405,7 @@ export function SourceDeleteConfirmDialog(props: SourceDeleteConfirmDialogProps)
             {busySourceID === pendingDeleteSource.id ? '删除中...' : '确认删除'}
           </Button>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

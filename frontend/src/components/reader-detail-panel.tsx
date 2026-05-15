@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
 import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
 
@@ -527,49 +528,51 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   </Button>
                   {hasDetailMoreActions && (
                     <div ref={detailMoreMenuRef} className="detail-more-menu-wrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-haspopup="menu"
-                        aria-expanded={showDetailMoreMenu}
-                        onClick={toggleDetailMoreMenu}
+                      <DropdownMenu
+                        open={showDetailMoreMenu}
+                        onOpenChange={(open) => {
+                          if (open) {
+                            toggleDetailMoreMenu()
+                            return
+                          }
+                          closeDetailMoreMenu()
+                        }}
                       >
-                        <MoreHorizontal aria-hidden="true" />
-                        更多
-                      </Button>
-                      {showDetailMoreMenu && (
-                        <div className="detail-more-menu" role="menu" aria-label="文章更多操作">
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="sm" aria-expanded={showDetailMoreMenu}>
+                            <MoreHorizontal aria-hidden="true" />
+                            更多
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="detail-more-menu" aria-label="文章更多操作">
                           {canTrackThread && (
-                            <button
-                              type="button"
+                            <DropdownMenuItem
                               className="detail-more-item"
-                              role="menuitem"
-                              onClick={() => {
+                              onSelect={(event) => {
+                                event.preventDefault()
                                 closeDetailMoreMenu()
                                 void onTrackThread()
                               }}
                             >
                               持续跟踪评论
-                            </button>
+                            </DropdownMenuItem>
                           )}
                           {canForceRecalcSummary && (
-                            <button
-                              type="button"
+                            <DropdownMenuItem
                               className="detail-more-item"
-                              role="menuitem"
-                              onClick={() => {
+                              disabled={loadingArticleSummary}
+                              onSelect={(event) => {
+                                event.preventDefault()
                                 closeDetailMoreMenu()
                                 void onSummarizeArticle(true)
                               }}
-                              disabled={loadingArticleSummary}
                             >
                               <RotateCcw aria-hidden="true" />
                               强制重算
-                            </button>
+                            </DropdownMenuItem>
                           )}
-                        </div>
-                      )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   )}
                 </div>
