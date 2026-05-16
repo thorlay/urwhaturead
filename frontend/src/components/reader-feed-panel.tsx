@@ -524,10 +524,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         if (!list) {
           return
         }
-        const rect = list.getBoundingClientRect()
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-        const visibleStart = Math.max(0, -rect.top)
-        const visibleEnd = Math.max(0, viewportHeight - rect.top)
+        const visibleStart = Math.max(0, list.scrollTop)
+        const visibleEnd = visibleStart + list.clientHeight
         const start = Math.max(0, Math.floor(visibleStart / estimatedFeedRowHeight) - FEED_VIRTUAL_OVERSCAN_ROWS)
         const end = Math.min(
           listRows.length,
@@ -538,13 +536,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     }
 
     updateVirtualRange()
-    window.addEventListener('scroll', updateVirtualRange, { passive: true })
+    const list = feedListRef.current
+    list?.addEventListener('scroll', updateVirtualRange, { passive: true })
     window.addEventListener('resize', updateVirtualRange)
     return () => {
       if (animationFrame) {
         window.cancelAnimationFrame(animationFrame)
       }
-      window.removeEventListener('scroll', updateVirtualRange)
+      list?.removeEventListener('scroll', updateVirtualRange)
       window.removeEventListener('resize', updateVirtualRange)
     }
   }, [estimatedFeedRowHeight, listRows.length, shouldVirtualizeFeed])
@@ -835,9 +834,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         {virtualBottomSpacer > 0 && (
           <div className="feed-list-spacer" style={{ height: virtualBottomSpacer }} aria-hidden="true" />
         )}
-      </div>
 
-      <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
+        <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
+      </div>
 
       <div className="feed-footer">
         <Button type="button" onClick={onLoadMore} disabled={!hasMoreFeed || loadingFeed}>

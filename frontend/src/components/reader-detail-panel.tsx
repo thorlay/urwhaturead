@@ -219,6 +219,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   const [readingPreferences, setReadingPreferences] = useState<ReadingPreferences>(readStoredReadingPreferences)
 
   const hasAIArticleSummary = Boolean(articleSummary.trim())
+  const shouldShowAIInspector = hasAIArticleSummary || loadingArticleSummary || Boolean(articleSummaryError || selectedSummaryTask?.error)
   const hasThreadCommentsView = Boolean(selectedArticle?.thread)
   const hasCapturedExternal = Boolean(selectedArticle?.external?.content)
   const detailViewOptions = useMemo(
@@ -659,41 +660,43 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
 
           {detailView === 'main' && (
             <>
-              <section className="ai-summary-card detail-section">
-                <div className="ai-summary-card-head">
-                  <div>
-                    <p className="ai-summary-card-kicker">
-                      <Sparkles aria-hidden="true" />
-                      AI Inspector
-                    </p>
-                    <h4>{hasAIArticleSummary ? '阅读前判断' : '先生成阅读判断'}</h4>
-                  </div>
-                  <span className="ai-summary-card-model">{aiModel || 'AI'}</span>
-                </div>
-                {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
-                {articleSummary ? (
-                  <MarkdownBlock content={articleSummary} />
-                ) : (
-                  <div className="ai-summary-empty">
-                    <p className="hint">
-                      {loadingArticleSummary
-                        ? '摘要正在生成中。'
-                        : articleSummaryError || selectedSummaryTask?.error || '还没有可展示的 AI 摘要。'}
-                    </p>
-                    {selectedArticleID && selectedArticleID > 0 && !loadingArticleSummary && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void onSummarizeArticle(false)}
-                      >
+              {shouldShowAIInspector && (
+                <section className="ai-summary-card detail-section">
+                  <div className="ai-summary-card-head">
+                    <div>
+                      <p className="ai-summary-card-kicker">
                         <Sparkles aria-hidden="true" />
-                        生成 AI 摘要
-                      </Button>
-                    )}
+                        AI Inspector
+                      </p>
+                      <h4>{hasAIArticleSummary ? '阅读前判断' : '生成阅读判断中'}</h4>
+                    </div>
+                    <span className="ai-summary-card-model">{aiModel || 'AI'}</span>
                   </div>
-                )}
-              </section>
+                  {articleSummaryMeta && <p className="hint">{articleSummaryMeta}</p>}
+                  {articleSummary ? (
+                    <MarkdownBlock content={articleSummary} />
+                  ) : (
+                    <div className="ai-summary-empty">
+                      <p className="hint">
+                        {loadingArticleSummary
+                          ? '摘要正在生成中。'
+                          : articleSummaryError || selectedSummaryTask?.error || 'AI 摘要生成失败。'}
+                      </p>
+                      {selectedArticleID && selectedArticleID > 0 && !loadingArticleSummary && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void onSummarizeArticle(false)}
+                        >
+                          <Sparkles aria-hidden="true" />
+                          重新生成 AI 摘要
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
 
               <section className="detail-section detail-reading-section">
                 <div className="detail-section-head">

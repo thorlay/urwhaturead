@@ -324,6 +324,9 @@
 .reader-layout {
   display: grid;
   gap: 0.95rem;
+  height: calc(100dvh - 6.8rem);
+  min-height: 32rem;
+  overflow: hidden;
 }
 
 .mobile-reader-toolbar,
@@ -335,7 +338,9 @@
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 0.95rem;
-  align-items: start;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
   transition: grid-template-columns 170ms ease;
 }
 
@@ -351,6 +356,7 @@
 .reader-stack .reader-panel {
   width: 100%;
   margin: 0;
+  min-height: 0;
 }
 
 .feed-with-floating {
@@ -365,6 +371,12 @@
   flex-direction: column;
   gap: 0.9rem;
   padding: 1rem 0.9rem;
+}
+
+.reader-stack .feed {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .source-management-page {
@@ -1387,17 +1399,17 @@
 }
 
 .subscription-sidebar {
-  position: sticky;
+  position: relative;
   top: 0;
   align-self: start;
-  height: 100vh;
-  height: 100dvh;
-  min-height: min(420px, 100dvh);
+  height: 100%;
+  min-height: 0;
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.62rem;
   overflow: hidden;
+  overscroll-behavior: contain;
   transition: padding 150ms ease, opacity 150ms ease;
 }
 
@@ -1433,8 +1445,40 @@
   min-height: 0;
   gap: 0.52rem;
   overflow-y: auto;
-  padding-right: 0.12rem;
+  overscroll-behavior: contain;
+  padding-right: 0.18rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
   transition: opacity 140ms ease;
+}
+
+.subscription-sidebar:hover .subscription-tree,
+.subscription-tree:focus-within {
+  scrollbar-color: var(--border-subtle) transparent;
+}
+
+.subscription-tree::-webkit-scrollbar,
+.tracked-thread-items::-webkit-scrollbar {
+  width: 0.42rem;
+}
+
+.subscription-tree::-webkit-scrollbar-track,
+.tracked-thread-items::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subscription-tree::-webkit-scrollbar-thumb,
+.tracked-thread-items::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.subscription-sidebar:hover .subscription-tree::-webkit-scrollbar-thumb,
+.subscription-tree:focus-within::-webkit-scrollbar-thumb,
+.tracked-thread-section:hover .tracked-thread-items::-webkit-scrollbar-thumb,
+.tracked-thread-items:focus-within::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
 }
 
 .subscription-tag-filters {
@@ -1583,7 +1627,16 @@
 .tracked-thread-items {
   max-height: 38vh;
   overflow-y: auto;
-  padding-right: 0.12rem;
+  overscroll-behavior: contain;
+  padding-right: 0.18rem;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.tracked-thread-section:hover .tracked-thread-items,
+.tracked-thread-items:focus-within {
+  scrollbar-color: var(--border-subtle) transparent;
 }
 
 .tracked-thread-more {
@@ -2278,8 +2331,38 @@
 .feed-list {
   display: grid;
   gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   border-top: 1px solid var(--line);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
   transition: opacity 140ms ease;
+}
+
+.feed:hover .feed-list,
+.feed-list:focus-within {
+  scrollbar-color: var(--border-subtle) transparent;
+}
+
+.feed-list::-webkit-scrollbar {
+  width: 0.42rem;
+}
+
+.feed-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.feed-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.feed:hover .feed-list::-webkit-scrollbar-thumb,
+.feed-list:focus-within::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
 }
 
 .feed-list.is-loading {
@@ -3823,10 +3906,29 @@ button[data-slot='button'] svg,
   .reader-stack {
     grid-template-columns: 1fr;
     gap: 0.62rem;
+    height: auto;
+    min-height: 0;
   }
 
   .reader-stack.sidebar-closed {
     grid-template-columns: 1fr;
+  }
+
+  .reader-layout {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .reader-stack .feed {
+    height: auto;
+    overflow: visible;
+  }
+
+  .feed-list {
+    flex: initial;
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 
   .mobile-reader-toolbar {
@@ -3879,6 +3981,8 @@ button[data-slot='button'] svg,
     opacity: 1;
     pointer-events: auto;
     box-shadow: none;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     transition: transform 170ms ease, opacity 150ms ease;
   }
 
