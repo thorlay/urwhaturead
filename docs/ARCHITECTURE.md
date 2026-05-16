@@ -11,6 +11,8 @@
 - **PostgreSQL（含 pgvector 可选能力）**：主存储；也承担缓存（摘要、速览）。
 - **React 前端（Vite + TS）**：阅读流 + 管理页，统一调用后端 API。
 
+前端 UI/UX 的产品定位、生成 prompt、严格审核 prompt 见：`docs/UIUX_REVIEW_PROMPT.md`。后续 agent 做界面改动时，应先阅读这份文档，避免回到模板化 SaaS 页面风格。
+
 运行时关系：
 
 1. 前端请求后端 `GET` 接口拿流与详情。
