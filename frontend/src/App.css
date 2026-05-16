@@ -1,15 +1,15 @@
 :root {
-  --foreground-primary: #141413;
-  --foreground-secondary: #30302e;
-  --foreground-tertiary: #5e5d59;
-  --background-primary: #faf9f5;
-  --background-secondary: #f0eee6;
-  --background-tertiary: #e8e6dc;
-  --background-clay: #d97757;
-  --background-oat: #e3dacc;
-  --border-strong: #141413;
-  --border-subtle: #d1cfc5;
-  --border-faint: #f0eee6;
+  --foreground-primary: #161513;
+  --foreground-secondary: #30302d;
+  --foreground-tertiary: #666158;
+  --background-primary: #fbfaf6;
+  --background-secondary: #eee9df;
+  --background-tertiary: #e7dfd0;
+  --background-clay: #8f3d2d;
+  --background-oat: #ded4c4;
+  --border-strong: #161513;
+  --border-subtle: #d2cabe;
+  --border-faint: #eee9df;
   --line: var(--border-subtle);
   --line-strong: #b8b5aa;
   --surface: var(--background-primary);
@@ -64,7 +64,7 @@
 
 .topbar h1 {
   margin: 0;
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: clamp(1.42rem, 1.6vw + 1rem, 2.16rem);
   font-weight: 600;
   line-height: 0.98;
@@ -385,7 +385,7 @@
 .ai-library-section-head h3,
 .ai-library-group-head h3 {
   margin: 0;
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
@@ -612,7 +612,7 @@
 .ai-library-entry-title {
   margin: 0;
   color: var(--text);
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: 1.16rem;
   font-weight: 600;
   line-height: 1.25;
@@ -1335,9 +1335,11 @@
 
 .subscription-sidebar {
   position: sticky;
-  top: 0.8rem;
-  height: calc(100vh - 2rem);
-  min-height: 420px;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  min-height: min(420px, 100dvh);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
@@ -2326,7 +2328,7 @@
 
 .feed-item-title {
   margin: 0.24rem 0 0.42rem 0;
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: 1.16rem;
   font-weight: 600;
   line-height: 1.28;
@@ -2518,19 +2520,19 @@
   border: none;
   border-left: 1px solid var(--line-strong);
   border-radius: 0;
-  background: var(--paper-strong);
+  background: var(--background-primary);
   animation: detail-in 170ms ease;
 }
 
 .detail-page {
   --detail-reader-width: 74ch;
   --detail-reader-html-width: 76ch;
-  --detail-reader-font-size: 1.13rem;
-  --detail-reader-prose-font-size: 1.18rem;
-  --detail-reader-html-font-size: 1.1rem;
-  --detail-reader-line-height: 1.9;
+  --detail-reader-font-size: 1.1rem;
+  --detail-reader-prose-font-size: 1.14rem;
+  --detail-reader-html-font-size: 1.08rem;
+  --detail-reader-line-height: 1.88;
   --detail-reader-prose-line-height: 1.92;
-  --detail-reader-html-line-height: 1.84;
+  --detail-reader-html-line-height: 1.86;
   position: fixed;
   top: 0;
   right: 0;
@@ -2546,8 +2548,8 @@
   border-radius: 0;
   border: none;
   background:
-    radial-gradient(circle at 12% 0%, rgba(217, 119, 87, 0.045), transparent 30rem),
-    linear-gradient(180deg, var(--background-primary) 0%, #f7f6f0 100%);
+    linear-gradient(90deg, rgba(22, 21, 19, 0.018) 1px, transparent 1px),
+    linear-gradient(180deg, #fbfaf6 0%, #f6f2e9 100%);
   padding: 1.35rem clamp(1rem, 4vw, 3rem) 2rem;
   animation: detail-in 170ms ease;
 }
@@ -2695,7 +2697,7 @@
 
 .detail-title {
   margin: 0;
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: clamp(1.32rem, 1.25vw + 0.9rem, 1.85rem);
   font-weight: 600;
   line-height: 1.16;
@@ -2703,10 +2705,10 @@
 }
 
 .detail-page .detail-title {
-  font-size: clamp(2.15rem, 3vw + 1.05rem, 3.9rem);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
-  max-width: 18ch;
+  font-size: clamp(1.86rem, 2.35vw + 1.02rem, 3.3rem);
+  line-height: 1.08;
+  letter-spacing: -0.024em;
+  max-width: 22ch;
 }
 
 .detail-page .detail-author {
@@ -2732,7 +2734,7 @@
   border-top: 1px solid var(--border-faint);
   border-bottom: 1px solid var(--border-faint);
   padding: 0.42rem 0 0.5rem;
-  background: color-mix(in srgb, var(--background-primary) 94%, white);
+  background: color-mix(in srgb, var(--background-primary) 96%, white);
 }
 
 .detail-page .detail-toolbar-sticky {
@@ -2852,7 +2854,7 @@
 }
 
 .detail-section-tab.active {
-  background: #ffffff;
+  background: var(--background-primary);
   color: var(--text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
@@ -2999,7 +3001,7 @@
 
 .ai-summary-card h4 {
   margin: 0;
-  font-family: 'Crimson Pro', 'Songti SC', 'Noto Serif SC', serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: 1.2rem;
   letter-spacing: -0.018em;
 }
@@ -3143,19 +3145,21 @@
   margin-right: auto;
   white-space: pre-line;
   line-height: 1.78;
-  color: var(--text);
-  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
-  font-size: 1.1rem;
+  color: var(--foreground-secondary);
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  font-weight: 400;
+  font-size: 1.04rem;
+  letter-spacing: 0.005em;
 }
 
 .reading-block.prose {
-  font-size: 1.14rem;
+  font-size: 1.07rem;
   line-height: 1.82;
 }
 
 .plain-text-block {
   display: grid;
-  gap: 1.08rem;
+  gap: 1.18rem;
   white-space: normal;
 }
 
@@ -3170,14 +3174,16 @@
   width: min(100%, 78ch);
   margin-left: auto;
   margin-right: auto;
-  line-height: 1.82;
-  color: var(--text);
-  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
-  font-size: 1.1rem;
+  line-height: 1.8;
+  color: var(--foreground-secondary);
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  font-weight: 400;
+  font-size: 1.04rem;
+  letter-spacing: 0.005em;
 }
 
 .html-block > * + * {
-  margin-top: 0.9rem;
+  margin-top: 1.08rem;
 }
 
 .html-block p,
@@ -3260,10 +3266,12 @@
   width: min(100%, 78ch);
   margin-left: auto;
   margin-right: auto;
-  line-height: 1.8;
-  color: var(--text);
-  font-family: 'LXGW WenKai', 'Songti SC', 'Noto Serif SC', 'Crimson Pro', serif;
-  font-size: 1.06rem;
+  line-height: 1.78;
+  color: var(--foreground-secondary);
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  font-weight: 400;
+  font-size: 1.03rem;
+  letter-spacing: 0.005em;
 }
 
 .detail-floating .reading-block,
@@ -3285,7 +3293,7 @@
   margin-right: auto;
   font-size: var(--detail-reader-font-size);
   line-height: var(--detail-reader-line-height);
-  color: var(--foreground-primary);
+  color: var(--foreground-secondary);
 }
 
 .detail-page .reading-block.prose {
@@ -3304,12 +3312,12 @@
 }
 
 .detail-page .plain-text-block {
-  gap: 1.22rem;
+  gap: 1.32rem;
 }
 
 .detail-page .html-block > * + *,
 .detail-page .markdown-block > * + * {
-  margin-top: 1rem;
+  margin-top: 1.16rem;
 }
 
 .detail-page .detail-summary-preview {
@@ -3773,7 +3781,7 @@ button[data-slot='button'],
     min-height: 2.2rem;
     padding-inline: 0.7rem;
     border-radius: var(--control-radius);
-    background: #fff;
+    background: var(--background-primary);
     border-color: var(--line-strong);
   }
 
@@ -3802,7 +3810,7 @@ button[data-slot='button'],
     min-height: 0;
     z-index: 56;
     border-right: 1px solid var(--line);
-    background: #fff;
+    background: var(--background-primary);
     padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom));
     transform: translateX(0);
     opacity: 1;
@@ -3891,7 +3899,7 @@ button[data-slot='button'],
     max-height: 100dvh;
     border: none;
     border-radius: 0;
-    background: #fff;
+    background: var(--background-primary);
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
@@ -3940,13 +3948,21 @@ button[data-slot='button'],
   .plain-text-block {
     min-width: 0;
     max-width: 100%;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
     word-break: break-word;
   }
 
   .html-block *,
   .markdown-block * {
     max-width: 100%;
+  }
+
+  .html-block a,
+  .markdown-block a,
+  .html-block code,
+  .markdown-block code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .html-block pre,
@@ -4138,7 +4154,7 @@ button[data-slot='button'],
     border-radius: 999px;
     min-height: 2.2rem;
     padding-inline: 0.72rem;
-    background: #fff;
+    background: var(--background-primary);
     border: 1px solid var(--line-strong);
     color: var(--text);
   }
