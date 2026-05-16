@@ -839,7 +839,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
       </div>
 
       <div className="feed-footer">
-        <Button type="button" onClick={onLoadMore} disabled={!hasMoreFeed || loadingFeed}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="feed-load-more-button"
+          onClick={onLoadMore}
+          disabled={!hasMoreFeed || loadingFeed}
+        >
           {hasMoreFeed && !loadingFeed && <ChevronDown aria-hidden="true" />}
           {loadingFeed ? '加载中...' : hasMoreFeed ? '加载更多' : '没有更多了'}
         </Button>

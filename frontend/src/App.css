@@ -61,6 +61,16 @@
   overflow-x: hidden;
 }
 
+.app-shell:has(.reader-layout) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  padding-top: max(0.55rem, env(safe-area-inset-top));
+  padding-bottom: max(0.55rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -138,6 +148,27 @@
   font-size: 0.78rem;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.app-shell:has(.reader-layout) .topbar {
+  align-items: center;
+  margin-bottom: 0.58rem;
+  padding: 0.48rem 0.15rem 0.55rem;
+}
+
+.app-shell:has(.reader-layout) .topbar h1 {
+  font-size: clamp(1.12rem, 0.9vw + 0.92rem, 1.52rem);
+  line-height: 1.05;
+}
+
+.app-shell:has(.reader-layout) .eyebrow {
+  margin-bottom: 0.08rem;
+  font-size: 0.64rem;
+}
+
+.app-shell:has(.reader-layout) .ai-task-strip {
+  margin-bottom: 0.58rem;
+  padding: 0.48rem 0;
 }
 
 .mobile-feed-update-fab {
@@ -324,9 +355,15 @@
 .reader-layout {
   display: grid;
   gap: 0.95rem;
-  height: calc(100dvh - 6.8rem);
-  min-height: 32rem;
+  height: calc(100dvh - 5.2rem);
+  min-height: 0;
   overflow: hidden;
+}
+
+.app-shell:has(.reader-layout) .reader-layout {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .mobile-reader-toolbar,
@@ -376,7 +413,43 @@
 .reader-stack .feed {
   height: 100%;
   min-height: 0;
+  gap: 0.48rem;
+  padding: 0.62rem 0.72rem;
   overflow: hidden;
+}
+
+.reader-stack .feed-header {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reader-stack .feed-header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.reader-stack .feed-header-title .hint {
+  display: none;
+}
+
+.reader-stack .feed-header h2 {
+  font-size: 0.98rem;
+  white-space: nowrap;
+}
+
+.reader-stack .feed-filter-toggle-row,
+.reader-stack .feed-shortcuts {
+  display: none;
+}
+
+.reader-stack .module-divider {
+  margin: 0.04rem 0;
+}
+
+.reader-stack .feed-footer {
+  padding-top: 0;
 }
 
 .source-management-page {
@@ -2627,6 +2700,19 @@
 .feed-footer {
   display: flex;
   justify-content: center;
+  min-height: 1.45rem;
+}
+
+.feed-load-more-button {
+  min-height: 1.45rem;
+  padding: 0 0.52rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.feed-load-more-button svg {
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
 .feed-auto-load-sentinel {
@@ -3903,6 +3989,14 @@ button[data-slot='button'] svg,
     grid-template-columns: 1fr;
   }
 
+  .app-shell:has(.reader-layout) {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+
   .reader-stack {
     grid-template-columns: 1fr;
     gap: 0.62rem;
@@ -3922,6 +4016,8 @@ button[data-slot='button'] svg,
 
   .reader-stack .feed {
     height: auto;
+    gap: 0.58rem;
+    padding: 0.62rem;
     overflow: visible;
   }
 
@@ -4254,6 +4350,13 @@ button[data-slot='button'] svg,
 @media (max-width: 700px) {
   .app-shell {
     padding: 0.54rem;
+    padding-top: max(0.54rem, env(safe-area-inset-top));
+    padding-right: max(0.54rem, env(safe-area-inset-right));
+    padding-bottom: calc(max(0.54rem, env(safe-area-inset-bottom)) + 3.4rem);
+    padding-left: max(0.54rem, env(safe-area-inset-left));
+  }
+
+  .app-shell:has(.reader-layout) {
     padding-top: max(0.54rem, env(safe-area-inset-top));
     padding-right: max(0.54rem, env(safe-area-inset-right));
     padding-bottom: calc(max(0.54rem, env(safe-area-inset-bottom)) + 3.4rem);
