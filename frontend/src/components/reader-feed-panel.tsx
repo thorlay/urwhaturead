@@ -10,7 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from 'react'
-import { ChevronDown, MoreHorizontal, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
+import { MoreHorizontal, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -838,19 +838,20 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
       </div>
 
-      <div className="feed-footer">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="feed-load-more-button"
-          onClick={onLoadMore}
-          disabled={!hasMoreFeed || loadingFeed}
-        >
-          {hasMoreFeed && !loadingFeed && <ChevronDown aria-hidden="true" />}
-          {loadingFeed ? '加载中...' : hasMoreFeed ? '加载更多' : '没有更多了'}
-        </Button>
-      </div>
+      {(hasMoreFeed || loadingFeed) && (
+        <div className="feed-footer">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="feed-load-more-button"
+            onClick={onLoadMore}
+            disabled={loadingFeed}
+          >
+            {loadingFeed ? '加载中...' : '更多'}
+          </Button>
+        </div>
+      )}
     </section>
   )
 }

@@ -2700,19 +2700,13 @@
 .feed-footer {
   display: flex;
   justify-content: center;
-  min-height: 1.45rem;
 }
 
 .feed-load-more-button {
-  min-height: 1.45rem;
-  padding: 0 0.52rem;
+  min-height: 1.22rem;
+  padding: 0 0.42rem;
   color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.feed-load-more-button svg {
-  width: 0.82rem;
-  height: 0.82rem;
+  font-size: 0.7rem;
 }
 
 .feed-auto-load-sentinel {
