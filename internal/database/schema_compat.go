@@ -15,6 +15,9 @@ func EnsureRuntimeCompatibilitySchema(db *gorm.DB) error {
 	if err := ensureFeedBriefingTagSchema(db); err != nil {
 		return err
 	}
+	if err := ensureArticleFeedIndexes(db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -73,6 +76,23 @@ func ensureFeedBriefingTagSchema(db *gorm.DB) error {
 	for _, stmt := range statements {
 		if err := db.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("exec feed briefing compatibility statement failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureArticleFeedIndexes(db *gorm.DB) error {
+	statements := []string{
+		`CREATE INDEX IF NOT EXISTS ix_articles_feed_sort
+		 ON articles((COALESCE(published_at, created_at)) DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS ix_articles_source_feed_sort
+		 ON articles(source_id, (COALESCE(published_at, created_at)) DESC, id DESC)`,
+		`CREATE INDEX IF NOT EXISTS ix_articles_cluster_feed_sort
+		 ON articles((COALESCE(cluster_id, id)), (COALESCE(published_at, created_at)) DESC, id DESC)`,
+	}
+	for _, stmt := range statements {
+		if err := db.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("exec article feed index statement failed: %w", err)
 		}
 	}
 	return nil

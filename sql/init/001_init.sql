@@ -100,8 +100,14 @@ ON articles(source_id, link);
 CREATE INDEX IF NOT EXISTS ix_articles_published_at
 ON articles(published_at DESC);
 
+CREATE INDEX IF NOT EXISTS ix_articles_feed_sort
+ON articles((COALESCE(published_at, created_at)) DESC, id DESC);
+
 CREATE INDEX IF NOT EXISTS ix_articles_source_id
 ON articles(source_id);
+
+CREATE INDEX IF NOT EXISTS ix_articles_source_feed_sort
+ON articles(source_id, (COALESCE(published_at, created_at)) DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS ix_sources_click_count
 ON sources(click_count DESC, last_clicked_at DESC);
@@ -114,6 +120,9 @@ ON sources USING GIN(tags);
 
 CREATE INDEX IF NOT EXISTS ix_articles_cluster_id
 ON articles(cluster_id);
+
+CREATE INDEX IF NOT EXISTS ix_articles_cluster_feed_sort
+ON articles((COALESCE(cluster_id, id)), (COALESCE(published_at, created_at)) DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS ix_articles_canonical_link
 ON articles(canonical_link);

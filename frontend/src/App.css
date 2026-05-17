@@ -3647,6 +3647,20 @@
   font-size: 0.77rem;
 }
 
+.thread-preview-section {
+  border-top: 1px solid var(--line);
+}
+
+.thread-comments-preview .thread-comment {
+  padding-top: 0.12rem;
+  padding-bottom: 0.12rem;
+}
+
+.thread-comments-preview .reading-block {
+  font-size: 0.95rem;
+  line-height: 1.68;
+}
+
 .comment-toggle {
   justify-self: start;
 }
@@ -4197,14 +4211,18 @@ button[data-slot='button'] svg,
 
   .detail-content,
   .detail-page .detail-content,
+  .detail-header,
+  .detail-page .detail-header,
   .detail-section,
   .ai-summary-card,
   .reading-block,
   .html-block,
   .markdown-block,
-  .plain-text-block {
+  .plain-text-block,
+  .plain-text-paragraph {
     min-width: 0;
     max-width: 100%;
+    width: 100%;
     overflow-wrap: break-word;
     word-break: break-word;
   }
@@ -4217,7 +4235,8 @@ button[data-slot='button'] svg,
   .html-block a,
   .markdown-block a,
   .html-block code,
-  .markdown-block code {
+  .markdown-block code,
+  .plain-text-paragraph {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
@@ -4271,8 +4290,11 @@ button[data-slot='button'] svg,
 
   .detail-page .detail-title {
     max-width: 100%;
+    width: 100%;
     font-size: clamp(1.42rem, 8vw, 2rem);
     line-height: 1.18;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .detail-page .detail-content {
@@ -4290,6 +4312,41 @@ button[data-slot='button'] svg,
     border-bottom: 1px solid var(--line);
     background: var(--surface-overlay);
     backdrop-filter: blur(12px);
+    contain: inline-size;
+    overflow-x: hidden;
+  }
+
+  .detail-page .detail-toolbar,
+  .detail-page .detail-toolbar-sticky,
+  .detail-page .detail-toolbar-actions,
+  .detail-page .detail-toolbar-main-actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .detail-page .detail-toolbar-main-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail-page .detail-toolbar-main-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .detail-page .detail-mode-actions,
+  .detail-page .summary-actions,
+  .detail-page .detail-open-link {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .detail-page .detail-toolbar button,
+  .detail-page .detail-toolbar .detail-open-link {
+    max-width: calc(100vw - 1.8rem);
   }
 
   .detail-toolbar-main-actions,
@@ -4658,9 +4715,18 @@ button[data-slot='button'] svg,
     gap: 0.82rem;
   }
 
+  .plain-text-paragraph {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .detail-page {
     padding: max(0.78rem, env(safe-area-inset-top)) max(0.72rem, env(safe-area-inset-right))
       max(1rem, env(safe-area-inset-bottom)) max(0.72rem, env(safe-area-inset-left));
+    min-width: 0;
+    width: 100vw;
+    max-width: 100vw;
   }
 
   .detail-page .detail-header {
@@ -4674,7 +4740,10 @@ button[data-slot='button'] svg,
   }
 
   .detail-page .detail-title {
+    width: 100%;
     font-size: clamp(1.32rem, 7.2vw, 1.86rem);
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .detail-signals {
@@ -4686,6 +4755,8 @@ button[data-slot='button'] svg,
     margin-inline: calc(max(0.72rem, env(safe-area-inset-left)) * -1);
     padding-right: max(0.72rem, env(safe-area-inset-right));
     padding-left: max(0.72rem, env(safe-area-inset-left));
+    contain: inline-size;
+    overflow-x: hidden;
   }
 
   .detail-toolbar-actions,
@@ -4696,6 +4767,15 @@ button[data-slot='button'] svg,
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .detail-page .detail-toolbar-main-actions {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .detail-toolbar-actions::-webkit-scrollbar,

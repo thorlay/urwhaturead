@@ -17,7 +17,7 @@ type ReaderSummaryTask = {
   error?: string
 } | null
 
-type DetailView = 'main' | 'comments' | 'capture'
+type DetailView = 'main' | 'comments'
 type ReadingFontSize = 'compact' | 'default' | 'large'
 type ReadingWidth = 'narrow' | 'default' | 'wide'
 type ReadingLineHeight = 'tight' | 'default' | 'loose'
@@ -227,9 +227,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
       [
         { key: 'main' as const, label: '阅读', enabled: true },
         { key: 'comments' as const, label: '评论', enabled: hasThreadCommentsView },
-        { key: 'capture' as const, label: '抓取原文', enabled: hasCapturedExternal },
       ].filter((item) => item.enabled),
-    [hasCapturedExternal, hasThreadCommentsView],
+    [hasThreadCommentsView],
   )
   const activeArticleID = selectedArticle?.id ?? null
   const detailView = useMemo<DetailView>(() => {
@@ -701,12 +700,21 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <section className="detail-section detail-reading-section">
                 <div className="detail-section-head">
                   <h4>{isThreadArticle ? '主帖正文' : '正文'}</h4>
-                  {selectedArticle.summary && !selectedArticle.content && !selectedArticle.content_html && !threadPrimaryBody && (
-                    <span className="hint">当前展示原始摘要</span>
-                  )}
+                  {hasCapturedExternal && !isThreadArticle && <span className="hint">当前展示抓取全文</span>}
+                  {selectedArticle.summary &&
+                    !hasCapturedExternal &&
+                    !selectedArticle.content &&
+                    !selectedArticle.content_html &&
+                    !threadPrimaryBody && <span className="hint">当前展示原始摘要</span>}
                 </div>
                 {isThreadArticle && threadPrimaryBody ? (
                   <PlainTextBlock content={threadPrimaryBody} className="reading-block prose" />
+                ) : hasCapturedExternal && selectedArticle.external?.content ? (
+                  <>
+                    {selectedArticle.external.title && <p className="hint">{selectedArticle.external.title}</p>}
+                    <PlainTextBlock content={selectedArticle.external.content} className="reading-block prose" />
+                    {selectedArticle.external.truncated && <p className="hint">原文较长，已截断显示。</p>}
+                  </>
                 ) : selectedArticle.content_html ? (
                   <SafeHTMLBlock content={selectedArticle.content_html} baseURL={selectedArticle.link} />
                 ) : selectedArticle.content ? (
@@ -717,24 +725,58 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   <p className="hint">暂无可展示正文。</p>
                 )}
               </section>
-            </>
-          )}
 
-          {detailView === 'capture' && selectedArticle.external?.content && (
-            <section className="detail-section detail-reading-section">
-              <div className="detail-section-head">
-                <h4>抓取原文</h4>
-                <Button asChild variant="outline" size="sm" className="detail-open-link">
-                  <a href={selectedArticle.external.url} target="_blank" rel="noreferrer">
-                    <ExternalLink aria-hidden="true" />
-                    打开抓取原文
-                  </a>
-                </Button>
-              </div>
-              <p className="hint">{selectedArticle.external.title}</p>
-              <PlainTextBlock content={selectedArticle.external.content} className="reading-block prose" />
-              {selectedArticle.external.truncated && <p className="hint">原文较长，已截断显示。</p>}
-            </section>
+              {hasThreadCommentsView && selectedArticle.thread && (
+                <section className="thread-section thread-preview-section detail-section">
+                  <div className="thread-header">
+                    <div>
+                      <p className="detail-support-kicker">评论预览</p>
+                      <h4>讨论</h4>
+                    </div>
+                    <div className="thread-header-tools">
+                      <span className="thread-counts">
+                        共 {selectedArticle.thread.total_posts} 帖 · 展示 {visibleThreadComments.length}
+                      </span>
+                      {threadComments.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="thread-order-toggle"
+                          onClick={onToggleThreadCommentsNewestFirst}
+                        >
+                          {threadCommentsNewestFirst ? '最新在前' : '最早在前'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {threadComments.length > 0 ? (
+                    <>
+                      <div className="thread-comments thread-comments-preview">
+                        {visibleThreadComments.map((comment, index) => (
+                          <article key={`preview-${comment.link}-${index}`} className="thread-comment">
+                            <p className="thread-comment-meta">
+                              #{comment.post_number || index + 2} · {comment.author || 'unknown'} ·{' '}
+                              {comment.published_at ? formatTimeAgo(comment.published_at) : '-'}
+                            </p>
+                            <PlainTextBlock content={comment.content} className="reading-block" />
+                          </article>
+                        ))}
+                      </div>
+                      {threadComments.length > threadPreviewCommentLimit && (
+                        <Button type="button" variant="ghost" size="sm" className="comment-toggle" onClick={() => setDetailView('comments')}>
+                          查看全部评论（{threadComments.length}）
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="hint">暂无评论。</p>
+                  )}
+                  {selectedArticle.thread.truncated && <p className="hint">评论过多，仅展示前 120 条。</p>}
+                </section>
+              )}
+            </>
           )}
 
           {detailView === 'comments' && selectedArticle.thread && (
@@ -797,30 +839,17 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             </section>
           )}
 
-          {detailView === 'main' && (hasCapturedExternal || hasThreadCommentsView) && (
+          {detailView === 'main' && hasThreadCommentsView && threadComments.length === 0 && (
             <section className="detail-section detail-supporting-section">
               <div className="detail-section-head">
                 <h4>继续阅读</h4>
               </div>
               <div className="detail-support-cards">
-                {hasCapturedExternal && (
-                  <button type="button" className="detail-support-card" onClick={() => setDetailView('capture')}>
-                    <span className="detail-support-kicker">抓取原文</span>
-                    <strong>{selectedArticle.external?.title || '查看抓取到的全文'}</strong>
-                    <span className="hint">切换到抓取原文视图</span>
-                  </button>
-                )}
-                {hasThreadCommentsView && (
-                  <button type="button" className="detail-support-card" onClick={() => setDetailView('comments')}>
-                    <span className="detail-support-kicker">评论区</span>
-                    <strong>共 {selectedArticle.thread?.total_posts ?? threadComments.length} 帖讨论</strong>
-                    <span className="hint">
-                      {threadComments.length > 0
-                        ? `当前可读 ${visibleThreadComments.length} 条，点击进入评论视图`
-                        : '进入评论视图查看讨论'}
-                    </span>
-                  </button>
-                )}
+                <button type="button" className="detail-support-card" onClick={() => setDetailView('comments')}>
+                  <span className="detail-support-kicker">评论区</span>
+                  <strong>共 {selectedArticle.thread?.total_posts ?? threadComments.length} 帖讨论</strong>
+                  <span className="hint">进入评论视图查看讨论</span>
+                </button>
               </div>
             </section>
           )}

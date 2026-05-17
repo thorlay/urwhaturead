@@ -294,28 +294,45 @@ func (h *FeedHandler) List(c *gin.Context) {
 		)
 	}
 
+	if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
+		cursor, err := decodeFeedCursor(cursorRaw)
+		if err != nil {
+			badRequest(c, "invalid cursor")
+			return
+		}
+		query = query.Where(
+			"(COALESCE(a.published_at, a.created_at), a.id) < (?, ?)",
+			cursor.SortTime, cursor.ID,
+		)
+	}
+
 	var rows []feedItem
 	if dedupe {
-		ranked := query.
+		candidates := query.
+			Order("COALESCE(a.published_at, a.created_at) DESC").
+			Order("a.id DESC").
+			Limit(feedDedupeCandidateLimit(limit))
+
+		ranked := h.db.Table("(?) AS candidates", candidates).
 			Select(`
-				a.id,
-				a.source_id,
-				a.cluster_id,
-				s.name AS source_name,
-				COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
-				a.title,
-				a.link,
-				a.summary,
-				a.author,
-				a.published_at,
-				a.image_url,
-				a.reply_count,
-				a.created_at,
-				COALESCE(a.published_at, a.created_at) AS sort_time,
-				COUNT(*) OVER (PARTITION BY COALESCE(a.cluster_id, a.id)) AS duplicate_count,
+				candidates.id,
+				candidates.source_id,
+				candidates.cluster_id,
+				candidates.source_name,
+				candidates.source_tag,
+				candidates.title,
+				candidates.link,
+				candidates.summary,
+				candidates.author,
+				candidates.published_at,
+				candidates.image_url,
+				candidates.reply_count,
+				candidates.created_at,
+				candidates.sort_time,
+				COUNT(*) OVER (PARTITION BY COALESCE(candidates.cluster_id, candidates.id)) AS duplicate_count,
 				ROW_NUMBER() OVER (
-					PARTITION BY COALESCE(a.cluster_id, a.id)
-					ORDER BY COALESCE(a.published_at, a.created_at) DESC, a.id DESC
+					PARTITION BY COALESCE(candidates.cluster_id, candidates.id)
+					ORDER BY candidates.sort_time DESC, candidates.id DESC
 				) AS rn
 			`)
 
@@ -339,15 +356,6 @@ func (h *FeedHandler) List(c *gin.Context) {
 			`).
 			Where("ranked.rn = 1")
 
-		if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
-			cursor, err := decodeFeedCursor(cursorRaw)
-			if err != nil {
-				badRequest(c, "invalid cursor")
-				return
-			}
-			outer = outer.Where("(ranked.sort_time, ranked.id) < (?, ?)", cursor.SortTime, cursor.ID)
-		}
-
 		if err := outer.
 			Order("ranked.sort_time DESC").
 			Order("ranked.id DESC").
@@ -357,17 +365,6 @@ func (h *FeedHandler) List(c *gin.Context) {
 			return
 		}
 	} else {
-		if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
-			cursor, err := decodeFeedCursor(cursorRaw)
-			if err != nil {
-				badRequest(c, "invalid cursor")
-				return
-			}
-			query = query.Where(
-				"(COALESCE(a.published_at, a.created_at), a.id) < (?, ?)",
-				cursor.SortTime, cursor.ID,
-			)
-		}
 		if err := query.
 			Order("COALESCE(a.published_at, a.created_at) DESC").
 			Order("a.id DESC").
@@ -398,6 +395,17 @@ func (h *FeedHandler) List(c *gin.Context) {
 			"elapsed_ms":  time.Since(startedAt).Milliseconds(),
 		},
 	})
+}
+
+func feedDedupeCandidateLimit(limit int) int {
+	candidateLimit := limit * 50
+	if candidateLimit < 500 {
+		return 500
+	}
+	if candidateLimit > 3000 {
+		return 3000
+	}
+	return candidateLimit
 }
 
 func (h *FeedHandler) Briefing(c *gin.Context) {

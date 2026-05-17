@@ -80,7 +80,7 @@ body {
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   background:
     radial-gradient(circle at 12% 0%, rgba(20, 20, 19, 0.025), transparent 34rem),
     linear-gradient(180deg, var(--card) 0%, var(--background) 48%, #f7f5ef 100%);
