@@ -124,7 +124,6 @@ type reclassifySourceResult struct {
 
 const threadAutoHideAfter = 14 * 24 * time.Hour
 const sourceClassificationRecentArticleLimit = 24
-const sourceClassificationSnippetLimit = 280
 
 func recentArticleCountsSubquery(db *gorm.DB, window time.Duration) *gorm.DB {
 	if window <= 0 {
@@ -539,41 +538,6 @@ func (h *SourceHandler) recentArticleClassificationText(ctx context.Context, sou
 		}
 	}
 	return text, nil
-}
-
-func compactArticleClassificationText(article models.Article) string {
-	parts := make([]string, 0, 4)
-	if title := compactClassificationSnippet(article.Title); title != "" {
-		parts = append(parts, title)
-	}
-	if article.Summary != nil {
-		if summary := compactClassificationSnippet(*article.Summary); summary != "" {
-			parts = append(parts, summary)
-		}
-	}
-	if article.Content != nil {
-		if content := compactClassificationSnippet(*article.Content); content != "" {
-			parts = append(parts, content)
-		}
-	}
-	if len(article.Tags) > 0 {
-		if tags := compactClassificationSnippet(strings.Join(article.Tags, " ")); tags != "" {
-			parts = append(parts, tags)
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-func compactClassificationSnippet(value string) string {
-	normalized := strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
-	if normalized == "" {
-		return ""
-	}
-	runes := []rune(normalized)
-	if len(runes) <= sourceClassificationSnippetLimit {
-		return normalized
-	}
-	return string(runes[:sourceClassificationSnippetLimit])
 }
 
 func (h *SourceHandler) BulkUpdateTags(c *gin.Context) {

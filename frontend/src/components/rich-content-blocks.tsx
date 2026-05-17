@@ -30,7 +30,7 @@ export function SafeHTMLBlock(props: { content?: string; baseURL?: string }) {
 }
 
 export function MarkdownBlock(props: { content?: string }) {
-  const content = props.content?.trim()
+  const content = useMemo(() => normalizeMarkdownLinks(props.content), [props.content])
   if (!content) return null
 
   return (
@@ -45,4 +45,29 @@ export function MarkdownBlock(props: { content?: string }) {
       </ReactMarkdown>
     </div>
   )
+}
+
+export function normalizeMarkdownLinks(rawContent?: string): string {
+  const content = rawContent?.trim()
+  if (!content) return ''
+
+  return content
+    .split('\n')
+    .map((line) => linkifyPipeSeparatedURL(line))
+    .join('\n')
+}
+
+function linkifyPipeSeparatedURL(line: string): string {
+  if (!line.includes('｜')) return line
+
+  return line.replace(/https?:\/\/[^\s<>\])）｜|]+/g, (url, offset, source) => {
+    if (isMarkdownLinkURL(source, offset)) {
+      return url
+    }
+    return `[原文](${url})`
+  })
+}
+
+function isMarkdownLinkURL(source: string, offset: number): boolean {
+  return offset >= 2 && source[offset - 1] === '(' && source[offset - 2] === ']'
 }

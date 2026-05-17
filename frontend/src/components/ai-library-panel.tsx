@@ -211,7 +211,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
   const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
-  const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -245,22 +244,10 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
 
   const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
   const toggleArticleSelection = (key: string) => {
-    setSelectedArticleKey((current) => {
-      const next = current === key ? null : key
-      if (next) {
-        setPendingScrollKey(key)
-      }
-      return next
-    })
+    setSelectedArticleKey((current) => (current === key ? null : key))
   }
   const toggleBriefingSelection = (key: string) => {
-    setSelectedBriefingKey((current) => {
-      const next = current === key ? null : key
-      if (next) {
-        setPendingScrollKey(key)
-      }
-      return next
-    })
+    setSelectedBriefingKey((current) => (current === key ? null : key))
   }
   const isArticleSelected = (item: ArticleSummaryLibraryItem) =>
     selectedArticleKey === `${item.article_id}:${item.generated_at}`
@@ -325,17 +312,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeView, selectedArticleIndex, selectedBriefingIndex, flatArticleItems, flatBriefingItems])
-
-  useEffect(() => {
-    if (!pendingScrollKey) {
-      return
-    }
-    const node = entryRefs.current[pendingScrollKey]
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-    setPendingScrollKey(null)
-  }, [pendingScrollKey, selectedArticleKey, selectedBriefingKey])
 
   return (
     <main className="ai-library-page">
