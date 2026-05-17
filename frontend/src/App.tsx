@@ -66,7 +66,6 @@ function App() {
   const {
     sourceSelectAllRef,
     sourceContextMenuRef,
-    feedAIMoreRef,
     sidebarSourceItemRefs,
     previousSidebarSourceItemRectsRef,
     previousSidebarSourceIDsRef,
@@ -383,7 +382,6 @@ function App() {
     selectedVisibleCount: sourceManagementState.selectedVisibleCount,
     allVisibleSelected: sourceManagementState.allVisibleSelected,
     showFeedAIMoreMenu,
-    feedAIMoreRef,
     setShowFeedAIMoreMenu,
     previousSidebarSourceItemRectsRef,
     previousSidebarSourceIDsRef,

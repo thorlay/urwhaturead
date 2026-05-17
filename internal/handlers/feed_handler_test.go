@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,40 @@ func TestBriefingSnippet_CleansNoise(t *testing.T) {
 	want := "主要内容"
 	if got != want {
 		t.Fatalf("briefingSnippet()=%q, want %q", got, want)
+	}
+}
+
+func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
+	items := []feedItem{
+		{
+			SourceName: "Blog",
+			SourceTag:  "tech",
+			Title:      "Why software teams need fewer dashboards",
+			Link:       "https://example.com/essay",
+			Summary:    stringPtr("作者认为团队应该减少仪表盘数量，集中在更少但更可靠的指标上。"),
+		},
+		{
+			SourceName: "Forum",
+			SourceTag:  "forum",
+			Title:      "How do you manage RSS overload?",
+			Link:       "https://example.com/thread",
+			Summary:    stringPtr("讨论集中在过滤规则、AI 摘要和手动精选之间的取舍。"),
+		},
+	}
+
+	prompt := buildFeedBriefingPrompt(items)
+	for _, want := range []string{
+		"信息条目",
+		"不要默认按新闻稿方式总结",
+		"essay_argument",
+		"forum_discussion",
+		"resource_tool",
+		"长文论点与讨论焦点",
+		"适合谁读",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("buildFeedBriefingPrompt() missing %q in prompt:\n%s", want, prompt)
+		}
 	}
 }
 

@@ -36,7 +36,7 @@ type FeedHandler struct {
 }
 
 const nonAdminBriefingModel = "gemini-3-flash-preview"
-const feedBriefingSystemPrompt = "你是一个中文新闻编辑台 AI。请先在心里合并重复事件，再按重要性输出。优先保留真正新增、多源确认、讨论升温、影响较大的信息；不要把所有条目写成同等重要，也不要重复复述同一事件的背景。除首次提及外，同一核心事实不要在多个 section 里重复展开。"
+const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。不要默认把所有条目都当新闻；请先识别每条内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按类型提炼。请先在心里合并重复事件和相似讨论，再按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
 
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
@@ -975,22 +975,25 @@ func parseCSVUint64Loose(raw string) []uint64 {
 
 func buildFeedBriefingPrompt(items []feedItem) string {
 	var builder strings.Builder
-	builder.WriteString("请基于以下新闻列表输出「今日聚合速览」。\n")
+	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
 	builder.WriteString("输出格式严格为：\n")
-	builder.WriteString("1) 一句话总览（1-2句，只写最重要的总体变化）\n")
-	builder.WriteString("2) 重点主题分组（2-4组，每组2-4条）\n")
-	builder.WriteString("3) 风险/争议观察（最多4条；只写前文没有完整展开的新风险点）\n")
-	builder.WriteString("4) 值得深读（最多6条，格式：标题｜链接URL｜一句理由；不要重复正文内容）\n\n")
+	builder.WriteString("1) 今日判断（4-8句；说明今天最值得注意的变化、论点或讨论趋势，不要只列标题）\n")
+	builder.WriteString("2) 内容类型分布（按 news_event / essay_argument / forum_discussion / resource_tool / mixed 粗略说明各类内容的主线）\n")
+	builder.WriteString("3) 重点主题分组（2-5组，每组2-4条；每条写“发生/主张/讨论了什么 + 为什么重要”）\n")
+	builder.WriteString("4) 长文论点与讨论焦点（如果有观点文或论坛内容，提炼作者论点、论证链条、主要分歧、经验信息；没有就写“本轮未发现明显长文/论坛主线”）\n")
+	builder.WriteString("5) 风险/争议/不确定性（最多4条；只写前文没有完整展开的新风险点或论证漏洞）\n")
+	builder.WriteString("6) 值得深读（最多6条，格式：标题｜链接URL｜推荐理由｜适合谁读；不要重复正文内容）\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
-	builder.WriteString("- 优先写真正新增、多源确认、讨论升温或影响较大的信息；信息不足或重复度高的条目可以忽略。\n")
+	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
+	builder.WriteString("- 优先写真正新增、多源确认、讨论升温、论证质量高、经验密度高或影响较大的信息；信息不足或重复度高的条目可以忽略。\n")
 	builder.WriteString("- 不要把所有主题写成同等重要；真正重要的主题放在前面，次要信息可以压缩。\n")
 	builder.WriteString("- 同一核心事实只能完整表述一次；后续 section 如果需要引用，只能极短指代，不得重复铺陈背景。\n")
-	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议观察”里再次完整重写。\n")
+	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议/不确定性”里再次完整重写。\n")
 	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")
-	builder.WriteString("- 第4部分每一条都必须包含可访问的原始链接 URL。\n")
-	builder.WriteString("- 链接必须来自下面提供的新闻条目，不要编造新链接。\n\n")
-	builder.WriteString("新闻条目：\n")
+	builder.WriteString("- 第6部分每一条都必须包含可访问的原始链接 URL。\n")
+	builder.WriteString("- 链接必须来自下面提供的信息条目，不要编造新链接。\n\n")
+	builder.WriteString("信息条目：\n")
 	for i, item := range items {
 		builder.WriteString(fmt.Sprintf(
 			"%d. [%s/%s] %s\n",

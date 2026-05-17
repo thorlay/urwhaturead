@@ -32,7 +32,6 @@ type UseAppUIEffectsParams = {
   selectedVisibleCount: number
   allVisibleSelected: boolean
   showFeedAIMoreMenu: boolean
-  feedAIMoreRef: RefObject<HTMLDivElement | null>
   setShowFeedAIMoreMenu: (show: boolean) => void
   previousSidebarSourceItemRectsRef: MutableRefObject<Map<number, DOMRect>>
   previousSidebarSourceIDsRef: MutableRefObject<number[]>
@@ -66,7 +65,6 @@ export function useAppUIEffects({
   selectedVisibleCount,
   allVisibleSelected,
   showFeedAIMoreMenu,
-  feedAIMoreRef,
   setShowFeedAIMoreMenu,
   previousSidebarSourceItemRectsRef,
   previousSidebarSourceIDsRef,
@@ -141,37 +139,6 @@ export function useAppUIEffects({
     if (!input) return
     input.indeterminate = selectedVisibleCount > 0 && !allVisibleSelected
   }, [allVisibleSelected, selectedVisibleCount, sourceSelectAllRef])
-
-  useEffect(() => {
-    if (!showFeedAIMoreMenu) return
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node | null
-      if (target && feedAIMoreRef.current?.contains(target)) {
-        return
-      }
-      setShowFeedAIMoreMenu(false)
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setShowFeedAIMoreMenu(false)
-      }
-    }
-
-    function handleScroll() {
-      setShowFeedAIMoreMenu(false)
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    window.addEventListener('scroll', handleScroll, true)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('scroll', handleScroll, true)
-    }
-  }, [feedAIMoreRef, setShowFeedAIMoreMenu, showFeedAIMoreMenu])
 
   useEffect(() => {
     if (activeTab !== 'reader' && showFeedAIMoreMenu) {

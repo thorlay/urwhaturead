@@ -597,7 +597,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 open={showFeedAIMoreMenu}
                 onOpenChange={(open) => {
                   if (open) {
-                    onToggleFeedAIMoreMenu()
+                    if (!showFeedAIMoreMenu) {
+                      onToggleFeedAIMoreMenu()
+                    }
                     return
                   }
                   onCloseFeedAIMoreMenu()

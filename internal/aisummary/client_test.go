@@ -64,6 +64,37 @@ func TestNewClient_NotConfigured(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_RequiresContentTypeAwareSummary(t *testing.T) {
+	prompt := buildPrompt("Long essay", "Body")
+	for _, want := range []string{
+		"内容类型",
+		"essay_argument",
+		"forum_discussion",
+		"resource_tool",
+		"不要默认把它当新闻",
+		"是否值得读",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("buildPrompt() missing %q in prompt:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildCompactPrompt_RequiresContentType(t *testing.T) {
+	prompt := buildCompactPrompt("Title", "Body")
+	for _, want := range []string{
+		"内容类型",
+		"不要默认按新闻写",
+		"观点文",
+		"论坛",
+		"工具资源",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("buildCompactPrompt() missing %q in prompt:\n%s", want, prompt)
+		}
+	}
+}
+
 func TestSummarize_MessagesAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

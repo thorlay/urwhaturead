@@ -55,16 +55,18 @@ export function SummaryTaskStrip<TTask extends SummaryTaskBase>(props: SummaryTa
           <h3>AI 任务队列</h3>
           <p className="hint">包含文章摘要与 AI 速览。点击任务可定位到对应内容。</p>
         </div>
-        <div className="ai-task-strip-badges">
-          <Badge variant="outline">运行中 {stats.running}</Badge>
-          <Badge variant="outline">排队 {stats.queued}</Badge>
-          <Badge variant="outline">失败 {stats.failed}</Badge>
-          <Badge variant="outline">完成 {stats.succeeded}</Badge>
-        </div>
-        <div className="ai-task-strip-actions">
-          <Button type="button" variant="outline" size="sm" onClick={onClearCompleted}>
-            清理已结束
-          </Button>
+        <div className="ai-task-strip-controls">
+          <div className="ai-task-strip-badges" aria-label="AI 任务状态统计">
+            <Badge variant="outline">运行中 {stats.running}</Badge>
+            <Badge variant="outline">排队 {stats.queued}</Badge>
+            <Badge variant="outline">失败 {stats.failed}</Badge>
+            <Badge variant="outline">完成 {stats.succeeded}</Badge>
+          </div>
+          <div className="ai-task-strip-actions">
+            <Button type="button" variant="outline" size="sm" onClick={onClearCompleted}>
+              清理已结束
+            </Button>
+          </div>
         </div>
       </div>
       <div className="ai-task-list">
@@ -73,7 +75,7 @@ export function SummaryTaskStrip<TTask extends SummaryTaskBase>(props: SummaryTa
             <button type="button" className="ai-task-open" onClick={() => onOpenTask(task)}>
               <span className="ai-task-title">{task.title}</span>
               <span className="ai-task-meta">
-                {summaryTaskKindLabel(task.kind)} · {task.sourceName} · {summaryTaskStatusLabel(task.status)} · {formatTimeAgo(task.updatedAt)}
+                {summaryTaskKindLabel(task.kind)} · {task.sourceName} · {formatTimeAgo(task.updatedAt)}
               </span>
             </button>
             <div className="ai-task-row-actions">
