@@ -4,12 +4,11 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason } from '../lib/app-utils'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, ExternalLink, Pin, PinOff, RefreshCw, Search } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
 type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
-type AILibraryPinnedFilter = 'all' | 'pinned'
 
 type AILibraryPanelProps = {
   aiModel: string
@@ -20,8 +19,6 @@ type AILibraryPanelProps = {
   timeRange: AILibraryRange
   sourceFilter: string
   statusFilter: AILibraryStatusFilter
-  pinnedFilter: AILibraryPinnedFilter
-  pinnedKeys: string[]
   articleSummaries: ArticleSummaryLibraryItem[]
   feedBriefings: FeedBriefingLibraryItem[]
   sources: Source[]
@@ -33,8 +30,6 @@ type AILibraryPanelProps = {
   onChangeTimeRange: (range: AILibraryRange) => void
   onChangeSourceFilter: (value: string) => void
   onChangeStatusFilter: (value: AILibraryStatusFilter) => void
-  onChangePinnedFilter: (value: AILibraryPinnedFilter) => void
-  onTogglePinnedKey: (key: string) => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
   onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
@@ -146,23 +141,6 @@ function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
   )
 }
 
-function splitPinnedSections<T extends { generated_at: string }>(
-  items: T[],
-  isPinned: (item: T) => boolean,
-): LibrarySection<T>[] {
-  const pinnedItems = items.filter(isPinned)
-  const regularItems = items.filter((item) => !isPinned(item))
-  const sections: LibrarySection<T>[] = []
-  if (pinnedItems.length > 0) {
-    sections.push({
-      key: 'pinned',
-      label: '已固定',
-      items: pinnedItems,
-    })
-  }
-  return sections.concat(groupByRecency(regularItems))
-}
-
 export function AILibraryPanel(props: AILibraryPanelProps) {
   const {
     aiModel,
@@ -173,8 +151,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     timeRange,
     sourceFilter,
     statusFilter,
-    pinnedFilter,
-    pinnedKeys,
     articleSummaries,
     feedBriefings,
     sources,
@@ -186,8 +162,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onChangeTimeRange,
     onChangeSourceFilter,
     onChangeStatusFilter,
-    onChangePinnedFilter,
-    onTogglePinnedKey,
     onOpenArticleSummary,
     onOpenFeedBriefing,
   } = props
@@ -199,7 +173,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     a.localeCompare(b, 'zh-Hans-CN'),
   )
 
-  const pinnedKeySet = useMemo(() => new Set(pinnedKeys), [pinnedKeys])
   const filteredArticles = articleSummaries.filter((item) => {
     if (!withinRange(item.generated_at, timeRange)) {
       return false
@@ -211,9 +184,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
       return false
     }
     if (statusFilter === 'truncated' && !item.truncated) {
-      return false
-    }
-    if (pinnedFilter === 'pinned' && !pinnedKeySet.has(`article:${item.article_id}:${item.generated_at}`)) {
       return false
     }
     return true
@@ -232,16 +202,10 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     if (statusFilter === 'truncated' && !item.truncated) {
       return false
     }
-    if (pinnedFilter === 'pinned' && !pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`)) {
-      return false
-    }
     return true
   })
-  const articleSections = splitPinnedSections(filteredArticles, (item) => pinnedKeySet.has(`article:${item.article_id}:${item.generated_at}`))
-  const briefingSections = splitPinnedSections(
-    filteredBriefings,
-    (item) => pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`),
-  )
+  const articleSections = groupByRecency(filteredArticles)
+  const briefingSections = groupByRecency(filteredBriefings)
   const activeCount = activeView === 'articles' ? filteredArticles.length : filteredBriefings.length
   const sourceOptions = activeView === 'articles' ? articleSourceOptions : briefingScopeOptions
   const sourceLabel = activeView === 'articles' ? '来源' : '范围'
@@ -249,8 +213,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
   const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
-  const [articleSelectionInitialized, setArticleSelectionInitialized] = useState(false)
-  const [briefingSelectionInitialized, setBriefingSelectionInitialized] = useState(false)
   const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
@@ -258,7 +220,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   useEffect(() => {
     if (flatArticleItems.length === 0) {
       setSelectedArticleKey(null)
-      setArticleSelectionInitialized(false)
       return
     }
     if (selectedArticleKey) {
@@ -266,22 +227,13 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
       if (hasCurrent) {
         return
       }
-      const first = flatArticleItems[0]
-      setSelectedArticleKey(`${first.article_id}:${first.generated_at}`)
-      setArticleSelectionInitialized(true)
-      return
+      setSelectedArticleKey(null)
     }
-    if (!articleSelectionInitialized) {
-      const first = flatArticleItems[0]
-      setSelectedArticleKey(`${first.article_id}:${first.generated_at}`)
-      setArticleSelectionInitialized(true)
-    }
-  }, [articleSelectionInitialized, flatArticleItems, selectedArticleKey])
+  }, [flatArticleItems, selectedArticleKey])
 
   useEffect(() => {
     if (flatBriefingItems.length === 0) {
       setSelectedBriefingKey(null)
-      setBriefingSelectionInitialized(false)
       return
     }
     if (selectedBriefingKey) {
@@ -289,27 +241,21 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
       if (hasCurrent) {
         return
       }
-      const first = flatBriefingItems[0]
-      setSelectedBriefingKey(`${first.digest_key}:${first.generated_at}`)
-      setBriefingSelectionInitialized(true)
-      return
+      setSelectedBriefingKey(null)
     }
-    if (!briefingSelectionInitialized) {
-      const first = flatBriefingItems[0]
-      setSelectedBriefingKey(`${first.digest_key}:${first.generated_at}`)
-      setBriefingSelectionInitialized(true)
-    }
-  }, [briefingSelectionInitialized, flatBriefingItems, selectedBriefingKey])
+  }, [flatBriefingItems, selectedBriefingKey])
 
   const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
   const toggleArticleSelection = (key: string) => {
-    setArticleSelectionInitialized(true)
     setSelectedArticleKey((current) => {
-      return current === key ? null : key
+      const next = current === key ? null : key
+      if (next) {
+        setPendingScrollKey(key)
+      }
+      return next
     })
   }
   const toggleBriefingSelection = (key: string) => {
-    setBriefingSelectionInitialized(true)
     setSelectedBriefingKey((current) => {
       const next = current === key ? null : key
       if (next) {
@@ -376,21 +322,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         }
         return
       }
-      if (event.key === 'p') {
-        event.preventDefault()
-        if (activeView === 'articles' && selectedArticleKey) {
-          onTogglePinnedKey(`article:${selectedArticleKey}`)
-          return
-        }
-        if (activeView === 'briefings' && selectedBriefingKey) {
-          onTogglePinnedKey(`briefing:${selectedBriefingKey}`)
-        }
-      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeView, onTogglePinnedKey, selectedArticleKey, selectedBriefingKey, selectedArticleIndex, selectedBriefingIndex, flatArticleItems, flatBriefingItems])
+  }, [activeView, selectedArticleIndex, selectedBriefingIndex, flatArticleItems, flatBriefingItems])
 
   useEffect(() => {
     if (!pendingScrollKey) {
@@ -412,12 +348,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
               <p className="ai-library-kicker">AI Reading</p>
               <h2>AI 速览与摘要</h2>
               <p className="hint">优先回看 AI 对阅读流做出的判断，再展开详情。</p>
-            </div>
-            <div className="ai-library-head-meta">
-              <span className="topbar-model-chip" title={aiModel}>
-                <span className="topbar-model-label">当前模型</span>
-                <span className="topbar-model-value">{aiModel || '-'}</span>
-              </span>
+              <p className="hint ai-library-model-note">模型：{aiModel || '-'}</p>
             </div>
           </div>
 
@@ -502,13 +433,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                     <option value="truncated">输出触顶/截断</option>
                   </select>
                 </label>
-                <label className="ai-library-select-label">
-                  <span>固定</span>
-                  <select className="ai-library-select" value={pinnedFilter} onChange={(event) => onChangePinnedFilter(event.target.value as AILibraryPinnedFilter)}>
-                    <option value="all">全部</option>
-                    <option value="pinned">只看固定</option>
-                  </select>
-                </label>
               </div>
             </div>
           </div>
@@ -526,9 +450,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
             {timeRange !== 'all' ? ` · 已按 ${timeRange} 过滤` : ''}
             {sourceFilter !== 'all' ? ` · ${sourceLabel} ${sourceFilter}` : ''}
             {statusFilter !== 'all' ? ` · ${statusFilter === 'truncated' ? '只看输出触顶/截断' : '只看正常结束'}` : ''}
-            {pinnedFilter === 'pinned' ? ' · 只看固定' : ''}
             {search.trim() ? ` · 关键词 “${search.trim()}”` : ''}
-            {pinnedKeys.length > 0 ? ` · 已固定 ${pinnedKeys.length} 条` : ''}
           </p>
         </div>
 
@@ -551,101 +473,92 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   {section.items.map((item) => {
                     const articleKey = `${item.article_id}:${item.generated_at}`
                     return (
-                    <article
-                      ref={attachEntryRef(articleKey)}
-                      key={`article-summary-${item.article_id}-${item.generated_at}`}
-                      className={`ai-library-entry ai-library-entry-clickable ${isArticleSelected(item) ? 'active' : ''}`}
-                      aria-expanded={isArticleSelected(item)}
-                      onClick={(event) => {
-                        if (shouldIgnoreEntryToggle(event)) {
-                          return
-                        }
-                        toggleArticleSelection(articleKey)
-                      }}
-                    >
-                      <div className="ai-library-entry-rail" aria-hidden="true">
-                        <span className="ai-library-entry-dot" />
-                      </div>
-                      <div className="ai-library-entry-body">
-                        <div className="ai-library-entry-head">
-                          <div className="ai-library-entry-main">
-                            <button
-                              type="button"
-                              className="ai-library-entry-select"
-                              onClick={() => toggleArticleSelection(articleKey)}
-                            >
-                              <span className="ai-library-entry-title">{item.title}</span>
-                            </button>
-                            <p className="ai-library-entry-meta">
-                              <span className="ai-library-entry-kind">文章摘要</span>
-                              <span>{item.source_name}</span>
-                              <span>{formatTimeAgo(item.generated_at)}</span>
-                              <span>{item.model}</span>
-                            </p>
-                            <div className="ai-library-entry-chips" aria-label="摘要属性">
-                              <span>输入 {item.input_chars} 字符</span>
-                              {item.truncated && <span>输出触顶</span>}
-                            </div>
-                          </div>
-                            <div className="ai-library-entry-actions">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onTogglePinnedKey(`article:${articleKey}`)}
-                            >
-                              {pinnedKeySet.has(`article:${articleKey}`) ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
-                              {pinnedKeySet.has(`article:${articleKey}`) ? '取消固定' : '固定'}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleArticleSelection(articleKey)}
-                            >
-                              {isArticleSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-                              {isArticleSelected(item) ? '收起' : '展开'}
-                            </Button>
-                            <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
-                              <ExternalLink aria-hidden="true" />
-                              打开文章
-                            </Button>
-                          </div>
+                      <article
+                        ref={attachEntryRef(articleKey)}
+                        key={`article-summary-${item.article_id}-${item.generated_at}`}
+                        className={`ai-library-entry ai-library-entry-clickable ${isArticleSelected(item) ? 'active' : ''}`}
+                        aria-expanded={isArticleSelected(item)}
+                        onClick={(event) => {
+                          if (shouldIgnoreEntryToggle(event)) {
+                            return
+                          }
+                          toggleArticleSelection(articleKey)
+                        }}
+                      >
+                        <div className="ai-library-entry-rail" aria-hidden="true">
+                          <span className="ai-library-entry-dot" />
                         </div>
-                        {isArticleSelected(item) ? (
-                          <div className="ai-library-entry-expanded">
-                            <div className="ai-library-entry-nav">
-                              <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentArticle(-1)} disabled={selectedArticleIndex <= 0}>
-                                <ArrowLeft aria-hidden="true" />
-                                上一条
-                              </Button>
+                        <div className="ai-library-entry-body">
+                          <div className="ai-library-entry-head">
+                            <div className="ai-library-entry-main">
+                              <button
+                                type="button"
+                                className="ai-library-entry-select"
+                                onClick={() => toggleArticleSelection(articleKey)}
+                              >
+                                <span className="ai-library-entry-title">{item.title}</span>
+                              </button>
+                              <p className="ai-library-entry-meta">
+                                <span className="ai-library-entry-kind">文章摘要</span>
+                                <span>{item.source_name}</span>
+                                <span>{formatTimeAgo(item.generated_at)}</span>
+                                <span>{item.model}</span>
+                              </p>
+                              <div className="ai-library-entry-chips" aria-label="摘要属性">
+                                <span>输入 {item.input_chars} 字符</span>
+                                {item.truncated && <span>输出触顶</span>}
+                              </div>
+                            </div>
+                            <div className="ai-library-entry-actions">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => selectAdjacentArticle(1)}
-                                disabled={selectedArticleIndex < 0 || selectedArticleIndex >= flatArticleItems.length - 1}
+                                onClick={() => toggleArticleSelection(articleKey)}
                               >
-                                <ArrowRight aria-hidden="true" />
-                                下一条
+                                {isArticleSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                                {isArticleSelected(item) ? '收起' : '展开'}
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
+                                <ExternalLink aria-hidden="true" />
+                                打开文章
                               </Button>
                             </div>
-                            <div className="ai-library-detail-body">
-                              <MarkdownBlock content={item.summary} />
+                          </div>
+                          {isArticleSelected(item) ? (
+                            <div className="ai-library-entry-expanded">
+                              <div className="ai-library-entry-nav">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentArticle(-1)} disabled={selectedArticleIndex <= 0}>
+                                  <ArrowLeft aria-hidden="true" />
+                                  上一条
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => selectAdjacentArticle(1)}
+                                  disabled={selectedArticleIndex < 0 || selectedArticleIndex >= flatArticleItems.length - 1}
+                                >
+                                  <ArrowRight aria-hidden="true" />
+                                  下一条
+                                </Button>
+                              </div>
+                              <div className="ai-library-detail-body">
+                                <MarkdownBlock content={item.summary} />
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="ai-library-inset">
-                            <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
-                          </div>
-                        )}
-                        {visibleAIStopReason(item.stop_reason, item.truncated) && (
-                          <p className="ai-library-entry-foot hint">
-                            {joinMetaParts([`输入 ${item.input_chars} 字符`, visibleAIStopReason(item.stop_reason, item.truncated)])}
-                          </p>
-                        )}
-                      </div>
-                    </article>
+                          ) : (
+                            <div className="ai-library-inset">
+                              <p className="ai-library-entry-preview">{previewText(item.summary, 220)}</p>
+                            </div>
+                          )}
+                          {visibleAIStopReason(item.stop_reason, item.truncated) && (
+                            <p className="ai-library-entry-foot hint">
+                              {joinMetaParts([`输入 ${item.input_chars} 字符`, visibleAIStopReason(item.stop_reason, item.truncated)])}
+                            </p>
+                          )}
+                        </div>
+                      </article>
                     )
                   })}
                 </div>
@@ -678,7 +591,16 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                       <article
                         ref={attachEntryRef(briefingKey)}
                         key={`feed-briefing-${item.digest_key}`}
-                        className={`ai-library-entry ai-library-entry-briefing ${isBriefingSelected(item) ? 'active' : ''}`}
+                        className={`ai-library-entry ai-library-entry-clickable ai-library-entry-briefing ${
+                          isBriefingSelected(item) ? 'active' : ''
+                        }`}
+                        aria-expanded={isBriefingSelected(item)}
+                        onClick={(event) => {
+                          if (shouldIgnoreEntryToggle(event)) {
+                            return
+                          }
+                          toggleBriefingSelection(briefingKey)
+                        }}
                       >
                         <div className="ai-library-entry-rail" aria-hidden="true">
                           <span className="ai-library-entry-dot" />
@@ -707,16 +629,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 {item.truncated && <span>输出触顶</span>}
                               </div>
                             </div>
-                          <div className="ai-library-entry-actions">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => onTogglePinnedKey(`briefing:${item.digest_key}:${item.generated_at}`)}
-                              >
-                                {pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`) ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
-                                {pinnedKeySet.has(`briefing:${item.digest_key}:${item.generated_at}`) ? '取消固定' : '固定'}
-                              </Button>
+                            <div className="ai-library-entry-actions">
                               <Button type="button" variant="ghost" size="sm" onClick={() => toggleBriefingSelection(briefingKey)}>
                                 {isBriefingSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
                                 {isBriefingSelected(item) ? '收起' : '展开'}
@@ -787,7 +700,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                                 if (isSummarized && relatedSummary) {
                                                   onChangeSourceFilter('all')
                                                   onChangeStatusFilter('all')
-                                                  onChangePinnedFilter('all')
                                                   onChangeTimeRange('all')
                                                   onChangeView('articles')
                                                   toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)

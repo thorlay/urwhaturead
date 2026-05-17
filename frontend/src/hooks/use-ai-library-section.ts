@@ -16,9 +16,6 @@ type UseAILibrarySectionParams = {
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
 type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
-type AILibraryPinnedFilter = 'all' | 'pinned'
-
-const aiLibraryPinnedStorageKey = 'quick_ai_library_pinned_keys'
 
 export function useAILibrarySection({
   activeTab,
@@ -38,19 +35,6 @@ export function useAILibrarySection({
   const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<AILibraryStatusFilter>('all')
-  const [pinnedFilter, setPinnedFilter] = useState<AILibraryPinnedFilter>('all')
-  const [pinnedKeys, setPinnedKeys] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const raw = window.localStorage.getItem(aiLibraryPinnedStorageKey)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return []
-      return parsed.filter((value): value is string => typeof value === 'string' && value.trim() !== '').slice(0, 200)
-    } catch {
-      return []
-    }
-  })
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -114,15 +98,6 @@ export function useAILibrarySection({
     void loadAILibrary('')
   }, [activeTab, loadedOnce, loadAILibrary])
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (pinnedKeys.length === 0) {
-      window.localStorage.removeItem(aiLibraryPinnedStorageKey)
-      return
-    }
-    window.localStorage.setItem(aiLibraryPinnedStorageKey, JSON.stringify(pinnedKeys.slice(0, 200)))
-  }, [pinnedKeys])
-
   const applySearch = useCallback(() => {
     void loadAILibrary(search)
   }, [loadAILibrary, search])
@@ -149,17 +124,6 @@ export function useAILibrarySection({
     [onOpenFromAILibrary, openFeedBriefing, setActiveTab],
   )
 
-  const togglePinnedKey = useCallback((key: string) => {
-    const normalized = key.trim()
-    if (!normalized) return
-    setPinnedKeys((current) => {
-      if (current.includes(normalized)) {
-        return current.filter((item) => item !== normalized)
-      }
-      return [normalized, ...current].slice(0, 200)
-    })
-  }, [])
-
   return {
     search,
     setSearch,
@@ -171,10 +135,6 @@ export function useAILibrarySection({
     setSourceFilter,
     statusFilter,
     setStatusFilter,
-    pinnedFilter,
-    setPinnedFilter,
-    pinnedKeys,
-    togglePinnedKey,
     articleSummaries,
     feedBriefings,
     loading,

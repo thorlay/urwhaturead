@@ -515,8 +515,6 @@ function App() {
             timeRange={aiLibrarySection.timeRange}
             sourceFilter={aiLibrarySection.sourceFilter}
             statusFilter={aiLibrarySection.statusFilter}
-            pinnedFilter={aiLibrarySection.pinnedFilter}
-            pinnedKeys={aiLibrarySection.pinnedKeys}
             articleSummaries={aiLibrarySection.articleSummaries}
             feedBriefings={aiLibrarySection.feedBriefings}
             sources={sources}
@@ -528,8 +526,6 @@ function App() {
             onChangeTimeRange={aiLibrarySection.setTimeRange}
             onChangeSourceFilter={aiLibrarySection.setSourceFilter}
             onChangeStatusFilter={aiLibrarySection.setStatusFilter}
-            onChangePinnedFilter={aiLibrarySection.setPinnedFilter}
-            onTogglePinnedKey={aiLibrarySection.togglePinnedKey}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
             onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />
