@@ -15,31 +15,31 @@ var sourceTagKeywordRules = []struct {
 }{
 	{
 		Tag:      "jobs",
-		Keywords: []string{"hiring", "jobs", "job ", "career", "who is hiring"},
+		Keywords: []string{"hiring", "jobs", "job ", "career", "who is hiring", "招聘", "求职", "内推", "远程工作"},
 	},
 	{
 		Tag:      "finance",
-		Keywords: []string{"finance", "market", "stocks", "invest", "economy", "fed", "interest rate", "credit card", "rewards", "points"},
+		Keywords: []string{"finance", "market", "stocks", "invest", "economy", "fed", "interest rate", "credit card", "rewards", "points", "财经", "金融", "股票", "市场", "美股", "港股", "a股", "基金", "投资", "银行", "利率", "美联储", "财报", "债券", "加密货币", "信用卡", "返现", "积分"},
 	},
 	{
 		Tag:      "tech",
-		Keywords: []string{"tech", "software", "developer", "programming", "open source", "hacker news", "ai", "startup", "github", "v2ex"},
+		Keywords: []string{"tech", "software", "developer", "programming", "open source", "hacker news", "artificial intelligence", "llm", "gpt", "startup", "github", "v2ex", "科技", "技术", "软件", "编程", "开发", "开源", "人工智能", "大模型", "模型", "芯片", "程序员", "互联网"},
 	},
 	{
 		Tag:      "world",
-		Keywords: []string{"world", "international", "geopolitic", "global", "election", "war"},
+		Keywords: []string{"world", "international", "geopolitic", "global", "election", "war", "国际", "全球", "地缘", "选举", "战争", "外交", "政治"},
 	},
 	{
 		Tag:      "science",
-		Keywords: []string{"science", "research", "space", "physics", "biology", "medicine"},
+		Keywords: []string{"science", "research", "space", "physics", "biology", "medicine", "科学", "研究", "太空", "物理", "生物", "医学", "航天"},
 	},
 	{
 		Tag:      "sports",
-		Keywords: []string{"sports", "nfl", "nba", "soccer", "mlb", "tennis"},
+		Keywords: []string{"sports", "nfl", "nba", "soccer", "mlb", "tennis", "体育", "足球", "篮球", "网球"},
 	},
 	{
 		Tag:      "forum",
-		Keywords: []string{"forum", "thread", "discussion", "community", "reddit", "comment"},
+		Keywords: []string{"forum", "thread", "discussion", "community", "reddit", "comment", "论坛", "帖子", "回复", "评论", "楼主", "请教", "讨论", "分享"},
 	},
 }
 
@@ -123,12 +123,20 @@ func resolveSourceTag(requestedTag string, rssURL string, probe *probeResult) st
 }
 
 func resolveSourceTagWithReason(requestedTag string, rssURL string, probe *probeResult) (string, string) {
+	return resolveSourceTagWithRecentText(requestedTag, rssURL, probe, nil)
+}
+
+func resolveSourceTagWithRecentText(requestedTag string, rssURL string, probe *probeResult, recentText []string) (string, string) {
 	if !shouldAutoInferTag(requestedTag) {
 		return strings.TrimSpace(requestedTag), "explicit"
 	}
 
 	if tag, ok := inferSourceTagByRule(rssURL); ok {
 		return tag, "rule"
+	}
+
+	if tag := inferSourceTagByRecentText(recentText); tag != "" {
+		return tag, "recent_articles"
 	}
 
 	if tag := inferSourceTagByKeywords(rssURL, probe); tag != "" {
@@ -175,6 +183,13 @@ func inferSourceTagByRule(rssURL string) (string, bool) {
 	return "", false
 }
 
+func inferSourceTagByRecentText(recentText []string) string {
+	if len(recentText) == 0 {
+		return ""
+	}
+	return inferSourceTagFromCorpus(recentText, 2)
+}
+
 func inferSourceTagByKeywords(rssURL string, probe *probeResult) string {
 	parts := []string{strings.ToLower(strings.TrimSpace(rssURL))}
 	if probe != nil {
@@ -187,7 +202,11 @@ func inferSourceTagByKeywords(rssURL string, probe *probeResult) string {
 			}
 		}
 	}
-	corpus := strings.Join(parts, " ")
+	return inferSourceTagFromCorpus(parts, 2)
+}
+
+func inferSourceTagFromCorpus(parts []string, minScore int) string {
+	corpus := strings.ToLower(strings.Join(parts, " "))
 	if corpus == "" {
 		return ""
 	}
@@ -197,9 +216,7 @@ func inferSourceTagByKeywords(rssURL string, probe *probeResult) string {
 	for _, rule := range sourceTagKeywordRules {
 		score := 0
 		for _, keyword := range rule.Keywords {
-			if strings.Contains(corpus, keyword) {
-				score++
-			}
+			score += keywordMatchScore(corpus, keyword)
 		}
 		if score > bestScore {
 			bestScore = score
@@ -211,6 +228,42 @@ func inferSourceTagByKeywords(rssURL string, probe *probeResult) string {
 		return ""
 	}
 	return bestTag
+}
+
+func keywordMatchScore(corpus string, keyword string) int {
+	normalized := strings.ToLower(strings.TrimSpace(keyword))
+	if normalized == "" {
+		return 0
+	}
+	if isShortASCIIKeyword(normalized) {
+		return shortASCIIKeywordMatchScore(corpus, normalized)
+	}
+	return strings.Count(corpus, normalized)
+}
+
+func isShortASCIIKeyword(value string) bool {
+	if len(value) > 3 {
+		return false
+	}
+	for _, r := range value {
+		if r < 'a' || r > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+func shortASCIIKeywordMatchScore(corpus string, keyword string) int {
+	fields := strings.FieldsFunc(corpus, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	})
+	score := 0
+	for _, field := range fields {
+		if field == keyword {
+			score++
+		}
+	}
+	return score
 }
 
 func equalStringArrays(left []string, right []string) bool {

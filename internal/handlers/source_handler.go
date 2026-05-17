@@ -123,6 +123,8 @@ type reclassifySourceResult struct {
 }
 
 const threadAutoHideAfter = 14 * 24 * time.Hour
+const sourceClassificationRecentArticleLimit = 24
+const sourceClassificationSnippetLimit = 280
 
 func recentArticleCountsSubquery(db *gorm.DB, window time.Duration) *gorm.DB {
 	if window <= 0 {
@@ -441,6 +443,11 @@ func (h *SourceHandler) Reclassify(c *gin.Context) {
 	errorCount := 0
 	for _, source := range sources {
 		oldTags := mergeSourceTags(source.Tags)
+		requestedTag := ""
+		if len(oldTags) > 0 {
+			requestedTag = oldTags[0]
+		}
+
 		probeReason := "rule"
 		var probe *probeResult
 		if probeEnabled {
@@ -452,14 +459,21 @@ func (h *SourceHandler) Reclassify(c *gin.Context) {
 			}
 		}
 
-		requestedTag := ""
-		if len(oldTags) > 0 {
-			requestedTag = oldTags[0]
+		var recentText []string
+		reasonPrefix := ""
+		if shouldAutoInferTag(requestedTag) {
+			text, err := h.recentArticleClassificationText(c.Request.Context(), source.ID)
+			if err != nil {
+				reasonPrefix = "recent article scan failed; "
+			} else {
+				recentText = text
+			}
 		}
-		newTag, reason := resolveSourceTagWithReason(requestedTag, source.RSSURL, probe)
+		newTag, reason := resolveSourceTagWithRecentText(requestedTag, source.RSSURL, probe, recentText)
 		if probeReason != "rule" && reason == "rule" {
 			reason = probeReason
 		}
+		reason = reasonPrefix + reason
 		newTags := models.StringArray{newTag}
 
 		entry := reclassifySourceResult{
@@ -504,6 +518,62 @@ func (h *SourceHandler) Reclassify(c *gin.Context) {
 			"limit":        limit,
 		},
 	})
+}
+
+func (h *SourceHandler) recentArticleClassificationText(ctx context.Context, sourceID uint64) ([]string, error) {
+	var articles []models.Article
+	if err := h.db.WithContext(ctx).
+		Model(&models.Article{}).
+		Select("title", "summary", "content", "tags").
+		Where("source_id = ?", sourceID).
+		Order("COALESCE(published_at, created_at) DESC").
+		Limit(sourceClassificationRecentArticleLimit).
+		Find(&articles).Error; err != nil {
+		return nil, err
+	}
+
+	text := make([]string, 0, len(articles))
+	for _, article := range articles {
+		if value := compactArticleClassificationText(article); value != "" {
+			text = append(text, value)
+		}
+	}
+	return text, nil
+}
+
+func compactArticleClassificationText(article models.Article) string {
+	parts := make([]string, 0, 4)
+	if title := compactClassificationSnippet(article.Title); title != "" {
+		parts = append(parts, title)
+	}
+	if article.Summary != nil {
+		if summary := compactClassificationSnippet(*article.Summary); summary != "" {
+			parts = append(parts, summary)
+		}
+	}
+	if article.Content != nil {
+		if content := compactClassificationSnippet(*article.Content); content != "" {
+			parts = append(parts, content)
+		}
+	}
+	if len(article.Tags) > 0 {
+		if tags := compactClassificationSnippet(strings.Join(article.Tags, " ")); tags != "" {
+			parts = append(parts, tags)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func compactClassificationSnippet(value string) string {
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	if normalized == "" {
+		return ""
+	}
+	runes := []rune(normalized)
+	if len(runes) <= sourceClassificationSnippetLimit {
+		return normalized
+	}
+	return string(runes[:sourceClassificationSnippetLimit])
 }
 
 func (h *SourceHandler) BulkUpdateTags(c *gin.Context) {

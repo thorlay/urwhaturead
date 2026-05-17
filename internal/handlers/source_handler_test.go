@@ -385,6 +385,34 @@ func TestResolveSourceTag(t *testing.T) {
 	}
 }
 
+func TestResolveSourceTagWithRecentText(t *testing.T) {
+	got, reason := resolveSourceTagWithRecentText(
+		"general",
+		"https://example.com/feed.xml",
+		nil,
+		[]string{
+			"美股市场继续上涨，投资者关注美联储利率路径和银行财报",
+			"债券收益率回落，基金经理重新评估科技股估值",
+		},
+	)
+	if got != "finance" {
+		t.Fatalf("resolveSourceTagWithRecentText() tag=%q, want finance", got)
+	}
+	if reason != "recent_articles" {
+		t.Fatalf("resolveSourceTagWithRecentText() reason=%q, want recent_articles", reason)
+	}
+}
+
+func TestInferSourceTagByRecentTextDoesNotMatchShortASCIIInsideWords(t *testing.T) {
+	got := inferSourceTagByRecentText([]string{
+		"daily paid email campaign update",
+		"plain status note without technology terms",
+	})
+	if got != "" {
+		t.Fatalf("inferSourceTagByRecentText()=%q, want empty", got)
+	}
+}
+
 func TestShouldAutoInferTag(t *testing.T) {
 	tests := []struct {
 		input string
