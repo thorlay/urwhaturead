@@ -460,11 +460,14 @@
 .ai-library-page {
   display: grid;
   gap: 0.9rem;
+  width: 100%;
+  max-width: min(100%, clamp(56rem, 68vw, 78rem));
+  margin: 0 auto;
 }
 
 .ai-library-panel {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.72rem;
   border-top: 1px solid var(--line);
   padding-top: 0.85rem;
   background: transparent;
@@ -497,8 +500,8 @@
 
 .ai-library-hero {
   display: grid;
-  gap: 0.62rem;
-  padding: 0.05rem 0 0.58rem;
+  gap: 0.54rem;
+  padding: 0.05rem 0 0.52rem;
   border-bottom: 1px solid var(--line);
   background: transparent;
 }
@@ -514,34 +517,31 @@
 
 .ai-library-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
-  gap: 0.42rem;
+  grid-template-columns: minmax(16rem, 38rem) auto auto;
+  justify-content: start;
+  gap: 0.38rem;
   align-items: center;
 }
 
 .ai-library-compact-controls {
   display: grid;
-  gap: 0.56rem;
+  gap: 0.48rem;
 }
 
 .ai-library-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto minmax(16rem, 1fr);
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.48rem 0.75rem;
+  justify-content: stretch;
+  gap: 0.42rem 0.72rem;
 }
 
 .ai-library-filter-row {
   display: flex;
-  flex-wrap: wrap;
-  margin-left: auto;
-  gap: 0.38rem;
-}
-
-.ai-library-model-note {
-  color: var(--foreground-tertiary);
-  font-size: 0.74rem;
+  flex-wrap: nowrap;
+  justify-self: end;
+  margin-left: 0;
+  gap: 0.34rem;
 }
 
 .ai-library-select-label {
@@ -551,17 +551,18 @@
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .ai-library-select {
-  min-width: min(100%, 8.8rem);
-  min-height: 1.88rem;
+  min-width: min(100%, 7.6rem);
+  min-height: 1.68rem;
   padding: 0 0.52rem;
   border: 1px solid var(--line);
   border-radius: 3px;
   background: var(--paper-strong);
   color: var(--text);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .ai-library-segmented,
@@ -618,7 +619,7 @@
 }
 
 .ai-library-summary-bar {
-  padding: 0;
+  padding: 0.04rem 0 0;
 }
 
 .ai-library-stack {
@@ -743,6 +744,13 @@
   min-height: 1.82rem;
   padding-inline: 0.5rem;
   font-size: 0.72rem;
+}
+
+.ai-library-entry-actions .ai-library-entry-expand-icon {
+  width: 1.82rem;
+  min-width: 1.82rem;
+  padding-inline: 0;
+  color: var(--foreground-tertiary);
 }
 
 .ai-library-entry-actions svg,
@@ -937,7 +945,8 @@
 .ai-library-empty {
   display: grid;
   gap: 0.45rem;
-  padding: 1rem 0;
+  max-width: 46rem;
+  padding: 0.96rem 0;
   border-top: 1px dashed rgba(100, 116, 139, 0.35);
   border-bottom: 1px dashed rgba(100, 116, 139, 0.35);
   background: transparent;
@@ -965,21 +974,29 @@
   }
 
   .ai-library-hero {
-    padding: 0.05rem 0 0.68rem;
+    gap: 0.48rem;
+    padding: 0.05rem 0 0.58rem;
   }
 
   .ai-library-toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
   }
 
   .ai-library-toolbar button {
-    width: 100%;
+    width: auto;
     justify-content: center;
+    min-width: 2.35rem;
+    padding-inline: 0.68rem;
+  }
+
+  .ai-library-button-text {
+    display: none;
   }
 
   .ai-library-controls {
     display: grid;
-    gap: 0.52rem;
+    gap: 0.42rem;
   }
 
   .ai-library-segmented {
@@ -1003,15 +1020,16 @@
 
   .ai-library-filter-row {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-left: 0;
-    gap: 0.48rem;
+    gap: 0.42rem;
   }
 
   .ai-library-select-label {
     display: grid;
     align-items: stretch;
-    gap: 0.28rem;
+    gap: 0.22rem;
+    font-size: 0.68rem;
   }
 
   .ai-library-select {

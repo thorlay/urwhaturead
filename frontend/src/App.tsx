@@ -507,7 +507,6 @@ function App() {
       {activeTab === 'ai' && (
         <Suspense fallback={null}>
           <AILibraryPanel
-            aiModel={aiModel}
             search={aiLibrarySection.search}
             loading={aiLibrarySection.loading}
             error={aiLibrarySection.error}

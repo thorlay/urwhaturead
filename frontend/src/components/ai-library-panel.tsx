@@ -11,7 +11,6 @@ type AILibraryRange = '24h' | '7d' | '30d' | 'all'
 type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
 
 type AILibraryPanelProps = {
-  aiModel: string
   search: string
   loading: boolean
   error: string | null
@@ -143,7 +142,6 @@ function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
 
 export function AILibraryPanel(props: AILibraryPanelProps) {
   const {
-    aiModel,
     search,
     loading,
     error,
@@ -348,7 +346,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
               <p className="ai-library-kicker">AI Reading</p>
               <h2>AI 速览与摘要</h2>
               <p className="hint">优先回看 AI 对阅读流做出的判断，再展开详情。</p>
-              <p className="hint ai-library-model-note">模型：{aiModel || '-'}</p>
             </div>
           </div>
 
@@ -365,13 +362,13 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   }
                 }}
               />
-              <Button type="button" onClick={onApplySearch} disabled={loading}>
+              <Button type="button" className="ai-library-search-button" variant="outline" onClick={onApplySearch} disabled={loading}>
                 <Search aria-hidden="true" />
-                搜索
+                <span className="ai-library-button-text">搜索</span>
               </Button>
-              <Button type="button" variant="outline" onClick={onRefresh} disabled={loading}>
+              <Button type="button" className="ai-library-refresh-button" variant="outline" onClick={onRefresh} disabled={loading}>
                 <RefreshCw aria-hidden="true" />
-                {loading ? '更新中...' : '刷新'}
+                <span className="ai-library-button-text">{loading ? '更新中...' : '刷新'}</span>
               </Button>
             </div>
 
@@ -513,11 +510,12 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="sm"
+                                size="icon"
+                                className="ai-library-entry-expand-icon"
+                                aria-label={isArticleSelected(item) ? '收起摘要' : '展开摘要'}
                                 onClick={() => toggleArticleSelection(articleKey)}
                               >
                                 {isArticleSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-                                {isArticleSelected(item) ? '收起' : '展开'}
                               </Button>
                               <Button type="button" variant="outline" size="sm" onClick={() => void onOpenArticleSummary(item.article_id)}>
                                 <ExternalLink aria-hidden="true" />
@@ -630,9 +628,15 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               </div>
                             </div>
                             <div className="ai-library-entry-actions">
-                              <Button type="button" variant="ghost" size="sm" onClick={() => toggleBriefingSelection(briefingKey)}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="ai-library-entry-expand-icon"
+                                aria-label={isBriefingSelected(item) ? '收起速览' : '展开速览'}
+                                onClick={() => toggleBriefingSelection(briefingKey)}
+                              >
                                 {isBriefingSelected(item) ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-                                {isBriefingSelected(item) ? '收起' : '展开'}
                               </Button>
                               <Button type="button" variant="outline" size="sm" onClick={() => onOpenFeedBriefing(item)}>
                                 <ExternalLink aria-hidden="true" />
