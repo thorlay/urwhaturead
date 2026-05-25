@@ -452,7 +452,9 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <img
                 src={selectedArticleImageURL}
                 alt=""
-                loading="lazy"
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 referrerPolicy="no-referrer"
                 onError={(event) => {
                   const target = event.currentTarget

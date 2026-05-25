@@ -46,6 +46,9 @@ func New(
 	articleHandler := handlers.NewArticleHandlerWithOptions(db, summaryClient, articleOptions)
 	articleHandler.RegisterReadRoutes(api.Group("/articles"))
 
+	imageProxyHandler := handlers.NewImageProxyHandler()
+	imageProxyHandler.RegisterRoutes(api.Group("/images"))
+
 	sourceHandler := handlers.NewSourceHandlerWithOptions(db, refresher, handlers.SourceHandlerOptions{
 		RSSHubBaseURL: rsshubBaseURL,
 	})

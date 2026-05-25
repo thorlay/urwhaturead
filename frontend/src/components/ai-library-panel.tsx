@@ -39,6 +39,13 @@ type LibrarySection<T> = {
   items: T[]
 }
 
+type DeepReadRecommendation = {
+  title: string
+  url: string
+  reason: string
+  audience: string
+}
+
 function stripMarkdown(input: string): string {
   return input
     .replace(/```[\s\S]*?```/g, ' ')
@@ -129,6 +136,63 @@ function joinMetaParts(parts: Array<string | false | null | undefined>): string 
   return parts.filter((part): part is string => Boolean(part)).join(' · ')
 }
 
+function parseDeepReadRecommendations(summary: string): DeepReadRecommendation[] {
+  const lines = summary.split('\n')
+  const startIndex = lines.findIndex((line) => /(?:^|\s)(?:6[).、]\s*)?值得深读/.test(stripMarkdown(line)))
+  if (startIndex < 0) return []
+
+  const recommendations: DeepReadRecommendation[] = []
+  for (const rawLine of lines.slice(startIndex + 1)) {
+    const plainLine = stripMarkdown(rawLine)
+    if (!plainLine) continue
+    if (/^(?:#{1,6}\s*)?(?:\d+[).、]\s*)?(?:今日判断|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) break
+
+    const recommendation = parseDeepReadLine(rawLine)
+    if (recommendation) {
+      recommendations.push(recommendation)
+    }
+    if (recommendations.length >= 6) break
+  }
+  return recommendations
+}
+
+function parseDeepReadLine(rawLine: string): DeepReadRecommendation | null {
+  const line = rawLine
+    .trim()
+    .replace(/^\s*(?:[-*+]\s+|\d+[).、]\s*)/, '')
+    .trim()
+  if (!line.includes('｜') && !/^https?:\/\//.test(line)) return null
+
+  const markdownLink = line.match(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/)
+  const bareURL = line.match(/https?:\/\/[^\s<>\])）｜|]+/)
+  const url = markdownLink?.[2] ?? bareURL?.[0] ?? ''
+  if (!url) return null
+
+  const parts = line
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/, '$1')
+    .split('｜')
+    .map((part) => stripMarkdown(part).trim())
+    .filter(Boolean)
+
+  const title = cleanDeepReadTitle(parts[0] ?? markdownLink?.[1] ?? '原文')
+  const urlPartIndex = parts.findIndex((part) => part.includes(url) || part === markdownLink?.[1] || part === '原文')
+  const detailParts = parts.filter((_, index) => index !== 0 && index !== urlPartIndex)
+
+  return {
+    title,
+    url,
+    reason: detailParts[0] ?? '',
+    audience: detailParts[1] ?? '',
+  }
+}
+
+function cleanDeepReadTitle(value: string): string {
+  return value
+    .replace(/^\s*(?:[-*+]\s+|\d+[).、]\s*)/, '')
+    .replace(/\s*[|｜]\s*$/, '')
+    .trim()
+}
+
 function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
   const target = event.target
   if (!(target instanceof HTMLElement)) {
@@ -211,6 +275,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
   const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
+  const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
 
@@ -244,10 +309,18 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
 
   const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
   const toggleArticleSelection = (key: string) => {
-    setSelectedArticleKey((current) => (current === key ? null : key))
+    setSelectedArticleKey((current) => {
+      const next = current === key ? null : key
+      if (next) setPendingScrollKey(key)
+      return next
+    })
   }
   const toggleBriefingSelection = (key: string) => {
-    setSelectedBriefingKey((current) => (current === key ? null : key))
+    setSelectedBriefingKey((current) => {
+      const next = current === key ? null : key
+      if (next) setPendingScrollKey(key)
+      return next
+    })
   }
   const isArticleSelected = (item: ArticleSummaryLibraryItem) =>
     selectedArticleKey === `${item.article_id}:${item.generated_at}`
@@ -312,6 +385,15 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeView, selectedArticleIndex, selectedBriefingIndex, flatArticleItems, flatBriefingItems])
+
+  useEffect(() => {
+    if (!pendingScrollKey) return
+    const node = entryRefs.current[pendingScrollKey]
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    setPendingScrollKey(null)
+  }, [pendingScrollKey, selectedArticleKey, selectedBriefingKey])
 
   return (
     <main className="ai-library-page">
@@ -561,6 +643,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                     const briefingKey = `${item.digest_key}:${item.generated_at}`
                     const articleRefsExpanded = expandedBriefingArticles[briefingKey] ?? false
                     const visibleArticleRefs = articleRefsExpanded || item.article_refs.length <= 5 ? item.article_refs : item.article_refs.slice(0, 5)
+                    const deepReadRecommendations = parseDeepReadRecommendations(item.summary)
                     return (
                       <article
                         ref={attachEntryRef(briefingKey)}
@@ -639,6 +722,33 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 </Button>
                               </div>
                               <div className="ai-library-detail-body">
+                                {deepReadRecommendations.length > 0 && (
+                                  <div className="ai-library-deep-read">
+                                    <div className="ai-library-deep-read-head">
+                                      <span>值得优先读</span>
+                                      <small>{deepReadRecommendations.length} 条</small>
+                                    </div>
+                                    <div className="ai-library-deep-read-list">
+                                      {deepReadRecommendations.map((recommendation, index) => (
+                                        <a
+                                          key={`${recommendation.url}-${index}`}
+                                          className="ai-library-deep-read-item"
+                                          href={recommendation.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <span className="ai-library-deep-read-index">{index + 1}</span>
+                                          <span className="ai-library-deep-read-copy">
+                                            <strong>{recommendation.title}</strong>
+                                            {recommendation.reason && <span>{recommendation.reason}</span>}
+                                            {recommendation.audience && <small>{recommendation.audience}</small>}
+                                          </span>
+                                          <ExternalLink aria-hidden="true" />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 <MarkdownBlock content={item.summary} />
                               </div>
                               <div className="ai-library-detail-context">

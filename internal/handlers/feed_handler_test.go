@@ -162,6 +162,22 @@ func TestDedupeFeedBriefingRows(t *testing.T) {
 	}
 }
 
+func TestFeedDedupeCandidateLimit(t *testing.T) {
+	tests := []struct {
+		limit int
+		want  int
+	}{
+		{limit: 20, want: 300},
+		{limit: 100, want: 800},
+	}
+
+	for _, tt := range tests {
+		if got := feedDedupeCandidateLimit(tt.limit); got != tt.want {
+			t.Fatalf("feedDedupeCandidateLimit(%d)=%d, want %d", tt.limit, got, tt.want)
+		}
+	}
+}
+
 func TestBriefingRateLimiter_AllowAndBlock(t *testing.T) {
 	limiter := newBriefingRateLimiter(2, 10*time.Minute)
 	now := time.Now().UTC()

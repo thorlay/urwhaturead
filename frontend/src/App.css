@@ -851,6 +851,103 @@
   border-top: 1px solid var(--line);
 }
 
+.ai-library-deep-read {
+  display: grid;
+  gap: 0.48rem;
+  margin-bottom: 0.9rem;
+  padding: 0.68rem;
+  border: 1px solid var(--line);
+  border-radius: var(--panel-radius);
+  background: var(--surface-muted);
+}
+
+.ai-library-deep-read-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-library-deep-read-head small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ai-library-deep-read-list {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.ai-library-deep-read-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.55rem;
+  padding: 0.54rem 0.44rem;
+  border-radius: calc(var(--panel-radius) - 4px);
+  color: var(--foreground-secondary);
+  text-decoration: none;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.ai-library-deep-read-item:hover {
+  color: var(--text);
+  background: var(--control-hover);
+}
+
+.ai-library-deep-read-item svg {
+  width: 0.92rem;
+  height: 0.92rem;
+  margin-top: 0.12rem;
+  color: var(--muted);
+}
+
+.ai-library-deep-read-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.ai-library-deep-read-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.ai-library-deep-read-copy strong {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ai-library-deep-read-copy span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.ai-library-deep-read-copy small {
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .ai-library-detail-context {
   display: grid;
   gap: 0.7rem;

@@ -208,7 +208,7 @@ export function normalizeImageURL(rawURL?: string): string | null {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null
     }
-    return parsed.toString()
+    return `/api/v1/images/proxy?url=${encodeURIComponent(parsed.toString())}`
   } catch {
     return null
   }

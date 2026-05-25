@@ -307,11 +307,14 @@ func (h *FeedHandler) List(c *gin.Context) {
 	}
 
 	var rows []feedItem
+	queryStartedAt := time.Now()
+	dedupeCandidateLimit := 0
 	if dedupe {
+		dedupeCandidateLimit = feedDedupeCandidateLimit(limit)
 		candidates := query.
 			Order("COALESCE(a.published_at, a.created_at) DESC").
 			Order("a.id DESC").
-			Limit(feedDedupeCandidateLimit(limit))
+			Limit(dedupeCandidateLimit)
 
 		ranked := h.db.Table("(?) AS candidates", candidates).
 			Select(`
@@ -374,6 +377,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 			return
 		}
 	}
+	queryElapsed := time.Since(queryStartedAt)
 
 	nextCursor := ""
 	if len(rows) > limit {
@@ -384,26 +388,33 @@ func (h *FeedHandler) List(c *gin.Context) {
 		})
 		rows = rows[:limit]
 	}
+	sanitizeStartedAt := time.Now()
 	sanitizeFeedItems(rows)
+	sanitizeElapsed := time.Since(sanitizeStartedAt)
+	totalElapsed := time.Since(startedAt)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": rows,
 		"meta": gin.H{
-			"limit":       limit,
-			"count":       len(rows),
-			"next_cursor": nextCursor,
-			"elapsed_ms":  time.Since(startedAt).Milliseconds(),
+			"limit":                  limit,
+			"count":                  len(rows),
+			"next_cursor":            nextCursor,
+			"elapsed_ms":             totalElapsed.Milliseconds(),
+			"query_ms":               queryElapsed.Milliseconds(),
+			"sanitize_ms":            sanitizeElapsed.Milliseconds(),
+			"dedupe":                 dedupe,
+			"dedupe_candidate_limit": dedupeCandidateLimit,
 		},
 	})
 }
 
 func feedDedupeCandidateLimit(limit int) int {
-	candidateLimit := limit * 50
-	if candidateLimit < 500 {
-		return 500
+	candidateLimit := limit * 15
+	if candidateLimit < limit+80 {
+		return limit + 80
 	}
-	if candidateLimit > 3000 {
-		return 3000
+	if candidateLimit > 800 {
+		return 800
 	}
 	return candidateLimit
 }

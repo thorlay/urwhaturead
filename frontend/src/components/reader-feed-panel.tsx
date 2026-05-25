@@ -29,6 +29,18 @@ type FeedListRow = { key: string; type: 'briefing' } | { key: string; type: 'art
 // can create visible blank gaps while scrolling.
 const FEED_VIRTUAL_MIN_ROWS = 1000
 const FEED_VIRTUAL_OVERSCAN_ROWS = 8
+const preloadedArticleImageURLs = new Set<string>()
+
+function preloadArticleImage(url: string | null) {
+  if (!url || preloadedArticleImageURLs.has(url) || typeof window === 'undefined') {
+    return
+  }
+  preloadedArticleImageURLs.add(url)
+  const image = new Image()
+  image.decoding = 'async'
+  image.referrerPolicy = 'no-referrer'
+  image.src = url
+}
 
 export type ReaderFeedPanelProps = {
   showFloatingReader: boolean
@@ -267,8 +279,9 @@ const FeedArticleListItem = memo(
     )
 
     const handleOpen = useCallback(() => {
+      preloadArticleImage(previewImageURL)
       void onOpenArticle(item.id)
-    }, [item.id, onOpenArticle])
+    }, [item.id, onOpenArticle, previewImageURL])
 
     const handleToggleFavorite = useCallback(
       (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -283,6 +296,8 @@ const FeedArticleListItem = memo(
       <article
         className={cn('feed-item', isActive && 'active', isRead && 'read', isFavorite && 'favorited')}
         onClick={handleOpen}
+        onPointerEnter={() => preloadArticleImage(previewImageURL)}
+        onFocusCapture={() => preloadArticleImage(previewImageURL)}
       >
         <div className="feed-item-body">
           <div className="feed-item-content">
@@ -380,6 +395,7 @@ const FeedArticleListItem = memo(
                 src={previewImageURL}
                 alt=""
                 loading="lazy"
+                decoding="async"
                 referrerPolicy="no-referrer"
                 onError={(event) => {
                   const target = event.currentTarget
