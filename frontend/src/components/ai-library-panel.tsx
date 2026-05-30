@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason } from '../lib/app-utils'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -138,7 +138,7 @@ function joinMetaParts(parts: Array<string | false | null | undefined>): string 
 
 function parseDeepReadRecommendations(summary: string): DeepReadRecommendation[] {
   const lines = summary.split('\n')
-  const startIndex = lines.findIndex((line) => /(?:^|\s)(?:6[).、]\s*)?值得深读/.test(stripMarkdown(line)))
+  const startIndex = findDeepReadSectionIndex(lines)
   if (startIndex < 0) return []
 
   const recommendations: DeepReadRecommendation[] = []
@@ -154,6 +154,30 @@ function parseDeepReadRecommendations(summary: string): DeepReadRecommendation[]
     if (recommendations.length >= 6) break
   }
   return recommendations
+}
+
+function summaryWithoutDeepReadSection(summary: string): string {
+  const lines = summary.split('\n')
+  const startIndex = findDeepReadSectionIndex(lines)
+  if (startIndex < 0) return summary
+
+  const endIndex = findNextBriefingSectionIndex(lines, startIndex + 1)
+  const nextLines = [...lines.slice(0, startIndex), ...lines.slice(endIndex)]
+  return nextLines.join('\n').trim()
+}
+
+function findDeepReadSectionIndex(lines: string[]): number {
+  return lines.findIndex((line) => /(?:^|\s)(?:6[).、]\s*)?值得深读/.test(stripMarkdown(line)))
+}
+
+function findNextBriefingSectionIndex(lines: string[], startIndex: number): number {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const plainLine = stripMarkdown(lines[index])
+    if (/^(?:\d+[).、]\s*)?(?:今日判断|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) {
+      return index
+    }
+  }
+  return lines.length
 }
 
 function parseDeepReadLine(rawLine: string): DeepReadRecommendation | null {
@@ -215,7 +239,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     statusFilter,
     articleSummaries,
     feedBriefings,
-    sources,
     formatTimeAgo,
     onChangeSearch,
     onApplySearch,
@@ -307,7 +330,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     }
   }, [flatBriefingItems, selectedBriefingKey])
 
-  const sourceNameByID = useMemo(() => new Map(sources.map((source) => [source.id, source.name])), [sources])
   const toggleArticleSelection = (key: string) => {
     setSelectedArticleKey((current) => {
       const next = current === key ? null : key
@@ -557,10 +579,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 <span className="ai-library-entry-kind">文章摘要</span>
                                 <span>{item.source_name}</span>
                                 <span>{formatTimeAgo(item.generated_at)}</span>
-                                <span>{item.model}</span>
                               </p>
                               <div className="ai-library-entry-chips" aria-label="摘要属性">
-                                <span>输入 {item.input_chars} 字符</span>
                                 {item.truncated && <span>输出触顶</span>}
                               </div>
                             </div>
@@ -583,22 +603,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           </div>
                           {isArticleSelected(item) ? (
                             <div className="ai-library-entry-expanded">
-                              <div className="ai-library-entry-nav">
-                                <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentArticle(-1)} disabled={selectedArticleIndex <= 0}>
-                                  <ArrowLeft aria-hidden="true" />
-                                  上一条
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => selectAdjacentArticle(1)}
-                                  disabled={selectedArticleIndex < 0 || selectedArticleIndex >= flatArticleItems.length - 1}
-                                >
-                                  <ArrowRight aria-hidden="true" />
-                                  下一条
-                                </Button>
-                              </div>
                               <div className="ai-library-detail-body">
                                 <MarkdownBlock content={item.summary} />
                               </div>
@@ -644,6 +648,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                     const articleRefsExpanded = expandedBriefingArticles[briefingKey] ?? false
                     const visibleArticleRefs = articleRefsExpanded || item.article_refs.length <= 5 ? item.article_refs : item.article_refs.slice(0, 5)
                     const deepReadRecommendations = parseDeepReadRecommendations(item.summary)
+                    const visibleBriefingSummary =
+                      deepReadRecommendations.length > 0 ? summaryWithoutDeepReadSection(item.summary) : item.summary
                     return (
                       <article
                         ref={attachEntryRef(briefingKey)}
@@ -675,14 +681,10 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                               <p className="ai-library-entry-meta">
                                 <span className="ai-library-entry-kind">AI 速览</span>
                                 <span>{formatTimeAgo(item.generated_at)}</span>
-                                <span>{item.model}</span>
                                 <span>{item.article_count} 条信息</span>
                               </p>
                               <div className="ai-library-entry-chips" aria-label="速览属性">
                                 <span>{item.article_count || parseIDList(item.article_ids).length} 条文章</span>
-                                <span>{parseIDList(item.source_ids).length} 个来源</span>
-                                {item.tag && <span>{item.tag}</span>}
-                                {item.keyword && <span>关键词 {item.keyword}</span>}
                                 {item.truncated && <span>输出触顶</span>}
                               </div>
                             </div>
@@ -705,22 +707,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           </div>
                           {isBriefingSelected(item) ? (
                             <div className="ai-library-entry-expanded">
-                              <div className="ai-library-entry-nav">
-                                <Button type="button" variant="ghost" size="sm" onClick={() => selectAdjacentBriefing(-1)} disabled={selectedBriefingIndex <= 0}>
-                                  <ArrowLeft aria-hidden="true" />
-                                  上一条
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => selectAdjacentBriefing(1)}
-                                  disabled={selectedBriefingIndex < 0 || selectedBriefingIndex >= flatBriefingItems.length - 1}
-                                >
-                                  <ArrowRight aria-hidden="true" />
-                                  下一条
-                                </Button>
-                              </div>
                               <div className="ai-library-detail-body">
                                 {deepReadRecommendations.length > 0 && (
                                   <div className="ai-library-deep-read">
@@ -749,80 +735,66 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                     </div>
                                   </div>
                                 )}
-                                <MarkdownBlock content={item.summary} />
+                                <MarkdownBlock content={visibleBriefingSummary} />
                               </div>
                               <div className="ai-library-detail-context">
-                                <div className="ai-library-detail-stats">
-                                  <div className="ai-library-detail-stat">
-                                    <span className="ai-library-detail-stat-label">关联来源</span>
-                                    <strong>{parseIDList(item.source_ids).length}</strong>
-                                  </div>
-                                  <div className="ai-library-detail-stat">
-                                    <span className="ai-library-detail-stat-label">关联文章</span>
-                                    <strong>{item.article_count || parseIDList(item.article_ids).length}</strong>
-                                  </div>
-                                </div>
-                                {parseIDList(item.source_ids).length > 0 && (
-                                  <div className="ai-library-detail-source-list">
-                                    <p className="hint">来源明细</p>
-                                    <div className="ai-library-detail-source-pills">
-                                      {parseIDList(item.source_ids).map((sourceID) => (
-                                        <span key={sourceID} className="ai-library-detail-source-pill">
-                                          {sourceNameByID.get(sourceID) ?? `来源 ${sourceID}`}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                                <p className="ai-library-detail-footnote">
+                                  {joinMetaParts([
+                                    `${item.article_count || parseIDList(item.article_ids).length} 条关联文章`,
+                                    `${parseIDList(item.source_ids).length} 个来源`,
+                                    item.tag ? `标签 ${item.tag}` : null,
+                                    item.keyword ? `关键词 ${item.keyword}` : null,
+                                    item.model,
+                                  ])}
+                                </p>
                                 {item.article_refs.length > 0 && (
                                   <div className="ai-library-detail-article-list">
-                                    <p className="hint">关联文章</p>
-                                    <div className="ai-library-detail-article-items">
-                                      {visibleArticleRefs.map((article) => {
-                                        const relatedSummary = articleSummaries.find((summary) => summary.article_id === article.id)
-                                        const isSummarized = Boolean(relatedSummary)
-                                        return (
-                                          <div key={`${item.digest_key}-${article.id}`} className="ai-library-detail-article-item">
-                                            <button
-                                              type="button"
-                                              className="ai-library-detail-article-link"
-                                              onClick={() => {
-                                                if (isSummarized && relatedSummary) {
-                                                  onChangeSourceFilter('all')
-                                                  onChangeStatusFilter('all')
-                                                  onChangeTimeRange('all')
-                                                  onChangeView('articles')
-                                                  toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)
-                                                  return
-                                                }
-                                                void onOpenArticleSummary(article.id)
-                                              }}
-                                            >
-                                              {article.title}
-                                            </button>
-                                            <p className="ai-library-detail-article-meta">
-                                              <span>{article.source_name || `来源 ${article.source_id}`}</span>
-                                              {article.published_at ? <span>{formatTimeAgo(article.published_at)}</span> : null}
-                                              <span>{isSummarized ? '已收录摘要' : '打开文章详情'}</span>
-                                            </p>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                    {item.article_refs.length > 5 && (
-                                      <button
-                                        type="button"
-                                        className="ai-library-detail-article-toggle"
-                                        onClick={() =>
-                                          setExpandedBriefingArticles((current) => ({
-                                            ...current,
-                                            [briefingKey]: !articleRefsExpanded,
-                                          }))
-                                        }
-                                      >
-                                        {articleRefsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-                                        {articleRefsExpanded ? '收起关联文章' : `展开全部 ${item.article_refs.length} 条关联文章`}
-                                      </button>
+                                    <button
+                                      type="button"
+                                      className="ai-library-detail-article-toggle"
+                                      onClick={() =>
+                                        setExpandedBriefingArticles((current) => ({
+                                          ...current,
+                                          [briefingKey]: !articleRefsExpanded,
+                                        }))
+                                      }
+                                    >
+                                      {articleRefsExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                                      {articleRefsExpanded ? '收起关联文章' : `查看关联文章 ${item.article_refs.length} 条`}
+                                    </button>
+                                    {articleRefsExpanded && (
+                                      <div className="ai-library-detail-article-items">
+                                        {visibleArticleRefs.map((article) => {
+                                          const relatedSummary = articleSummaries.find((summary) => summary.article_id === article.id)
+                                          const isSummarized = Boolean(relatedSummary)
+                                          return (
+                                            <div key={`${item.digest_key}-${article.id}`} className="ai-library-detail-article-item">
+                                              <button
+                                                type="button"
+                                                className="ai-library-detail-article-link"
+                                                onClick={() => {
+                                                  if (isSummarized && relatedSummary) {
+                                                    onChangeSourceFilter('all')
+                                                    onChangeStatusFilter('all')
+                                                    onChangeTimeRange('all')
+                                                    onChangeView('articles')
+                                                    toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)
+                                                    return
+                                                  }
+                                                  void onOpenArticleSummary(article.id)
+                                                }}
+                                              >
+                                                {article.title}
+                                              </button>
+                                              <p className="ai-library-detail-article-meta">
+                                                <span>{article.source_name || `来源 ${article.source_id}`}</span>
+                                                {article.published_at ? <span>{formatTimeAgo(article.published_at)}</span> : null}
+                                                <span>{isSummarized ? '已收录摘要' : '打开文章详情'}</span>
+                                              </p>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
                                     )}
                                   </div>
                                 )}
