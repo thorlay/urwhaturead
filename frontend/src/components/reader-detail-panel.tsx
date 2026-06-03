@@ -310,6 +310,16 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
       ref={floatingDetailRef}
       className={`panel detail reader-panel ${readerView === 'detail' ? 'detail-page' : 'detail-floating'} ${readingPreferenceClassName}`}
     >
+      {returnToAILibrary && readerView === 'detail' && (
+        <div className="detail-origin-return">
+          <Button type="button" variant="ghost" size="sm" onClick={handleReturn}>
+            <ArrowLeft aria-hidden="true" />
+            {returnLabel}
+          </Button>
+          <span className="hint">继续回看 AI 速览</span>
+        </div>
+      )}
+
       {!selectedArticle && !selectedFeedBriefing && !loadingArticle && !articleError && (
         <div className="hint-group">
           <p className="hint">请先从列表选择一篇文章</p>

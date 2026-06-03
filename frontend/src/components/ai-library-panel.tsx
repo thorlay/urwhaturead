@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason } from '../lib/app-utils'
 import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -300,7 +300,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
   const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
+  const [showExtraFilters, setShowExtraFilters] = useState(false)
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
+  const extraFilterCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)
 
   useEffect(() => {
     if (flatArticleItems.length === 0) {
@@ -490,27 +492,41 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 ))}
               </div>
 
-              <div className="ai-library-filter-row">
-                <label className="ai-library-select-label">
-                  <span>{sourceLabel}</span>
-                  <select className="ai-library-select" value={sourceFilter} onChange={(event) => onChangeSourceFilter(event.target.value)}>
-                    <option value="all">全部{sourceLabel}</option>
-                    {sourceOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="ai-library-select-label">
-                  <span>状态</span>
-                  <select className="ai-library-select" value={statusFilter} onChange={(event) => onChangeStatusFilter(event.target.value as AILibraryStatusFilter)}>
-                    <option value="all">全部</option>
-                    <option value="complete">正常结束</option>
-                    <option value="truncated">输出触顶/截断</option>
-                  </select>
-                </label>
-              </div>
+              <button
+                type="button"
+                className={`ai-library-filter-toggle ${showExtraFilters || extraFilterCount > 0 ? 'active' : ''}`}
+                onClick={() => setShowExtraFilters((current) => !current)}
+                aria-expanded={showExtraFilters || extraFilterCount > 0}
+                aria-controls="ai-library-extra-filters"
+              >
+                <SlidersHorizontal aria-hidden="true" />
+                筛选
+                {extraFilterCount > 0 && <span>{extraFilterCount}</span>}
+              </button>
+
+              {(showExtraFilters || extraFilterCount > 0) && (
+                <div className="ai-library-filter-row" id="ai-library-extra-filters">
+                  <label className="ai-library-select-label">
+                    <span>{sourceLabel}</span>
+                    <select className="ai-library-select" value={sourceFilter} onChange={(event) => onChangeSourceFilter(event.target.value)}>
+                      <option value="all">全部{sourceLabel}</option>
+                      {sourceOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ai-library-select-label">
+                    <span>状态</span>
+                    <select className="ai-library-select" value={statusFilter} onChange={(event) => onChangeStatusFilter(event.target.value as AILibraryStatusFilter)}>
+                      <option value="all">全部</option>
+                      <option value="complete">正常结束</option>
+                      <option value="truncated">输出触顶/截断</option>
+                    </select>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
         </div>
