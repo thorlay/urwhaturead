@@ -946,13 +946,6 @@
   background: var(--control-hover);
 }
 
-.ai-library-deep-read-item svg {
-  width: 0.92rem;
-  height: 0.92rem;
-  margin-top: 0.12rem;
-  color: var(--muted);
-}
-
 .ai-library-deep-read-index {
   display: inline-flex;
   align-items: center;
@@ -991,6 +984,48 @@
   line-height: 1.4;
 }
 
+.ai-library-deep-read-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  margin-top: 0.04rem;
+}
+
+.ai-library-deep-read-ref,
+.ai-library-deep-read-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.34rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-strong);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.ai-library-deep-read-ref {
+  padding: 0 0.46rem;
+  font-size: 0.68rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ai-library-deep-read-open {
+  width: 1.34rem;
+}
+
+.ai-library-deep-read-ref:hover,
+.ai-library-deep-read-open:hover {
+  border-color: var(--border-subtle);
+  color: var(--text);
+}
+
+.ai-library-deep-read-open svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
 .ai-library-detail-context {
   display: grid;
   gap: 0.45rem;
@@ -1021,14 +1056,35 @@
 
 .ai-library-detail-article-item {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.14rem;
   padding: 0.55rem 0;
   border-top: 1px solid rgba(0, 0, 0, 0.05);
+  scroll-margin-top: 5rem;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ai-library-detail-article-item.highlight {
+  background: var(--row-active);
+  box-shadow: -0.48rem 0 0 var(--row-active), 0.48rem 0 0 var(--row-active);
 }
 
 .ai-library-detail-article-items .ai-library-detail-article-item:first-child {
   border-top: none;
   padding-top: 0;
+}
+
+.ai-library-detail-article-index {
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.ai-library-detail-article-content {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
 }
 
 .ai-library-detail-article-link {

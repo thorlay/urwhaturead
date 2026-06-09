@@ -993,7 +993,7 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("3) 重点主题分组（2-5组，每组2-4条；每条写“发生/主张/讨论了什么 + 为什么重要”）\n")
 	builder.WriteString("4) 长文论点与讨论焦点（如果有观点文或论坛内容，提炼作者论点、论证链条、主要分歧、经验信息；没有就写“本轮未发现明显长文/论坛主线”）\n")
 	builder.WriteString("5) 风险/争议/不确定性（最多4条；只写前文没有完整展开的新风险点或论证漏洞）\n")
-	builder.WriteString("6) 值得深读（最多6条，格式：标题｜[原文](链接URL)｜推荐理由｜适合谁读；不要重复正文内容）\n\n")
+	builder.WriteString("6) 值得深读（最多6条，格式：[A01] 标题｜[原文](链接URL)｜推荐理由｜适合谁读；不要重复正文内容）\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
 	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
@@ -1002,13 +1002,14 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("- 同一核心事实只能完整表述一次；后续 section 如果需要引用，只能极短指代，不得重复铺陈背景。\n")
 	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议/不确定性”里再次完整重写。\n")
 	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")
-	builder.WriteString("- 第6部分每一条都必须包含可访问的原始链接 URL。\n")
+	builder.WriteString("- 引用具体条目时尽量保留条目编号，例如 [A03]，方便读者定位原文章。\n")
+	builder.WriteString("- 第6部分每一条都必须包含对应的信息条目编号和可访问的原始链接 URL。\n")
 	builder.WriteString("- 第6部分链接必须使用 Markdown 链接语法：[原文](URL)，不要直接输出裸 URL。\n")
 	builder.WriteString("- 链接必须来自下面提供的信息条目，不要编造新链接。\n\n")
 	builder.WriteString("信息条目：\n")
 	for i, item := range items {
 		builder.WriteString(fmt.Sprintf(
-			"%d. [%s/%s] %s\n",
+			"[A%02d] [%s/%s] %s\n",
 			i+1,
 			textclean.NormalizeInline(item.SourceName),
 			textclean.NormalizeInline(item.SourceTag),

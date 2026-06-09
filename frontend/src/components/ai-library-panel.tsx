@@ -46,6 +46,8 @@ type DeepReadRecommendation = {
   audience: string
 }
 
+type BriefingArticleRef = FeedBriefingLibraryItem['article_refs'][number]
+
 function stripMarkdown(input: string): string {
   return input
     .replace(/```[\s\S]*?```/g, ' ')
@@ -213,8 +215,62 @@ function parseDeepReadLine(rawLine: string): DeepReadRecommendation | null {
 function cleanDeepReadTitle(value: string): string {
   return value
     .replace(/^\s*(?:[-*+]\s+|\d+[).、]\s*)/, '')
+    .replace(/^\s*\[[A-Z]\d{1,3}\]\s*/, '')
     .replace(/\s*[|｜]\s*$/, '')
     .trim()
+}
+
+function canonicalArticleURL(input: string): string {
+  const raw = input.trim()
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    url.hash = ''
+    url.hostname = url.hostname.toLowerCase()
+    const normalized = url.toString()
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized
+  } catch {
+    return raw.toLowerCase().replace(/\/$/, '')
+  }
+}
+
+function normalizeMatchText(input: string): string {
+  return stripMarkdown(input)
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim()
+}
+
+function findMatchingArticleRef(
+  recommendation: DeepReadRecommendation,
+  articleRefs: BriefingArticleRef[],
+): { article: BriefingArticleRef; index: number } | null {
+  const recommendationURL = canonicalArticleURL(recommendation.url)
+  if (recommendationURL) {
+    const byURL = articleRefs.findIndex((article) => canonicalArticleURL(article.link) === recommendationURL)
+    if (byURL >= 0) {
+      return { article: articleRefs[byURL], index: byURL }
+    }
+  }
+
+  const recommendationTitle = normalizeMatchText(recommendation.title)
+  if (!recommendationTitle) {
+    return null
+  }
+  const byTitle = articleRefs.findIndex((article) => {
+    const title = normalizeMatchText(article.title)
+    return title === recommendationTitle || title.includes(recommendationTitle) || recommendationTitle.includes(title)
+  })
+  return byTitle >= 0 ? { article: articleRefs[byTitle], index: byTitle } : null
+}
+
+function safeDOMID(input: string): string {
+  return input.replace(/[^a-zA-Z0-9_-]+/g, '-')
+}
+
+function articleRefDOMID(briefingKey: string, articleID: number): string {
+  return `ai-briefing-ref-${safeDOMID(briefingKey)}-${articleID}`
 }
 
 function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
@@ -301,6 +357,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const [showExtraFilters, setShowExtraFilters] = useState(false)
+  const [highlightedArticleRefID, setHighlightedArticleRefID] = useState<string | null>(null)
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
   const extraFilterCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)
 
@@ -352,6 +409,20 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     selectedBriefingKey === `${item.digest_key}:${item.generated_at}`
   const attachEntryRef = (key: string) => (node: HTMLElement | null) => {
     entryRefs.current[key] = node
+  }
+  const revealBriefingArticleRef = (briefingKey: string, articleID: number) => {
+    const targetID = articleRefDOMID(briefingKey, articleID)
+    setExpandedBriefingArticles((current) => ({
+      ...current,
+      [briefingKey]: true,
+    }))
+    setHighlightedArticleRefID(targetID)
+    window.setTimeout(() => {
+      document.getElementById(targetID)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 0)
+    window.setTimeout(() => {
+      setHighlightedArticleRefID((current) => (current === targetID ? null : current))
+    }, 1600)
   }
 
   const selectedArticleIndex = flatArticleItems.findIndex((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
@@ -731,23 +802,39 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                       <small>{deepReadRecommendations.length} 条</small>
                                     </div>
                                     <div className="ai-library-deep-read-list">
-                                      {deepReadRecommendations.map((recommendation, index) => (
-                                        <a
-                                          key={`${recommendation.url}-${index}`}
-                                          className="ai-library-deep-read-item"
-                                          href={recommendation.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                        >
-                                          <span className="ai-library-deep-read-index">{index + 1}</span>
-                                          <span className="ai-library-deep-read-copy">
-                                            <strong>{recommendation.title}</strong>
-                                            {recommendation.reason && <span>{recommendation.reason}</span>}
-                                            {recommendation.audience && <small>{recommendation.audience}</small>}
-                                          </span>
-                                          <ExternalLink aria-hidden="true" />
-                                        </a>
-                                      ))}
+                                      {deepReadRecommendations.map((recommendation, index) => {
+                                        const matchedRef = findMatchingArticleRef(recommendation, item.article_refs)
+                                        return (
+                                          <div key={`${recommendation.url}-${index}`} className="ai-library-deep-read-item">
+                                            <span className="ai-library-deep-read-index">{index + 1}</span>
+                                            <span className="ai-library-deep-read-copy">
+                                              <strong>{recommendation.title}</strong>
+                                              {recommendation.reason && <span>{recommendation.reason}</span>}
+                                              {recommendation.audience && <small>{recommendation.audience}</small>}
+                                            </span>
+                                            <span className="ai-library-deep-read-actions">
+                                              {matchedRef && (
+                                                <button
+                                                  type="button"
+                                                  className="ai-library-deep-read-ref"
+                                                  onClick={() => revealBriefingArticleRef(briefingKey, matchedRef.article.id)}
+                                                >
+                                                  原文章 #{matchedRef.index + 1}
+                                                </button>
+                                              )}
+                                              <a
+                                                className="ai-library-deep-read-open"
+                                                href={recommendation.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                aria-label={`打开原文：${recommendation.title}`}
+                                              >
+                                                <ExternalLink aria-hidden="true" />
+                                              </a>
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -783,30 +870,39 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                         {visibleArticleRefs.map((article) => {
                                           const relatedSummary = articleSummaries.find((summary) => summary.article_id === article.id)
                                           const isSummarized = Boolean(relatedSummary)
+                                          const articleNumber = item.article_refs.findIndex((ref) => ref.id === article.id) + 1
+                                          const refID = articleRefDOMID(briefingKey, article.id)
                                           return (
-                                            <div key={`${item.digest_key}-${article.id}`} className="ai-library-detail-article-item">
-                                              <button
-                                                type="button"
-                                                className="ai-library-detail-article-link"
-                                                onClick={() => {
-                                                  if (isSummarized && relatedSummary) {
-                                                    onChangeSourceFilter('all')
-                                                    onChangeStatusFilter('all')
-                                                    onChangeTimeRange('all')
-                                                    onChangeView('articles')
-                                                    toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)
-                                                    return
-                                                  }
-                                                  void onOpenArticleSummary(article.id)
-                                                }}
-                                              >
-                                                {article.title}
-                                              </button>
-                                              <p className="ai-library-detail-article-meta">
-                                                <span>{article.source_name || `来源 ${article.source_id}`}</span>
-                                                {article.published_at ? <span>{formatTimeAgo(article.published_at)}</span> : null}
-                                                <span>{isSummarized ? '已收录摘要' : '打开文章详情'}</span>
-                                              </p>
+                                            <div
+                                              id={refID}
+                                              key={`${item.digest_key}-${article.id}`}
+                                              className={`ai-library-detail-article-item ${highlightedArticleRefID === refID ? 'highlight' : ''}`}
+                                            >
+                                              <span className="ai-library-detail-article-index">#{articleNumber || '?'}</span>
+                                              <span className="ai-library-detail-article-content">
+                                                <button
+                                                  type="button"
+                                                  className="ai-library-detail-article-link"
+                                                  onClick={() => {
+                                                    if (isSummarized && relatedSummary) {
+                                                      onChangeSourceFilter('all')
+                                                      onChangeStatusFilter('all')
+                                                      onChangeTimeRange('all')
+                                                      onChangeView('articles')
+                                                      toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)
+                                                      return
+                                                    }
+                                                    void onOpenArticleSummary(article.id)
+                                                  }}
+                                                >
+                                                  {article.title}
+                                                </button>
+                                                <p className="ai-library-detail-article-meta">
+                                                  <span>{article.source_name || `来源 ${article.source_id}`}</span>
+                                                  {article.published_at ? <span>{formatTimeAgo(article.published_at)}</span> : null}
+                                                  <span>{isSummarized ? '已收录摘要' : '打开文章详情'}</span>
+                                                </p>
+                                              </span>
                                             </div>
                                           )
                                         })}
