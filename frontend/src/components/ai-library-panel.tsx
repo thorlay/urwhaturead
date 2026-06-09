@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { MarkdownBlock } from '@/components/rich-content-blocks'
-import { formatAIStopReason } from '../lib/app-utils'
-import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal } from 'lucide-react'
+import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
+import { formatAIStopReason, normalizeImageURL } from '../lib/app-utils'
+import type { ArticleDetail, ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -20,6 +20,9 @@ type AILibraryPanelProps = {
   statusFilter: AILibraryStatusFilter
   articleSummaries: ArticleSummaryLibraryItem[]
   feedBriefings: FeedBriefingLibraryItem[]
+  readerArticle: ArticleDetail | null
+  readerArticleLoading: boolean
+  readerArticleError: string | null
   sources: Source[]
   formatTimeAgo: (input: string) => string
   onChangeSearch: (value: string) => void
@@ -30,6 +33,7 @@ type AILibraryPanelProps = {
   onChangeSourceFilter: (value: string) => void
   onChangeStatusFilter: (value: AILibraryStatusFilter) => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
+  onCloseArticleReader: () => void
   onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
 
@@ -273,6 +277,116 @@ function articleRefDOMID(briefingKey: string, articleID: number): string {
   return `ai-briefing-ref-${safeDOMID(briefingKey)}-${articleID}`
 }
 
+function AIArticleReader(props: {
+  article: ArticleDetail | null
+  loading: boolean
+  error: string | null
+  formatTimeAgo: (input: string) => string
+  onClose: () => void
+}) {
+  const { article, loading, error, formatTimeAgo, onClose } = props
+  const imageURL = normalizeImageURL(article?.image_url)
+  const hasExternal = Boolean(article?.external?.content?.trim())
+  const hasThread = Boolean(article?.thread)
+  const threadComments = article?.thread?.comments ?? []
+
+  if (!loading && !error && !article) {
+    return null
+  }
+
+  return (
+    <div className="ai-article-reader-shell" role="dialog" aria-modal="true" aria-label="AI 页面文章阅读">
+      <div className="ai-article-reader-backdrop" onClick={onClose} />
+      <article className="ai-article-reader-panel">
+        <header className="ai-article-reader-top">
+          <button type="button" className="ai-article-reader-close" onClick={onClose}>
+            <X aria-hidden="true" />
+            返回 AI 速览
+          </button>
+          {article?.link && (
+            <a className="ai-article-reader-source-link" href={article.link} target="_blank" rel="noreferrer">
+              <ExternalLink aria-hidden="true" />
+              打开原文
+            </a>
+          )}
+        </header>
+
+        {loading && (
+          <div className="ai-article-reader-loading">
+            <div className="skeleton skeleton-title" />
+            <div className="skeleton skeleton-line" />
+            <div className="skeleton skeleton-line short" />
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="inline-error">
+            <span>{error}</span>
+          </div>
+        )}
+
+        {article && !loading && (
+          <div className="ai-article-reader-content">
+            <div className="ai-article-reader-heading">
+              <p className="ai-article-reader-meta">
+                {article.source_name} · {formatTimeAgo(article.published_at ?? article.created_at)}
+                {article.reply_count ? ` · ${article.reply_count} 回复` : ''}
+              </p>
+              <h2>{article.title}</h2>
+              {article.author && <p className="hint">作者: {article.author}</p>}
+            </div>
+
+            {imageURL && (
+              <figure className="ai-article-reader-image">
+                <img src={imageURL} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" />
+              </figure>
+            )}
+
+            <section className="ai-article-reader-body">
+              {hasExternal && article.external ? (
+                <>
+                  {article.external.title && <p className="hint">{article.external.title}</p>}
+                  <PlainTextBlock content={article.external.content} className="reading-block prose" />
+                  {article.external.truncated && <p className="hint">原文较长，已截断显示。</p>}
+                </>
+              ) : article.content_html ? (
+                <SafeHTMLBlock content={article.content_html} baseURL={article.link} />
+              ) : article.content ? (
+                <PlainTextBlock content={article.content} className="reading-block prose" />
+              ) : article.summary ? (
+                <PlainTextBlock content={article.summary} className="reading-block prose" />
+              ) : (
+                <p className="hint">这篇文章暂时没有可展示正文。</p>
+              )}
+            </section>
+
+            {hasThread && threadComments.length > 0 && (
+              <section className="ai-article-reader-comments">
+                <div className="ai-article-reader-section-head">
+                  <h3>讨论</h3>
+                  <span className="hint">{article.thread?.total_posts ?? threadComments.length} 条</span>
+                </div>
+                <div className="ai-article-reader-comment-list">
+                  {threadComments.slice(0, 30).map((comment) => (
+                    <div key={`${comment.post_number}-${comment.link}`} className="ai-article-reader-comment">
+                      <p className="ai-article-reader-comment-meta">
+                        {comment.author || '匿名'} · #{comment.post_number}
+                        {comment.published_at ? ` · ${formatTimeAgo(comment.published_at)}` : ''}
+                      </p>
+                      <PlainTextBlock content={comment.content} />
+                    </div>
+                  ))}
+                </div>
+                {threadComments.length > 30 && <p className="hint">评论较多，仅展示前 30 条。</p>}
+              </section>
+            )}
+          </div>
+        )}
+      </article>
+    </div>
+  )
+}
+
 function shouldIgnoreEntryToggle(event: ReactMouseEvent<HTMLElement>): boolean {
   const target = event.target
   if (!(target instanceof HTMLElement)) {
@@ -295,6 +409,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     statusFilter,
     articleSummaries,
     feedBriefings,
+    readerArticle,
+    readerArticleLoading,
+    readerArticleError,
     formatTimeAgo,
     onChangeSearch,
     onApplySearch,
@@ -304,6 +421,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onChangeSourceFilter,
     onChangeStatusFilter,
     onOpenArticleSummary,
+    onCloseArticleReader,
     onOpenFeedBriefing,
   } = props
 
@@ -884,14 +1002,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                                   type="button"
                                                   className="ai-library-detail-article-link"
                                                   onClick={() => {
-                                                    if (isSummarized && relatedSummary) {
-                                                      onChangeSourceFilter('all')
-                                                      onChangeStatusFilter('all')
-                                                      onChangeTimeRange('all')
-                                                      onChangeView('articles')
-                                                      toggleArticleSelection(`${relatedSummary.article_id}:${relatedSummary.generated_at}`)
-                                                      return
-                                                    }
                                                     void onOpenArticleSummary(article.id)
                                                   }}
                                                 >
@@ -940,6 +1050,13 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
           </div>
         )}
       </section>
+      <AIArticleReader
+        article={readerArticle}
+        loading={readerArticleLoading}
+        error={readerArticleError}
+        formatTimeAgo={formatTimeAgo}
+        onClose={onCloseArticleReader}
+      />
     </main>
   )
 }

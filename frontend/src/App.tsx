@@ -328,7 +328,6 @@ function App() {
   const aiLibrarySection = useAILibrarySection({
     activeTab,
     setActiveTab,
-    openArticle: readerSection.openArticle,
     openFeedBriefing: openFeedBriefingFromLibrary,
     onOpenFromAILibrary: () => setCanReturnToAILibrary(true),
     setNotice,
@@ -514,6 +513,9 @@ function App() {
             statusFilter={aiLibrarySection.statusFilter}
             articleSummaries={aiLibrarySection.articleSummaries}
             feedBriefings={aiLibrarySection.feedBriefings}
+            readerArticle={aiLibrarySection.readerArticle}
+            readerArticleLoading={aiLibrarySection.readerArticleLoading}
+            readerArticleError={aiLibrarySection.readerArticleError}
             sources={sources}
             formatTimeAgo={formatTimeAgo}
             onChangeSearch={aiLibrarySection.setSearch}
@@ -524,6 +526,7 @@ function App() {
             onChangeSourceFilter={aiLibrarySection.setSourceFilter}
             onChangeStatusFilter={aiLibrarySection.setStatusFilter}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
+            onCloseArticleReader={aiLibrarySection.closeArticleReader}
             onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />
         </Suspense>

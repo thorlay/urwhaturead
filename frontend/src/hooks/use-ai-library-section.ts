@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listArticleSummaries, listFeedBriefings } from '../api'
+import { getArticle, listArticleSummaries, listFeedBriefings } from '../api'
 import type { AppTab, Notice } from '../lib/app-domain'
-import type { ArticleSummaryLibraryItem, FeedBriefingLibraryItem } from '../types'
+import type { ArticleDetail, ArticleSummaryLibraryItem, FeedBriefingLibraryItem } from '../types'
 import { toErrorMessage } from '../lib/app-utils'
 
 type UseAILibrarySectionParams = {
   activeTab: AppTab
   setActiveTab: (tab: AppTab) => void
-  openArticle: (articleID: number) => Promise<void>
   openFeedBriefing: (item: FeedBriefingLibraryItem) => void
   onOpenFromAILibrary: () => void
   setNotice: (notice: Notice | null) => void
@@ -20,7 +19,6 @@ type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
 export function useAILibrarySection({
   activeTab,
   setActiveTab,
-  openArticle,
   openFeedBriefing,
   onOpenFromAILibrary,
   setNotice,
@@ -35,6 +33,9 @@ export function useAILibrarySection({
   const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<AILibraryStatusFilter>('all')
+  const [readerArticle, setReaderArticle] = useState<ArticleDetail | null>(null)
+  const [readerArticleLoading, setReaderArticleLoading] = useState(false)
+  const [readerArticleError, setReaderArticleError] = useState<string | null>(null)
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -108,12 +109,28 @@ export function useAILibrarySection({
 
   const openArticleSummary = useCallback(
     async (articleID: number) => {
-      onOpenFromAILibrary()
-      setActiveTab('reader')
-      await openArticle(articleID)
+      try {
+        setReaderArticleLoading(true)
+        setReaderArticleError(null)
+        setReaderArticle(null)
+        const article = await getArticle(articleID)
+        setReaderArticle(article)
+      } catch (err) {
+        const message = toErrorMessage(err)
+        setReaderArticleError(`文章加载失败: ${message}`)
+        setNotice({ kind: 'error', text: `文章加载失败: ${message}` })
+      } finally {
+        setReaderArticleLoading(false)
+      }
     },
-    [onOpenFromAILibrary, openArticle, setActiveTab],
+    [setNotice],
   )
+
+  const closeArticleReader = useCallback(() => {
+    setReaderArticle(null)
+    setReaderArticleError(null)
+    setReaderArticleLoading(false)
+  }, [])
 
   const openFeedBriefingSummary = useCallback(
     (item: FeedBriefingLibraryItem) => {
@@ -137,12 +154,16 @@ export function useAILibrarySection({
     setStatusFilter,
     articleSummaries,
     feedBriefings,
+    readerArticle,
+    readerArticleLoading,
+    readerArticleError,
     loading,
     error,
     loadedOnce,
     applySearch,
     refresh,
     openArticleSummary,
+    closeArticleReader,
     openFeedBriefingSummary,
   }
 }

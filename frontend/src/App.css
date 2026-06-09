@@ -1114,6 +1114,228 @@
   font-size: 0.78rem;
 }
 
+.ai-article-reader-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  justify-items: end;
+  pointer-events: none;
+}
+
+.ai-article-reader-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 20, 19, 0.14);
+  pointer-events: auto;
+}
+
+.ai-article-reader-panel {
+  position: relative;
+  z-index: 1;
+  width: min(760px, calc(100vw - 2rem));
+  height: calc(100vh - 2rem);
+  margin: 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--panel-radius);
+  background: var(--paper-strong);
+  box-shadow: -18px 0 44px rgba(20, 20, 19, 0.12);
+}
+
+.ai-article-reader-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.78rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper-strong) 94%, white);
+  backdrop-filter: blur(10px);
+}
+
+.ai-article-reader-close,
+.ai-article-reader-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 1.9rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.ai-article-reader-close:hover,
+.ai-article-reader-source-link:hover {
+  color: var(--text);
+}
+
+.ai-article-reader-close svg,
+.ai-article-reader-source-link svg {
+  width: 0.92rem;
+  height: 0.92rem;
+}
+
+.ai-article-reader-loading,
+.ai-article-reader-content,
+.ai-article-reader-panel .inline-error {
+  width: min(68ch, calc(100% - 2rem));
+  margin: 0 auto;
+}
+
+.ai-article-reader-loading {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.3rem 0;
+}
+
+.ai-article-reader-content {
+  display: grid;
+  gap: 1.05rem;
+  padding: 1.05rem 0 2.2rem;
+}
+
+.ai-article-reader-heading {
+  display: grid;
+  gap: 0.48rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.ai-article-reader-meta,
+.ai-article-reader-comment-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.ai-article-reader-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: clamp(1.65rem, 2.2vw, 2.5rem);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.024em;
+}
+
+.ai-article-reader-image {
+  margin: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--background-secondary);
+}
+
+.ai-article-reader-image img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.ai-article-reader-body,
+.ai-article-reader-comments {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.ai-article-reader-body .html-block,
+.ai-article-reader-body .markdown-block,
+.ai-article-reader-body .plain-text-block {
+  font-size: 1.04rem;
+  line-height: 1.86;
+}
+
+.ai-article-reader-comments {
+  display: grid;
+  gap: 0.72rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.ai-article-reader-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.ai-article-reader-section-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ai-article-reader-comment-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.ai-article-reader-comment {
+  display: grid;
+  gap: 0.3rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-faint);
+}
+
+.ai-article-reader-comment:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+@media (max-width: 760px) {
+  .ai-article-reader-panel {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .ai-article-reader-top {
+    padding: max(0.72rem, env(safe-area-inset-top)) max(0.78rem, env(safe-area-inset-right)) 0.72rem
+      max(0.78rem, env(safe-area-inset-left));
+  }
+
+  .ai-article-reader-loading,
+  .ai-article-reader-content,
+  .ai-article-reader-panel .inline-error {
+    width: min(100%, calc(100vw - 1.5rem));
+  }
+
+  .ai-article-reader-content {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .ai-article-reader-heading h2 {
+    font-size: clamp(1.32rem, 7vw, 1.9rem);
+    line-height: 1.18;
+  }
+
+  .ai-article-reader-body .html-block,
+  .ai-article-reader-body .markdown-block,
+  .ai-article-reader-body .plain-text-block {
+    font-size: 1.02rem;
+    line-height: 1.78;
+  }
+
+  .ai-article-reader-source-link {
+    max-width: 8rem;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+}
+
 .ai-library-empty {
   display: grid;
   gap: 0.45rem;
