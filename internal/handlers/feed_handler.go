@@ -36,7 +36,7 @@ type FeedHandler struct {
 }
 
 const nonAdminBriefingModel = "gemini-3-flash-preview"
-const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。不要默认把所有条目都当新闻；请先识别每条内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按类型提炼。请先在心里合并重复事件和相似讨论，再按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
+const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。你的输出首先要好读，其次才是完整。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。请先在心里合并重复事件和相似讨论，按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
 
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
@@ -987,18 +987,22 @@ func parseCSVUint64Loose(raw string) []uint64 {
 func buildFeedBriefingPrompt(items []feedItem) string {
 	var builder strings.Builder
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
+	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。\n")
 	builder.WriteString("输出格式严格为：\n")
-	builder.WriteString("1) 今日判断（4-8句；说明今天最值得注意的变化、论点或讨论趋势，不要只列标题）\n")
-	builder.WriteString("2) 内容类型分布（按 news_event / essay_argument / forum_discussion / resource_tool / mixed 粗略说明各类内容的主线）\n")
-	builder.WriteString("3) 重点主题分组（2-5组，每组2-4条；每条写“发生/主张/讨论了什么 + 为什么重要”）\n")
-	builder.WriteString("4) 长文论点与讨论焦点（如果有观点文或论坛内容，提炼作者论点、论证链条、主要分歧、经验信息；没有就写“本轮未发现明显长文/论坛主线”）\n")
-	builder.WriteString("5) 风险/争议/不确定性（最多4条；只写前文没有完整展开的新风险点或论证漏洞）\n")
-	builder.WriteString("6) 值得深读（最多6条，格式：[A01] 标题｜[原文](链接URL)｜推荐理由｜适合谁读；不要重复正文内容）\n\n")
+	builder.WriteString("1) 先看这个（3-5条 bullet；每条 1-2 句；直接说“发生了什么 / 核心论点是什么 / 为什么值得看”）\n")
+	builder.WriteString("2) 主要线索（2-4组；每组一个短标题 + 2-3条 bullet；每条最多 2 句，避免长段落）\n")
+	builder.WriteString("3) 观点与讨论（即长文论点与讨论焦点；只有存在长文、论坛或争议时才写；提炼论点、分歧、经验信息；没有就省略本节）\n")
+	builder.WriteString("4) 风险与不确定（最多3条；只写真正影响判断的新风险，不要重复前文）\n")
+	builder.WriteString("5) 值得深读（最多5条，格式：[A01] 标题｜[原文](链接URL)｜一句推荐理由｜适合谁读）\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
 	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
 	builder.WriteString("- 优先写真正新增、多源确认、讨论升温、论证质量高、经验密度高或影响较大的信息；信息不足或重复度高的条目可以忽略。\n")
 	builder.WriteString("- 不要把所有主题写成同等重要；真正重要的主题放在前面，次要信息可以压缩。\n")
+	builder.WriteString("- 内容类型只作为内部判断：news_event / essay_argument / forum_discussion / resource_tool / mixed；不要机械输出成分类清单。\n")
+	builder.WriteString("- 除“值得深读”外，不要每一句都塞入 [Axx] 编号；只有需要定位原文时才少量引用编号。\n")
+	builder.WriteString("- 段落必须短。一个自然段最多 3 行；优先使用 bullet；避免 5 句以上的大段文字。\n")
+	builder.WriteString("- 每个 bullet 只表达一个判断。不要把多个公司、多个事件塞进同一句。\n")
 	builder.WriteString("- 同一核心事实只能完整表述一次；后续 section 如果需要引用，只能极短指代，不得重复铺陈背景。\n")
 	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议/不确定性”里再次完整重写。\n")
 	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")

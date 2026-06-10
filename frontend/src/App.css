@@ -605,6 +605,35 @@
   font-size: 0.62rem;
 }
 
+.ai-library-review-modes {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.28rem;
+  padding: 0.18rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.ai-library-review-mode {
+  min-height: 1.56rem;
+  padding: 0 0.62rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ai-library-review-mode:hover,
+.ai-library-review-mode.active {
+  background: var(--paper-strong);
+  color: var(--text);
+}
+
 .ai-library-select-label {
   display: inline-flex;
   align-items: center;
@@ -1293,6 +1322,19 @@
 }
 
 @media (max-width: 760px) {
+  .ai-library-review-modes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .ai-library-review-mode {
+    min-width: 0;
+    padding-inline: 0.35rem;
+    text-align: center;
+  }
+
   .ai-article-reader-panel {
     width: 100vw;
     height: 100vh;

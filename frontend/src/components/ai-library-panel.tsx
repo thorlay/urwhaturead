@@ -9,6 +9,7 @@ import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizon
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
 type AILibraryStatusFilter = 'all' | 'complete' | 'truncated'
+type AILibraryReviewMode = 'recent' | 'date' | 'source'
 
 type AILibraryPanelProps = {
   search: string
@@ -121,6 +122,83 @@ function groupByRecency<T extends { generated_at: string }>(items: T[]): Library
   })
 
   return buckets.filter((bucket) => bucket.items.length > 0)
+}
+
+function groupBriefingsByDate(items: FeedBriefingLibraryItem[]): LibrarySection<FeedBriefingLibraryItem>[] {
+  const sections = new Map<string, LibrarySection<FeedBriefingLibraryItem>>()
+  items.forEach((item) => {
+    const dateKey = generatedDateKey(item.generated_at)
+    const existing = sections.get(dateKey)
+    if (existing) {
+      existing.items.push(item)
+      return
+    }
+    sections.set(dateKey, {
+      key: `date-${dateKey}`,
+      label: formatDateSectionLabel(dateKey),
+      items: [item],
+    })
+  })
+  return Array.from(sections.values())
+}
+
+function groupBriefingsBySource(items: FeedBriefingLibraryItem[]): LibrarySection<FeedBriefingLibraryItem>[] {
+  const sections = new Map<string, LibrarySection<FeedBriefingLibraryItem>>()
+  items.forEach((item) => {
+    const scope = item.scope_label || '当前阅读流'
+    const existing = sections.get(scope)
+    if (existing) {
+      existing.items.push(item)
+      return
+    }
+    sections.set(scope, {
+      key: `source-${safeDOMID(scope)}`,
+      label: scope,
+      items: [item],
+    })
+  })
+  return Array.from(sections.values())
+}
+
+function generatedDateKey(input: string): string {
+  const date = new Date(input)
+  if (!Number.isFinite(date.getTime())) {
+    return 'unknown'
+  }
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatDateSectionLabel(dateKey: string): string {
+  if (dateKey === 'unknown') {
+    return '日期未知'
+  }
+  const [year, month, day] = dateKey.split('-').map((part) => Number.parseInt(part, 10))
+  const date = new Date(year, month - 1, day)
+  const today = startOfLocalDay(new Date())
+  const target = startOfLocalDay(date)
+  const diffDays = Math.round((today.getTime() - target.getTime()) / (24 * 60 * 60 * 1000))
+  const formatted = new Intl.DateTimeFormat('zh-Hans-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date)
+  if (diffDays === 0) {
+    return `今天 · ${formatted}`
+  }
+  if (diffDays === 1) {
+    return `昨天 · ${formatted}`
+  }
+  if (diffDays === 2) {
+    return `前天 · ${formatted}`
+  }
+  return `${dateKey} · ${formatted}`
+}
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
 function parseIDList(input: string): number[] {
@@ -464,20 +542,31 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     return true
   })
   const articleSections = groupByRecency(filteredArticles)
-  const briefingSections = groupByRecency(filteredBriefings)
   const activeCount = activeView === 'articles' ? filteredArticles.length : filteredBriefings.length
   const sourceOptions = activeView === 'articles' ? articleSourceOptions : briefingScopeOptions
   const sourceLabel = activeView === 'articles' ? '来源' : '范围'
-  const flatArticleItems = useMemo(() => articleSections.flatMap((section) => section.items), [articleSections])
-  const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
   const [selectedArticleKey, setSelectedArticleKey] = useState<string | null>(null)
   const [selectedBriefingKey, setSelectedBriefingKey] = useState<string | null>(null)
   const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const [showExtraFilters, setShowExtraFilters] = useState(false)
   const [highlightedArticleRefID, setHighlightedArticleRefID] = useState<string | null>(null)
+  const [briefingReviewMode, setBriefingReviewMode] = useState<AILibraryReviewMode>('recent')
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
   const extraFilterCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)
+  const briefingSections = useMemo(() => {
+    if (briefingReviewMode === 'date') {
+      return groupBriefingsByDate(filteredBriefings)
+    }
+    if (briefingReviewMode === 'source') {
+      return groupBriefingsBySource(filteredBriefings)
+    }
+    return groupByRecency(filteredBriefings)
+  }, [briefingReviewMode, filteredBriefings])
+  const flatArticleItems = useMemo(() => articleSections.flatMap((section) => section.items), [articleSections])
+  const flatBriefingItems = useMemo(() => briefingSections.flatMap((section) => section.items), [briefingSections])
+  const briefingReviewModeLabel =
+    briefingReviewMode === 'date' ? '按日期回看' : briefingReviewMode === 'source' ? '按来源回看' : '最近'
 
   useEffect(() => {
     if (flatArticleItems.length === 0) {
@@ -717,6 +806,25 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                 </div>
               )}
             </div>
+
+            {activeView === 'briefings' && (
+              <div className="ai-library-review-modes" role="tablist" aria-label="AI 速览回看方式">
+                {[
+                  ['recent', '最近'],
+                  ['date', '按日期'],
+                  ['source', '按来源'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`ai-library-review-mode ${briefingReviewMode === value ? 'active' : ''}`}
+                    onClick={() => setBriefingReviewMode(value as AILibraryReviewMode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -729,6 +837,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         <div className="ai-library-summary-bar">
           <p className="hint">
             当前视图共 {activeCount} 条
+            {activeView === 'briefings' ? ` · ${briefingReviewModeLabel}` : ''}
             {timeRange !== 'all' ? ` · 已按 ${timeRange} 过滤` : ''}
             {sourceFilter !== 'all' ? ` · ${sourceLabel} ${sourceFilter}` : ''}
             {statusFilter !== 'all' ? ` · ${statusFilter === 'truncated' ? '只看输出触顶/截断' : '只看正常结束'}` : ''}
