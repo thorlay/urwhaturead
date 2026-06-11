@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
@@ -52,6 +55,8 @@ type DeepReadRecommendation = {
 }
 
 type BriefingArticleRef = FeedBriefingLibraryItem['article_refs'][number]
+
+const INTERNAL_ARTICLE_LINK_PREFIX = 'quick-article://'
 
 function stripMarkdown(input: string): string {
   return input
@@ -353,6 +358,75 @@ function safeDOMID(input: string): string {
 
 function articleRefDOMID(briefingKey: string, articleID: number): string {
   return `ai-briefing-ref-${safeDOMID(briefingKey)}-${articleID}`
+}
+
+function linkBriefingArticleReferences(summary: string, articleRefs: BriefingArticleRef[]): string {
+  if (!summary || articleRefs.length === 0) {
+    return summary
+  }
+  return summary.replace(/\[A(\d{1,3})\]/g, (match, rawIndex: string, offset: number, source: string) => {
+    if (isInsideMarkdownLink(source, offset, match.length)) {
+      return match
+    }
+    const index = Number.parseInt(rawIndex, 10)
+    if (!Number.isFinite(index) || index < 1 || index > articleRefs.length) {
+      return match
+    }
+    return `[${match}](${INTERNAL_ARTICLE_LINK_PREFIX}${index})`
+  })
+}
+
+function isInsideMarkdownLink(source: string, offset: number, length: number): boolean {
+  return source[offset - 1] === '[' || source[offset + length] === ']'
+}
+
+function LinkedBriefingMarkdown(props: {
+  content: string
+  articleRefs: BriefingArticleRef[]
+  onOpenArticle: (articleID: number) => void
+}) {
+  const content = useMemo(
+    () => linkBriefingArticleReferences(props.content, props.articleRefs),
+    [props.articleRefs, props.content],
+  )
+  if (!content.trim()) {
+    return null
+  }
+
+  return (
+    <div className="markdown-block ai-library-linked-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{
+          a: ({ href, children, ...linkProps }) => {
+            if (href?.startsWith(INTERNAL_ARTICLE_LINK_PREFIX)) {
+              const articleIndex = Number.parseInt(href.slice(INTERNAL_ARTICLE_LINK_PREFIX.length), 10)
+              const article = props.articleRefs[articleIndex - 1]
+              if (article) {
+                return (
+                  <button
+                    type="button"
+                    className="ai-library-inline-article-link"
+                    title={article.title}
+                    onClick={() => props.onOpenArticle(article.id)}
+                  >
+                    {children}
+                  </button>
+                )
+              }
+            }
+            return (
+              <a {...linkProps} href={href} target="_blank" rel="noreferrer">
+                {children}
+              </a>
+            )
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 function AIArticleReader(props: {
@@ -1065,7 +1139,13 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                     </div>
                                   </div>
                                 )}
-                                <MarkdownBlock content={visibleBriefingSummary} />
+                                <LinkedBriefingMarkdown
+                                  content={visibleBriefingSummary}
+                                  articleRefs={item.article_refs}
+                                  onOpenArticle={(articleID) => {
+                                    void onOpenArticleSummary(articleID)
+                                  }}
+                                />
                               </div>
                               <div className="ai-library-detail-context">
                                 <p className="ai-library-detail-footnote">

@@ -1055,6 +1055,29 @@
   height: 0.78rem;
 }
 
+.ai-library-inline-article-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.08rem;
+  margin: 0 0.08rem;
+  padding: 0 0.24rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--foreground-secondary);
+  font: inherit;
+  font-size: 0.76em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 0.08em;
+}
+
+.ai-library-inline-article-link:hover {
+  border-color: var(--border-subtle);
+  background: var(--paper-strong);
+  color: var(--text);
+}
+
 .ai-library-detail-context {
   display: grid;
   gap: 0.45rem;
