@@ -1060,14 +1060,14 @@
   align-items: center;
   min-height: 1.08rem;
   margin: 0 0.08rem;
-  padding: 0 0.24rem;
+  padding: 0 0.3rem;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--surface-muted);
-  color: var(--foreground-secondary);
+  background: transparent;
+  color: var(--foreground-tertiary);
   font: inherit;
-  font-size: 0.76em;
-  font-weight: 700;
+  font-size: 0.72em;
+  font-weight: 650;
   line-height: 1;
   vertical-align: 0.08em;
 }
@@ -1076,6 +1076,19 @@
   border-color: var(--border-subtle);
   background: var(--paper-strong);
   color: var(--text);
+}
+
+.ai-library-inline-article-link.disabled {
+  border-style: dashed;
+  color: var(--foreground-tertiary);
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.ai-library-inline-article-link.disabled:hover {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--foreground-tertiary);
 }
 
 .ai-library-detail-context {
@@ -1178,23 +1191,25 @@
 .ai-article-reader-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(20, 20, 19, 0.14);
+  background: rgba(20, 20, 19, 0.06);
   pointer-events: auto;
 }
 
 .ai-article-reader-panel {
   position: relative;
   z-index: 1;
-  width: min(760px, calc(100vw - 2rem));
-  height: calc(100vh - 2rem);
-  margin: 1rem;
+  width: min(820px, 46vw);
+  min-width: min(100vw, 680px);
+  height: 100vh;
+  margin: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   pointer-events: auto;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--panel-radius);
+  border: none;
+  border-left: 1px solid var(--line-strong);
+  border-radius: 0;
   background: var(--paper-strong);
-  box-shadow: -18px 0 44px rgba(20, 20, 19, 0.12);
+  box-shadow: -12px 0 30px rgba(20, 20, 19, 0.08);
 }
 
 .ai-article-reader-top {
@@ -1205,7 +1220,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.78rem 1rem;
+  padding: 0.78rem clamp(1.1rem, 3vw, 2.4rem);
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--paper-strong) 94%, white);
   backdrop-filter: blur(10px);
@@ -1239,7 +1254,7 @@
 .ai-article-reader-loading,
 .ai-article-reader-content,
 .ai-article-reader-panel .inline-error {
-  width: min(68ch, calc(100% - 2rem));
+  width: min(72ch, calc(100% - clamp(2.2rem, 6vw, 4.8rem)));
   margin: 0 auto;
 }
 
@@ -1251,15 +1266,15 @@
 
 .ai-article-reader-content {
   display: grid;
-  gap: 1.05rem;
-  padding: 1.05rem 0 2.2rem;
+  gap: 1.18rem;
+  padding: 1.35rem 0 2.8rem;
 }
 
 .ai-article-reader-heading {
   display: grid;
   gap: 0.48rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--border-faint);
+  padding-bottom: 0.12rem;
+  border-bottom: none;
 }
 
 .ai-article-reader-meta,

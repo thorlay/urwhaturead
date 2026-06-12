@@ -360,8 +360,8 @@ function articleRefDOMID(briefingKey: string, articleID: number): string {
   return `ai-briefing-ref-${safeDOMID(briefingKey)}-${articleID}`
 }
 
-function linkBriefingArticleReferences(summary: string, articleRefs: BriefingArticleRef[]): string {
-  if (!summary || articleRefs.length === 0) {
+function linkBriefingArticleReferences(summary: string): string {
+  if (!summary) {
     return summary
   }
   return summary.replace(/\[A(\d{1,3})\]/g, (match, rawIndex: string, offset: number, source: string) => {
@@ -369,7 +369,7 @@ function linkBriefingArticleReferences(summary: string, articleRefs: BriefingArt
       return match
     }
     const index = Number.parseInt(rawIndex, 10)
-    if (!Number.isFinite(index) || index < 1 || index > articleRefs.length) {
+    if (!Number.isFinite(index) || index < 1) {
       return match
     }
     return `[${match}](${INTERNAL_ARTICLE_LINK_PREFIX}${index})`
@@ -386,8 +386,8 @@ function LinkedBriefingMarkdown(props: {
   onOpenArticle: (articleID: number) => void
 }) {
   const content = useMemo(
-    () => linkBriefingArticleReferences(props.content, props.articleRefs),
-    [props.articleRefs, props.content],
+    () => linkBriefingArticleReferences(props.content),
+    [props.content],
   )
   if (!content.trim()) {
     return null
@@ -402,6 +402,7 @@ function LinkedBriefingMarkdown(props: {
             if (href?.startsWith(INTERNAL_ARTICLE_LINK_PREFIX)) {
               const articleIndex = Number.parseInt(href.slice(INTERNAL_ARTICLE_LINK_PREFIX.length), 10)
               const article = props.articleRefs[articleIndex - 1]
+              const label = `原文 ${Number.isFinite(articleIndex) ? articleIndex : ''}`.trim()
               if (article) {
                 return (
                   <button
@@ -410,10 +411,15 @@ function LinkedBriefingMarkdown(props: {
                     title={article.title}
                     onClick={() => props.onOpenArticle(article.id)}
                   >
-                    {children}
+                    {label}
                   </button>
                 )
               }
+              return (
+                <span className="ai-library-inline-article-link disabled" title="未找到关联文章">
+                  {label}
+                </span>
+              )
             }
             return (
               <a {...linkProps} href={href} target="_blank" rel="noreferrer">
