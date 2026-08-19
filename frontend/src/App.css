@@ -71,6 +71,12 @@
   overflow: hidden;
 }
 
+.app-shell:has(.reader-layout) > .topbar,
+.app-shell:has(.reader-layout) > .notice,
+.app-shell:has(.reader-layout) > .ai-task-strip {
+  flex: 0 0 auto;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -167,8 +173,26 @@
 }
 
 .app-shell:has(.reader-layout) .ai-task-strip {
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: min(11rem, 28dvh);
   margin-bottom: 0.58rem;
   padding: 0.48rem 0;
+  overflow: hidden;
+}
+
+.app-shell:has(.reader-layout) .ai-task-strip-head {
+  align-items: center;
+}
+
+.app-shell:has(.reader-layout) .ai-task-strip-title .hint {
+  display: none;
+}
+
+.app-shell:has(.reader-layout) .ai-task-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .mobile-feed-update-fab {

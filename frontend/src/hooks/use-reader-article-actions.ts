@@ -218,7 +218,6 @@ export function useReaderArticleActions({
           error: response.data.error,
         })
         setArticleSummaryMeta(`后台生成中 · ${response.data.status} · ${taskModel}`)
-        setNotice({ kind: 'info', text: 'AI 摘要已进入后台任务，正在生成中。' })
       } catch (error) {
         if (requestID !== summaryRequestSeqRef.current) {
           return

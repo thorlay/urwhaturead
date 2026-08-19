@@ -48,6 +48,8 @@ export function SummaryTaskStrip<TTask extends SummaryTaskBase>(props: SummaryTa
     return null
   }
 
+  const finishedCount = stats.failed + stats.succeeded
+
   return (
     <section className="panel ai-task-strip">
       <div className="ai-task-strip-head">
@@ -57,16 +59,18 @@ export function SummaryTaskStrip<TTask extends SummaryTaskBase>(props: SummaryTa
         </div>
         <div className="ai-task-strip-controls">
           <div className="ai-task-strip-badges" aria-label="AI 任务状态统计">
-            <Badge variant="outline">运行中 {stats.running}</Badge>
-            <Badge variant="outline">排队 {stats.queued}</Badge>
-            <Badge variant="outline">失败 {stats.failed}</Badge>
-            <Badge variant="outline">完成 {stats.succeeded}</Badge>
+            {stats.running > 0 && <Badge variant="outline">运行中 {stats.running}</Badge>}
+            {stats.queued > 0 && <Badge variant="outline">排队 {stats.queued}</Badge>}
+            {stats.failed > 0 && <Badge variant="outline">失败 {stats.failed}</Badge>}
+            {stats.succeeded > 0 && <Badge variant="outline">完成 {stats.succeeded}</Badge>}
           </div>
-          <div className="ai-task-strip-actions">
-            <Button type="button" variant="outline" size="sm" onClick={onClearCompleted}>
-              清理已结束
-            </Button>
-          </div>
+          {finishedCount > 0 && (
+            <div className="ai-task-strip-actions">
+              <Button type="button" variant="outline" size="sm" onClick={onClearCompleted}>
+                清理已结束
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       <div className="ai-task-list">
