@@ -377,5 +377,6 @@ export type AdminSessionResponse = {
     configured: boolean
     authenticated: boolean
     username?: string
+    ai_model?: string
   }
 }

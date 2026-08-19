@@ -21,15 +21,18 @@ export function useAdminAccess({
   const [adminAuthEnabled, setAdminAuthEnabled] = useState(true)
   const [adminAuthenticated, setAdminAuthenticated] = useState(false)
   const [adminSessionReady, setAdminSessionReady] = useState(false)
+  const [publicAIModel, setPublicAIModel] = useState('')
 
   const refreshAdminSession = useCallback(async () => {
     try {
       const response = await getAdminSession()
       setAdminAuthEnabled(Boolean(response.data.enabled))
       setAdminAuthenticated(Boolean(response.data.authenticated))
+      setPublicAIModel(response.data.ai_model?.trim() ?? '')
     } catch {
       setAdminAuthEnabled(true)
       setAdminAuthenticated(false)
+      setPublicAIModel('')
     } finally {
       setAdminSessionReady(true)
     }
@@ -103,6 +106,7 @@ export function useAdminAccess({
     adminAuthEnabled,
     adminAuthenticated,
     adminSessionReady,
+    publicAIModel,
     canAccessManagement,
     refreshAdminSession,
     onAdminLogin,

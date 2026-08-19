@@ -21,6 +21,7 @@ func TestAdminAuthLoginAndSession(t *testing.T) {
 		Token:    "token-123",
 		Username: "admin",
 		Password: "secret",
+		AIModel:  "deepseek-v4-flash",
 	})
 	handler.RegisterPublicRoutes(engine.Group("/api/v1/admin"))
 
@@ -53,6 +54,7 @@ func TestAdminAuthLoginAndSession(t *testing.T) {
 			Configured    bool   `json:"configured"`
 			Authenticated bool   `json:"authenticated"`
 			Username      string `json:"username"`
+			AIModel       string `json:"ai_model"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(sessionRecorder.Body.Bytes(), &payload); err != nil {
@@ -63,6 +65,9 @@ func TestAdminAuthLoginAndSession(t *testing.T) {
 	}
 	if payload.Data.Username != "admin" {
 		t.Fatalf("expected username=admin, got %q", payload.Data.Username)
+	}
+	if payload.Data.AIModel != "deepseek-v4-flash" {
+		t.Fatalf("expected ai_model=deepseek-v4-flash, got %q", payload.Data.AIModel)
 	}
 }
 

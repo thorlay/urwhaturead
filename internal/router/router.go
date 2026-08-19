@@ -59,6 +59,7 @@ func New(
 		Token:    adminToken,
 		Username: adminUsername,
 		Password: adminPassword,
+		AIModel:  summaryClient.DefaultModel(),
 	})
 	adminAuthHandler.RegisterPublicRoutes(api.Group("/admin"))
 

@@ -35,7 +35,6 @@ type FeedHandler struct {
 	briefingCooldown *briefingCooldownStore
 }
 
-const nonAdminBriefingModel = "gemini-3-flash-preview"
 const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。你的输出首先要好读，其次才是完整。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。请先在心里合并重复事件和相似讨论，按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
 
 type FeedHandlerOptions struct {
@@ -824,7 +823,10 @@ func dedupeFeedBriefingRows(rows []feedItem) []feedItem {
 
 func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {
 	if !isAdmin {
-		return nonAdminBriefingModel
+		if summarizer == nil {
+			return ""
+		}
+		return strings.TrimSpace(summarizer.DefaultModel())
 	}
 	model := strings.TrimSpace(requestedModel)
 	if model != "" {

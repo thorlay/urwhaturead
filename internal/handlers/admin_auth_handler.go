@@ -19,6 +19,7 @@ type AdminAuthOptions struct {
 	Token    string
 	Username string
 	Password string
+	AIModel  string
 }
 
 type AdminAuthHandler struct {
@@ -26,6 +27,7 @@ type AdminAuthHandler struct {
 	token    string
 	username string
 	password string
+	aiModel  string
 	ttl      time.Duration
 }
 
@@ -40,6 +42,7 @@ func NewAdminAuthHandler(options AdminAuthOptions) *AdminAuthHandler {
 		token:    strings.TrimSpace(options.Token),
 		username: strings.TrimSpace(options.Username),
 		password: strings.TrimSpace(options.Password),
+		aiModel:  strings.TrimSpace(options.AIModel),
 		ttl:      defaultAdminSessionTTL,
 	}
 }
@@ -100,6 +103,7 @@ func (h *AdminAuthHandler) Session(c *gin.Context) {
 		"enabled":       enabled,
 		"configured":    configured,
 		"authenticated": authenticated,
+		"ai_model":      h.aiModel,
 	}
 	if authenticated {
 		payload["username"] = h.username

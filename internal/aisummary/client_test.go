@@ -147,6 +147,67 @@ func TestSummarize_MessagesAPI(t *testing.T) {
 	}
 }
 
+func TestSummarize_DeepSeekDisablesThinkingByDefault(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer secret" {
+			t.Fatalf("unexpected Authorization header: %q", got)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		thinking, ok := payload["thinking"].(map[string]any)
+		if !ok || thinking["type"] != thinkingModeDisabled {
+			t.Fatalf("unexpected thinking config: %#v", payload["thinking"])
+		}
+		if _, exists := payload["max_completion_tokens"]; exists {
+			t.Fatalf("DeepSeek payload should not include max_completion_tokens")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"deepseek-v4-flash","choices":[{"message":{"content":"DeepSeek summary"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{
+		BaseURL:         server.URL + "/chat/completions",
+		APIKey:          "secret",
+		Model:           "deepseek-v4-flash",
+		Timeout:         2 * time.Second,
+		MaxOutputTokens: 1800,
+		APIStyle:        "openai_chat",
+		APIKeyPrefix:    "Bearer",
+	})
+	result, err := client.Summarize(context.Background(), "Title", "Body text")
+	if err != nil {
+		t.Fatalf("summarize failed: %v", err)
+	}
+	if result.Summary != "DeepSeek summary" {
+		t.Fatalf("unexpected summary: %q", result.Summary)
+	}
+	if result.ProviderName != "deepseek" {
+		t.Fatalf("unexpected provider: %q", result.ProviderName)
+	}
+}
+
+func TestBuildPayload_DeepSeekThinkingEnabled(t *testing.T) {
+	client := NewClient(Options{
+		BaseURL:      "https://api.deepseek.com/chat/completions",
+		APIKey:       "secret",
+		Model:        "deepseek-v4-pro",
+		APIStyle:     "openai_chat",
+		ThinkingMode: "enabled",
+	})
+	if client == nil {
+		t.Fatalf("client should not be nil")
+	}
+	payload := client.buildPayload("system", "user", "deepseek-v4-pro")
+	thinking, ok := payload["thinking"].(map[string]string)
+	if !ok || thinking["type"] != thinkingModeEnabled {
+		t.Fatalf("unexpected thinking config: %#v", payload["thinking"])
+	}
+}
+
 func TestSummarize_EmptyWithAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

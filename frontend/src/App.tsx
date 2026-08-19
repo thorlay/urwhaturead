@@ -16,10 +16,7 @@ import { useAppTabActions } from './hooks/use-app-tab-actions'
 import { useAILibrarySection } from './hooks/use-ai-library-section'
 import { useReaderFeatureSection } from './hooks/use-reader-feature-section'
 import { useReaderWorkspaceComposition } from './hooks/use-reader-workspace-composition'
-import {
-  aiModelOptions,
-  nonAdminLockedAIModel,
-} from './lib/app-domain'
+import { aiModelOptions } from './lib/app-domain'
 import {
   bulkActionLabel,
   confidenceLabel,
@@ -337,6 +334,7 @@ function App() {
     adminAuthEnabled,
     adminAuthenticated,
     adminSessionReady,
+    publicAIModel,
     canAccessManagement,
     refreshAdminSession,
     onAdminLogout,
@@ -358,11 +356,12 @@ function App() {
     if (!adminSessionReady || canAccessManagement) {
       return
     }
-    if (aiModel === nonAdminLockedAIModel) {
+    const lockedModel = publicAIModel.trim()
+    if (!lockedModel || aiModel === lockedModel) {
       return
     }
-    setAIModel(nonAdminLockedAIModel)
-  }, [adminSessionReady, aiModel, canAccessManagement, setAIModel])
+    setAIModel(lockedModel)
+  }, [adminSessionReady, aiModel, canAccessManagement, publicAIModel, setAIModel])
 
   useAppUIEffects({
     activeTab,

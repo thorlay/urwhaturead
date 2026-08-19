@@ -102,6 +102,19 @@ AI_SUMMARY_API_KEY_PREFIX=Bearer
 AI_SUMMARY_MODEL=gemini-2.5-flash
 ```
 
+也可以直接使用 DeepSeek 官方 API：
+
+```env
+AI_SUMMARY_BASE_URL=https://api.deepseek.com/chat/completions
+AI_SUMMARY_API_KEY=请填写_DEEPSEEK_API_KEY
+AI_SUMMARY_API_STYLE=openai_chat
+AI_SUMMARY_API_KEY_HEADER=Authorization
+AI_SUMMARY_API_KEY_PREFIX=Bearer
+AI_SUMMARY_MODEL=deepseek-v4-flash
+AI_SUMMARY_THINKING_MODE=disabled
+AI_SUMMARY_MAX_OUTPUT_TOKENS=1800
+```
+
 注意：
 
 - 如果 AI 代理不在本机，`AI_SUMMARY_BASE_URL` 要改成真实外网/内网地址。

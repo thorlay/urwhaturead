@@ -20,6 +20,9 @@ const (
 	apiStyleAuto           = "auto"
 	apiStyleOpenAIChat     = "openai_chat"
 	apiStyleMessages       = "messages"
+	thinkingModeAuto       = "auto"
+	thinkingModeEnabled    = "enabled"
+	thinkingModeDisabled   = "disabled"
 )
 
 var (
@@ -37,6 +40,7 @@ type Options struct {
 	APIStyle        string
 	APIKeyHeader    string
 	APIKeyPrefix    string
+	ThinkingMode    string
 }
 
 type Result struct {
@@ -59,6 +63,7 @@ type Client struct {
 	httpClient      *http.Client
 	maxInputChars   int
 	maxOutputTokens int
+	thinkingMode    string
 }
 
 func (c *Client) DefaultModel() string {
@@ -75,7 +80,9 @@ func (c *Client) Probe(ctx context.Context) error {
 
 	payload := c.buildPayload("Reply with OK.", "ping", c.model)
 	payload["max_tokens"] = 16
-	payload["max_completion_tokens"] = 16
+	if !isDeepSeekModel(c.model) {
+		payload["max_completion_tokens"] = 16
+	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -146,8 +153,11 @@ func NewClient(options Options) *Client {
 		}
 	}
 	apiKeyPrefix := options.APIKeyPrefix
-	if apiKeyPrefix == "" && strings.EqualFold(apiKeyHeader, "Authorization") {
-		apiKeyPrefix = "Bearer "
+	if strings.EqualFold(apiKeyHeader, "Authorization") {
+		switch strings.ToLower(strings.TrimSpace(apiKeyPrefix)) {
+		case "", "bearer":
+			apiKeyPrefix = "Bearer "
+		}
 	}
 
 	return &Client{
@@ -162,6 +172,7 @@ func NewClient(options Options) *Client {
 		},
 		maxInputChars:   maxInputChars,
 		maxOutputTokens: maxOutputTokens,
+		thinkingMode:    normalizeThinkingMode(options.ThinkingMode),
 	}
 }
 
@@ -297,7 +308,7 @@ func (c *Client) complete(
 		Truncated:    truncated,
 		StopReason:   stopReason,
 		GeneratedAt:  time.Now().UTC(),
-		ProviderName: "geminicli2api",
+		ProviderName: providerName(c.endpointURL, model),
 	}, nil
 }
 
@@ -320,7 +331,7 @@ func (c *Client) buildPayload(systemPrompt string, userPrompt string, model stri
 		}
 	}
 
-	return map[string]any{
+	payload := map[string]any{
 		"model": model,
 		"messages": []map[string]string{
 			{
@@ -332,10 +343,22 @@ func (c *Client) buildPayload(systemPrompt string, userPrompt string, model stri
 				"content": userPrompt,
 			},
 		},
-		"temperature":           0.2,
-		"max_tokens":            c.maxOutputTokens,
-		"max_completion_tokens": c.maxOutputTokens,
+		"temperature": 0.2,
+		"max_tokens":  c.maxOutputTokens,
 	}
+	if isDeepSeekModel(model) {
+		payload["thinking"] = map[string]string{"type": c.deepSeekThinkingMode()}
+	} else {
+		payload["max_completion_tokens"] = c.maxOutputTokens
+	}
+	return payload
+}
+
+func (c *Client) deepSeekThinkingMode() string {
+	if c.thinkingMode == thinkingModeEnabled {
+		return thinkingModeEnabled
+	}
+	return thinkingModeDisabled
 }
 
 func (c *Client) pickModel(modelOverride string) string {
@@ -356,6 +379,28 @@ func normalizeAPIStyle(raw string) string {
 	default:
 		return apiStyleOpenAIChat
 	}
+}
+
+func normalizeThinkingMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case thinkingModeEnabled:
+		return thinkingModeEnabled
+	case thinkingModeDisabled:
+		return thinkingModeDisabled
+	default:
+		return thinkingModeAuto
+	}
+}
+
+func isDeepSeekModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "deepseek-")
+}
+
+func providerName(endpointURL string, model string) string {
+	if isDeepSeekModel(model) || strings.Contains(strings.ToLower(endpointURL), "deepseek.com") {
+		return "deepseek"
+	}
+	return "geminicli2api"
 }
 
 func detectAPIStyle(baseURL string) string {

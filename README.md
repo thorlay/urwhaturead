@@ -112,6 +112,7 @@ Main vars:
 - `AI_SUMMARY_API_STYLE` (`auto` / `openai_chat` / `messages`)
 - `AI_SUMMARY_API_KEY_HEADER`
 - `AI_SUMMARY_API_KEY_PREFIX`
+- `AI_SUMMARY_THINKING_MODE` (`auto` / `disabled` / `enabled`; DeepSeek defaults to disabled in `auto`)
 - `FEED_BRIEFING_RATE_LIMIT_PER_HOUR` (default `10` for non-admin requests)
 - `FEED_BRIEFING_COOLDOWN_SEC` (default `600`; same digest cooldown for non-admin requests)
 - `PGADMIN_PORT`
@@ -209,6 +210,19 @@ AI_SUMMARY_API_STYLE=messages
 AI_SUMMARY_API_KEY_HEADER=X-API-Key
 AI_SUMMARY_API_KEY_PREFIX=
 AI_SUMMARY_MAX_OUTPUT_TOKENS=1000
+```
+
+DeepSeek OpenAI-compatible example:
+
+```env
+AI_SUMMARY_BASE_URL=https://api.deepseek.com/chat/completions
+AI_SUMMARY_API_KEY=YOUR_DEEPSEEK_API_KEY
+AI_SUMMARY_MODEL=deepseek-v4-flash
+AI_SUMMARY_API_STYLE=openai_chat
+AI_SUMMARY_API_KEY_HEADER=Authorization
+AI_SUMMARY_API_KEY_PREFIX=Bearer
+AI_SUMMARY_THINKING_MODE=disabled
+AI_SUMMARY_MAX_OUTPUT_TOKENS=1800
 ```
 
 Feed query params:

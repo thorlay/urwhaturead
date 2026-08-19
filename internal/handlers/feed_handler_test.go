@@ -264,7 +264,7 @@ func TestResolveFeedBriefingModel_NonAdminLocked(t *testing.T) {
 		t.Fatalf("summarizer should not be nil")
 	}
 	got := resolveFeedBriefingModel("gemini-2.5-flash", summarizer, false)
-	if got != nonAdminBriefingModel {
-		t.Fatalf("resolveFeedBriefingModel non-admin=%q, want %q", got, nonAdminBriefingModel)
+	if got != "gemini-2.5-pro" {
+		t.Fatalf("resolveFeedBriefingModel non-admin=%q, want configured default", got)
 	}
 }

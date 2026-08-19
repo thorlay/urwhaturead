@@ -80,6 +80,7 @@ func main() {
 			APIStyle:        cfg.AISummaryAPIStyle,
 			APIKeyHeader:    cfg.AISummaryAPIKeyHeader,
 			APIKeyPrefix:    cfg.AISummaryAPIKeyPrefix,
+			ThinkingMode:    cfg.AISummaryThinkingMode,
 		})
 		if summaryClient == nil {
 			log.Println("ai summary is enabled but not fully configured; endpoint will return 503")

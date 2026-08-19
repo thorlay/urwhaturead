@@ -68,7 +68,6 @@ export type ReaderSession = {
 export const threadPreviewCommentLimit = 3
 export const trackedSidebarPreviewLimit = 10
 export const aiModelStorageKey = 'quick.ai.model'
-export const nonAdminLockedAIModel = 'gemini-3-flash-preview'
 export const readArticleStorageKey = 'quick.reader.read_article_ids'
 export const favoriteArticleStorageKey = 'quick.reader.favorite_article_ids'
 export const readMarkMinScrollProgress = 0.3
@@ -83,4 +82,6 @@ export const aiModelOptions = [
   'gemini-3-pro-preview',
   'gemini-3-flash-preview',
   'gemini-3.1-pro-preview',
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
 ]

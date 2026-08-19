@@ -34,6 +34,7 @@ type Config struct {
 	AISummaryAPIStyle               string
 	AISummaryAPIKeyHeader           string
 	AISummaryAPIKeyPrefix           string
+	AISummaryThinkingMode           string
 	AutoAIBriefingTickSec           int
 	AutoAIBriefingLimit             int
 	AutoAIBriefingMaxSourcesPerTick int
@@ -87,6 +88,7 @@ func Load() Config {
 		AISummaryAPIStyle:               envOrDefault("AI_SUMMARY_API_STYLE", "auto"),
 		AISummaryAPIKeyHeader:           envOrDefault("AI_SUMMARY_API_KEY_HEADER", ""),
 		AISummaryAPIKeyPrefix:           envOrDefault("AI_SUMMARY_API_KEY_PREFIX", ""),
+		AISummaryThinkingMode:           envOrDefault("AI_SUMMARY_THINKING_MODE", "auto"),
 		AutoAIBriefingTickSec:           envOrDefaultInt("AUTO_AI_BRIEFING_TICK_SEC", 120),
 		AutoAIBriefingLimit:             envOrDefaultInt("AUTO_AI_BRIEFING_LIMIT", 20),
 		AutoAIBriefingMaxSourcesPerTick: envOrDefaultInt("AUTO_AI_BRIEFING_MAX_SOURCES_PER_TICK", 4),
