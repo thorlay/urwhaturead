@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason, normalizeImageURL } from '../lib/app-utils'
 import type { ArticleDetail, ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -51,12 +51,11 @@ type DeepReadRecommendation = {
   title: string
   url: string
   reason: string
-  audience: string
 }
 
 type BriefingArticleRef = FeedBriefingLibraryItem['article_refs'][number]
 
-const INTERNAL_ARTICLE_LINK_PREFIX = 'quick-article://'
+const INTERNAL_ARTICLE_LINK_PREFIX = '#quick-article-'
 
 function stripMarkdown(input: string): string {
   return input
@@ -295,7 +294,6 @@ function parseDeepReadLine(rawLine: string): DeepReadRecommendation | null {
     title,
     url,
     reason: detailParts[0] ?? '',
-    audience: detailParts[1] ?? '',
   }
 }
 
@@ -356,10 +354,6 @@ function safeDOMID(input: string): string {
   return input.replace(/[^a-zA-Z0-9_-]+/g, '-')
 }
 
-function articleRefDOMID(briefingKey: string, articleID: number): string {
-  return `ai-briefing-ref-${safeDOMID(briefingKey)}-${articleID}`
-}
-
 function linkBriefingArticleReferences(summary: string): string {
   if (!summary) {
     return summary
@@ -402,22 +396,23 @@ function LinkedBriefingMarkdown(props: {
             if (href?.startsWith(INTERNAL_ARTICLE_LINK_PREFIX)) {
               const articleIndex = Number.parseInt(href.slice(INTERNAL_ARTICLE_LINK_PREFIX.length), 10)
               const article = props.articleRefs[articleIndex - 1]
-              const label = `原文 ${Number.isFinite(articleIndex) ? articleIndex : ''}`.trim()
+              const label = `打开原文 A${Number.isFinite(articleIndex) ? String(articleIndex).padStart(2, '0') : ''}`.trim()
               if (article) {
                 return (
                   <button
                     type="button"
                     className="ai-library-inline-article-link"
-                    title={article.title}
+                    title={`${label}：${article.title}`}
+                    aria-label={`${label}：${article.title}`}
                     onClick={() => props.onOpenArticle(article.id)}
                   >
-                    {label}
+                    {children}
                   </button>
                 )
               }
               return (
                 <span className="ai-library-inline-article-link disabled" title="未找到关联文章">
-                  {label}
+                  {children}
                 </span>
               )
             }
@@ -630,7 +625,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const [pendingScrollKey, setPendingScrollKey] = useState<string | null>(null)
   const [expandedBriefingArticles, setExpandedBriefingArticles] = useState<Record<string, boolean>>({})
   const [showExtraFilters, setShowExtraFilters] = useState(false)
-  const [highlightedArticleRefID, setHighlightedArticleRefID] = useState<string | null>(null)
   const [briefingReviewMode, setBriefingReviewMode] = useState<AILibraryReviewMode>('recent')
   const entryRefs = useRef<Record<string, HTMLElement | null>>({})
   const extraFilterCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0)
@@ -697,21 +691,6 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const attachEntryRef = (key: string) => (node: HTMLElement | null) => {
     entryRefs.current[key] = node
   }
-  const revealBriefingArticleRef = (briefingKey: string, articleID: number) => {
-    const targetID = articleRefDOMID(briefingKey, articleID)
-    setExpandedBriefingArticles((current) => ({
-      ...current,
-      [briefingKey]: true,
-    }))
-    setHighlightedArticleRefID(targetID)
-    window.setTimeout(() => {
-      document.getElementById(targetID)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 0)
-    window.setTimeout(() => {
-      setHighlightedArticleRefID((current) => (current === targetID ? null : current))
-    }, 1600)
-  }
-
   const selectedArticleIndex = flatArticleItems.findIndex((item) => `${item.article_id}:${item.generated_at}` === selectedArticleKey)
   const selectedBriefingIndex = flatBriefingItems.findIndex((item) => `${item.digest_key}:${item.generated_at}` === selectedBriefingKey)
 
@@ -1105,41 +1084,48 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                 {deepReadRecommendations.length > 0 && (
                                   <div className="ai-library-deep-read">
                                     <div className="ai-library-deep-read-head">
-                                      <span>值得优先读</span>
-                                      <small>{deepReadRecommendations.length} 条</small>
+                                      <span>优先阅读</span>
                                     </div>
                                     <div className="ai-library-deep-read-list">
                                       {deepReadRecommendations.map((recommendation, index) => {
                                         const matchedRef = findMatchingArticleRef(recommendation, item.article_refs)
-                                        return (
-                                          <div key={`${recommendation.url}-${index}`} className="ai-library-deep-read-item">
+                                        const content = (
+                                          <>
                                             <span className="ai-library-deep-read-index">{index + 1}</span>
                                             <span className="ai-library-deep-read-copy">
                                               <strong>{recommendation.title}</strong>
                                               {recommendation.reason && <span>{recommendation.reason}</span>}
-                                              {recommendation.audience && <small>{recommendation.audience}</small>}
                                             </span>
-                                            <span className="ai-library-deep-read-actions">
-                                              {matchedRef && (
-                                                <button
-                                                  type="button"
-                                                  className="ai-library-deep-read-ref"
-                                                  onClick={() => revealBriefingArticleRef(briefingKey, matchedRef.article.id)}
-                                                >
-                                                  原文章 #{matchedRef.index + 1}
-                                                </button>
-                                              )}
-                                              <a
-                                                className="ai-library-deep-read-open"
-                                                href={recommendation.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                aria-label={`打开原文：${recommendation.title}`}
-                                              >
-                                                <ExternalLink aria-hidden="true" />
-                                              </a>
+                                            <span className="ai-library-deep-read-action">
+                                              阅读
+                                              <ChevronRight aria-hidden="true" />
                                             </span>
-                                          </div>
+                                          </>
+                                        )
+                                        if (matchedRef) {
+                                          return (
+                                            <button
+                                              key={`${recommendation.url}-${index}`}
+                                              type="button"
+                                              className="ai-library-deep-read-item"
+                                              onClick={() => {
+                                                void onOpenArticleSummary(matchedRef.article.id)
+                                              }}
+                                            >
+                                              {content}
+                                            </button>
+                                          )
+                                        }
+                                        return (
+                                          <a
+                                            key={`${recommendation.url}-${index}`}
+                                            className="ai-library-deep-read-item"
+                                            href={recommendation.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            {content}
+                                          </a>
                                         )
                                       })}
                                     </div>
@@ -1184,12 +1170,10 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                                           const relatedSummary = articleSummaries.find((summary) => summary.article_id === article.id)
                                           const isSummarized = Boolean(relatedSummary)
                                           const articleNumber = item.article_refs.findIndex((ref) => ref.id === article.id) + 1
-                                          const refID = articleRefDOMID(briefingKey, article.id)
                                           return (
                                             <div
-                                              id={refID}
                                               key={`${item.digest_key}-${article.id}`}
-                                              className={`ai-library-detail-article-item ${highlightedArticleRefID === refID ? 'highlight' : ''}`}
+                                              className="ai-library-detail-article-item"
                                             >
                                               <span className="ai-library-detail-article-index">#{articleNumber || '?'}</span>
                                               <span className="ai-library-detail-article-content">

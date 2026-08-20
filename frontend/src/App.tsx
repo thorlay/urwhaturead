@@ -16,7 +16,7 @@ import { useAppTabActions } from './hooks/use-app-tab-actions'
 import { useAILibrarySection } from './hooks/use-ai-library-section'
 import { useReaderFeatureSection } from './hooks/use-reader-feature-section'
 import { useReaderWorkspaceComposition } from './hooks/use-reader-workspace-composition'
-import { aiModelOptions } from './lib/app-domain'
+import { aiModelOptions, areAIModelsProviderCompatible } from './lib/app-domain'
 import {
   bulkActionLabel,
   confidenceLabel,
@@ -353,11 +353,14 @@ function App() {
   })
 
   useEffect(() => {
-    if (!adminSessionReady || canAccessManagement) {
+    if (!adminSessionReady) {
       return
     }
     const lockedModel = publicAIModel.trim()
     if (!lockedModel || aiModel === lockedModel) {
+      return
+    }
+    if (canAccessManagement && areAIModelsProviderCompatible(aiModel, lockedModel)) {
       return
     }
     setAIModel(lockedModel)

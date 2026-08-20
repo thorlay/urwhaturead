@@ -85,3 +85,18 @@ export const aiModelOptions = [
   'deepseek-v4-flash',
   'deepseek-v4-pro',
 ]
+
+export function aiModelProvider(model: string): 'deepseek' | 'gemini' | 'other' {
+  const normalized = model.trim().toLowerCase()
+  if (normalized.startsWith('deepseek-')) {
+    return 'deepseek'
+  }
+  if (normalized.startsWith('gemini-')) {
+    return 'gemini'
+  }
+  return 'other'
+}
+
+export function areAIModelsProviderCompatible(left: string, right: string): boolean {
+  return aiModelProvider(left) === aiModelProvider(right)
+}

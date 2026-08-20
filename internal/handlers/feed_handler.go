@@ -892,7 +892,7 @@ func (h *FeedHandler) loadArticleRefsForBriefings(
 ) (map[string][]feedBriefingInputItem, error) {
 	articleIDs := make([]uint64, 0)
 	for _, row := range rows {
-		articleIDs = append(articleIDs, parseCSVUint64Loose(row.ArticleIDs)...)
+		articleIDs = append(articleIDs, parseCSVUint64OrderedLoose(row.ArticleIDs)...)
 	}
 	articleIDs = uniqueSortedUint64(articleIDs)
 	if len(articleIDs) == 0 {
@@ -932,22 +932,23 @@ func (h *FeedHandler) loadArticleRefsForBriefings(
 
 	result := make(map[string][]feedBriefingInputItem, len(rows))
 	for _, row := range rows {
-		ids := parseCSVUint64Loose(row.ArticleIDs)
-		if len(ids) == 0 {
-			result[row.DigestKey] = nil
-			continue
-		}
-		refs := make([]feedBriefingInputItem, 0, len(ids))
-		for _, articleID := range ids {
-			ref, ok := articleByID[articleID]
-			if !ok {
-				continue
-			}
-			refs = append(refs, ref)
-		}
-		result[row.DigestKey] = refs
+		result[row.DigestKey] = orderFeedBriefingArticleRefs(row.ArticleIDs, articleByID)
 	}
 	return result, nil
+}
+
+func orderFeedBriefingArticleRefs(
+	rawArticleIDs string,
+	articleByID map[uint64]feedBriefingInputItem,
+) []feedBriefingInputItem {
+	ids := parseCSVUint64OrderedLoose(rawArticleIDs)
+	refs := make([]feedBriefingInputItem, 0, len(ids))
+	for _, articleID := range ids {
+		if ref, ok := articleByID[articleID]; ok {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }
 
 func normalizeBriefingKeyword(raw string) string {
@@ -970,20 +971,29 @@ func countCSVEntries(raw string) int {
 }
 
 func parseCSVUint64Loose(raw string) []uint64 {
+	return uniqueSortedUint64(parseCSVUint64OrderedLoose(raw))
+}
+
+func parseCSVUint64OrderedLoose(raw string) []uint64 {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
 	parts := strings.Split(raw, ",")
 	result := make([]uint64, 0, len(parts))
+	seen := make(map[uint64]struct{}, len(parts))
 	for _, part := range parts {
 		value, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64)
-		if err != nil {
+		if err != nil || value == 0 {
 			continue
 		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
 		result = append(result, value)
 	}
-	return uniqueSortedUint64(result)
+	return result
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {
@@ -991,11 +1001,11 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
 	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。\n")
 	builder.WriteString("输出格式严格为：\n")
-	builder.WriteString("1) 先看这个（3-5条 bullet；每条 2-3 句；写清“发生/主张了什么 + 关键依据 + 为什么值得看”）\n")
-	builder.WriteString("2) 主要线索（2-4组；每组一个短标题 + 2-4条 bullet；每条 2-3 句，可以包含关键数字、公司/人物、影响范围或后续关注）\n")
+	builder.WriteString("1) 先看这个（2-3条 bullet；每条 1-2 句；只写最重要判断、关键依据和为什么值得看）\n")
+	builder.WriteString("2) 主要线索（仅当条目超过5条或存在至少2组明显不同的主题时输出；2-4组，每组一个短标题 + 1-3条 bullet）\n")
 	builder.WriteString("3) 观点与讨论（即长文论点与讨论焦点；只有存在长文、论坛或争议时才写；提炼论点、论证链条、主要分歧、经验信息；没有就省略本节）\n")
 	builder.WriteString("4) 风险与不确定（最多4条；写风险来源、可能影响、需要继续观察什么；不要重复前文）\n")
-	builder.WriteString("5) 值得深读（最多6条，格式：[A01] 标题｜[原文](链接URL)｜一句推荐理由｜适合谁读）\n\n")
+	builder.WriteString("5) 值得深读（最多4条，格式：[A01] 标题｜[原文](链接URL)｜一句推荐理由）\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
 	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
@@ -1011,8 +1021,8 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议/不确定性”里再次完整重写。\n")
 	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")
 	builder.WriteString("- 引用具体条目时尽量保留条目编号，例如 [A03]，方便读者定位原文章。\n")
-	builder.WriteString("- 第6部分每一条都必须包含对应的信息条目编号和可访问的原始链接 URL。\n")
-	builder.WriteString("- 第6部分链接必须使用 Markdown 链接语法：[原文](URL)，不要直接输出裸 URL。\n")
+	builder.WriteString("- 第5部分每一条都必须包含对应的信息条目编号和可访问的原始链接 URL。\n")
+	builder.WriteString("- 第5部分链接必须使用 Markdown 链接语法：[原文](URL)，不要直接输出裸 URL。\n")
 	builder.WriteString("- 链接必须来自下面提供的信息条目，不要编造新链接。\n\n")
 	builder.WriteString("信息条目：\n")
 	for i, item := range items {

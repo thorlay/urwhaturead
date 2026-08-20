@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getArticle, listArticleSummaries, listFeedBriefings } from '../api'
 import type { AppTab, Notice } from '../lib/app-domain'
 import type { ArticleDetail, ArticleSummaryLibraryItem, FeedBriefingLibraryItem } from '../types'
@@ -36,6 +36,7 @@ export function useAILibrarySection({
   const [readerArticle, setReaderArticle] = useState<ArticleDetail | null>(null)
   const [readerArticleLoading, setReaderArticleLoading] = useState(false)
   const [readerArticleError, setReaderArticleError] = useState<string | null>(null)
+  const aiTabActiveRef = useRef(false)
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -93,11 +94,12 @@ export function useAILibrarySection({
   )
 
   useEffect(() => {
-    if (activeTab !== 'ai' || loadedOnce) {
-      return
+    const isActive = activeTab === 'ai'
+    if (isActive && !aiTabActiveRef.current) {
+      void loadAILibrary(search)
     }
-    void loadAILibrary('')
-  }, [activeTab, loadedOnce, loadAILibrary])
+    aiTabActiveRef.current = isActive
+  }, [activeTab, loadAILibrary, search])
 
   const applySearch = useCallback(() => {
     void loadAILibrary(search)

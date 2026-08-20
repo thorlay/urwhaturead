@@ -49,7 +49,8 @@ func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
 		"forum_discussion",
 		"resource_tool",
 		"长文论点与讨论焦点",
-		"适合谁读",
+		"最多4条",
+		"一句推荐理由",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("buildFeedBriefingPrompt() missing %q in prompt:\n%s", want, prompt)
@@ -133,6 +134,21 @@ func TestBuildFeedBriefingInputItems(t *testing.T) {
 	}
 	if got[1].Title != "文章 #102" {
 		t.Fatalf("got[1].Title=%q, want %q", got[1].Title, "文章 #102")
+	}
+}
+
+func TestOrderFeedBriefingArticleRefs_PreservesPromptOrder(t *testing.T) {
+	articleByID := map[uint64]feedBriefingInputItem{
+		10: {ID: 10, Title: "Older"},
+		20: {ID: 20, Title: "Newest"},
+	}
+
+	got := orderFeedBriefingArticleRefs("20,10,20,invalid", articleByID)
+	if len(got) != 2 {
+		t.Fatalf("len(got)=%d, want 2", len(got))
+	}
+	if got[0].ID != 20 || got[1].ID != 10 {
+		t.Fatalf("article order=(%d,%d), want (20,10)", got[0].ID, got[1].ID)
 	}
 }
 

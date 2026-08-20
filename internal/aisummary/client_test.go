@@ -270,6 +270,36 @@ func TestSummarizeWithModel_Override(t *testing.T) {
 	}
 }
 
+func TestSummarizeWithModel_IgnoresCrossProviderOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if model := payload["model"]; model != "deepseek-v4-flash" {
+			t.Fatalf("unexpected model: %#v", model)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"deepseek-v4-flash","choices":[{"message":{"content":"fallback summary"}}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Options{
+		BaseURL: server.URL + "/chat/completions",
+		APIKey:  "secret",
+		Model:   "deepseek-v4-flash",
+		Timeout: 2 * time.Second,
+	})
+
+	result, err := client.SummarizeWithModel(context.Background(), "Title", "Body text", "gemini-3-flash-preview")
+	if err != nil {
+		t.Fatalf("summarize failed: %v", err)
+	}
+	if result.Model != "deepseek-v4-flash" {
+		t.Fatalf("unexpected model: %q", result.Model)
+	}
+}
+
 func TestSummarize_RetryOnMaxTokensEmpty(t *testing.T) {
 	var calls int32
 	var secondCallUserContent string

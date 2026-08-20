@@ -363,10 +363,26 @@ func (c *Client) deepSeekThinkingMode() string {
 
 func (c *Client) pickModel(modelOverride string) string {
 	model := strings.TrimSpace(modelOverride)
-	if model == "" {
+	if model == "" || !sameModelProvider(c.model, model) {
 		return c.model
 	}
 	return model
+}
+
+func sameModelProvider(left string, right string) bool {
+	return modelProvider(left) == modelProvider(right)
+}
+
+func modelProvider(model string) string {
+	model = strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case strings.HasPrefix(model, "deepseek-"):
+		return "deepseek"
+	case strings.HasPrefix(model, "gemini-"):
+		return "gemini"
+	default:
+		return "other"
+	}
 }
 
 func normalizeAPIStyle(raw string) string {
