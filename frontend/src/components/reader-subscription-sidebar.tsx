@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MoreHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronUp, Inbox, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { resolveSourceSiteKey } from '../lib/app-utils'
@@ -73,6 +73,20 @@ function parseSourceIDSet(value: string): Set<number> {
 function sameSourceIDSet(selectedIDs: Set<number>, sources: Source[]): boolean {
   if (selectedIDs.size !== sources.length) return false
   return sources.every((source) => selectedIDs.has(source.id))
+}
+
+function compactSiteLabel(label: string): string {
+  const normalized = label.trim().replace(/^www\./i, '')
+  const firstSegment = normalized.split(/[./_-]/)[0] || normalized
+  const characters = Array.from(firstSegment)
+  if (characters.length === 0) return '?'
+  if (/^[\u3400-\u9fff]/u.test(characters[0])) return characters[0]
+  return characters.slice(0, 2).join('').toUpperCase()
+}
+
+function compactNewCount(count: number): string {
+  if (count > 99) return '99+'
+  return String(count)
 }
 
 type SubscriptionSourceRowProps = {
@@ -232,6 +246,16 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
     return groups
   }, [sidebarVisibleFeedSources])
 
+  const compactSiteGroups = useMemo(() => {
+    const visible = sidebarSiteGroups.slice(0, 6)
+    const selected = sidebarSiteGroups.find((group) => {
+      if (group.sources.length === 1) return sourceFilter === String(group.sources[0].id)
+      return sourceGroupFilterKey === group.key || sameSourceIDSet(selectedSourceIDs, group.sources)
+    })
+    if (!selected || visible.some((group) => group.key === selected.key)) return visible
+    return [...visible.slice(0, 5), selected]
+  }, [selectedSourceIDs, sidebarSiteGroups, sourceFilter, sourceGroupFilterKey])
+
   const toggleSiteGroup = useCallback((event: ReactMouseEvent<HTMLButtonElement>, groupKey: string) => {
     event.preventDefault()
     event.stopPropagation()
@@ -249,20 +273,73 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
   return (
     <aside className={`panel subscription-sidebar ${showSubscriptionSidebar ? 'open' : 'collapsed'}`}>
       <div className="subscription-sidebar-header">
-        {showSubscriptionSidebar && <h3>订阅源</h3>}
+        <h3 aria-hidden={!showSubscriptionSidebar}>订阅源</h3>
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="icon"
           className="subscription-sidebar-toggle"
           onClick={onToggleSubscriptionSidebar}
+          title={showSubscriptionSidebar ? '收起订阅源' : '展开订阅源'}
+          aria-label={showSubscriptionSidebar ? '收起订阅源' : '展开订阅源'}
         >
-          {showSubscriptionSidebar ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
-          {showSubscriptionSidebar ? '收起' : '展开'}
+          <ChevronLeft aria-hidden="true" />
         </Button>
       </div>
-      {showSubscriptionSidebar && (
-        <>
+      <div className="subscription-sidebar-content">
+        <nav
+          className="subscription-compact-rail"
+          aria-label="订阅源快捷入口"
+          aria-hidden={showSubscriptionSidebar}
+          inert={showSubscriptionSidebar}
+        >
+          <button
+            type="button"
+            className={cn('subscription-compact-item', !sourceFilter && 'active')}
+            title={`全部来源 · ${readerSources.length} 个`}
+            aria-label={`全部来源，共 ${readerSources.length} 个`}
+            aria-pressed={!sourceFilter}
+            onClick={() => onApplySourceFilterFromSidebar('')}
+          >
+            <Inbox aria-hidden="true" />
+            <span className="subscription-compact-count">{readerSources.length}</span>
+          </button>
+          <span className="subscription-compact-divider" aria-hidden="true" />
+          {compactSiteGroups.map((group) => {
+            const active = group.sources.length === 1
+              ? sourceFilter === String(group.sources[0].id)
+              : sourceGroupFilterKey === group.key || sameSourceIDSet(selectedSourceIDs, group.sources)
+            const sourceIDs = group.sources.map((source) => source.id)
+            const applyGroup = () => {
+              if (group.sources.length === 1) {
+                onApplySourceFilterFromSidebar(String(group.sources[0].id), { preserveSidebarTags: true })
+                return
+              }
+              onApplySourceGroupFilterFromSidebar({ key: group.key, label: group.label, sourceIDs })
+            }
+            return (
+              <button
+                key={`compact:${group.key}`}
+                type="button"
+                className={cn('subscription-compact-item', active && 'active')}
+                title={`${group.label}${group.newCount > 0 ? ` · ${group.newCount} 篇/24h` : ''}`}
+                aria-label={`${group.label}${group.newCount > 0 ? `，24 小时新增 ${group.newCount} 篇` : ''}`}
+                aria-pressed={active}
+                onClick={applyGroup}
+              >
+                <span className="subscription-compact-monogram" aria-hidden="true">{compactSiteLabel(group.label)}</span>
+                {group.newCount > 0 && (
+                  <span className="subscription-compact-count fresh">{compactNewCount(group.newCount)}</span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+        <div
+          className="subscription-sidebar-expanded"
+          aria-hidden={!showSubscriptionSidebar}
+          inert={!showSubscriptionSidebar}
+        >
           <Button
             type="button"
             variant="ghost"
@@ -473,8 +550,8 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
               )}
             </section>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </aside>
   )
 }
