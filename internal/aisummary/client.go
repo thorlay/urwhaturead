@@ -112,7 +112,7 @@ func (c *Client) Probe(ctx context.Context) error {
 	return nil
 }
 
-const defaultSummarySystemPrompt = "你是一个中文阅读判断助手。你的任务不是把所有内容都写成新闻摘要，而是先识别内容类型，再提炼对读者有用的信息。输出中文，优先保留事实、证据、论点、讨论分歧、限制和可执行信息；避免空话、套话、模板化过渡句和无根据延伸。不确定的信息明确写“原文未说明”。"
+const defaultSummarySystemPrompt = "你是一个中文阅读判断助手。你的任务不是把所有内容都写成新闻摘要，而是先识别内容类型，再提炼对读者有用的信息。输出中文，优先保留事实、证据、论点、讨论分歧、限制和可执行信息；区分原文事实、作者观点与合理推断。避免空话、套话、模板化过渡句和无根据延伸；没有独立价值的段落直接省略。"
 
 func NewClient(options Options) *Client {
 	baseURL := strings.TrimSpace(options.BaseURL)
@@ -672,25 +672,17 @@ func buildPrompt(title string, content string) string {
 		builder.WriteString(title)
 		builder.WriteString("\n\n")
 	}
-	builder.WriteString("请对下面内容进行“中等长度的阅读判断总结”。不要默认把它当新闻，先判断内容类型，再按对应重点总结。输出格式严格为：\n")
-	builder.WriteString("1) 内容类型（从 news_event / essay_argument / forum_discussion / resource_tool / mixed 中选一个，并用一句话说明判断依据）\n")
-	builder.WriteString("2) TL;DR（3-5句；根据类型覆盖事件变化、核心论点、讨论焦点或工具用途）\n")
-	builder.WriteString("3) 重点拆解（4-7条；每条包含“要点：”和“依据/原因：”）\n")
-	builder.WriteString("4) 类型化分析\n")
-	builder.WriteString("   - 如果是 news_event：写背景、影响、后续关注点。\n")
-	builder.WriteString("   - 如果是 essay_argument：写作者论点、论证链条、证据质量、可能漏洞。\n")
-	builder.WriteString("   - 如果是 forum_discussion：写主要观点阵营、共识、分歧、有价值经验。\n")
-	builder.WriteString("   - 如果是 resource_tool：写用途、适合谁、亮点、限制。\n")
-	builder.WriteString("   - 如果是 mixed：按类型分组，不要强行合并成新闻。\n")
-	builder.WriteString("5) 争议、风险或局限（2-4条；没有就写“原文未明确给出”）\n")
-	builder.WriteString("6) 是否值得读（说明适合什么读者，以及是否需要打开原文）\n")
-	builder.WriteString("7) 一句话结论\n\n")
+	builder.WriteString("请对下面内容进行“中等长度的阅读判断总结”。不要默认把它当新闻，先判断内容类型，再按对应重点总结。用 Markdown 输出；只输出有独立信息价值的部分。\n")
+	builder.WriteString("输出结构：\n")
+	builder.WriteString("## 这篇在说什么\n用 2-4 句说明内容类型（news_event / essay_argument / forum_discussion / resource_tool / mixed）及中心事件或论点。\n")
+	builder.WriteString("## 关键依据\n3-5 条 bullet；每条只写一个事实、论据、推理或经验，并说明它支撑什么判断。\n")
+	builder.WriteString("## 如何判断\n按内容类型输出：新闻写影响和后续变量；长文写论证链条、证据强弱和漏洞；论坛写共识、分歧与可复用经验；工具写用途、适用对象和限制；混合内容按类型分组。\n")
+	builder.WriteString("## 是否值得读原文\n用 1-2 句说明适合谁读、最值得读哪一部分；仅在存在独立风险或局限时补充。\n\n")
 	builder.WriteString("要求：\n")
-	builder.WriteString("- 忠于原文，不编造事实；不确定信息请明确标注“原文未说明”。\n")
-	builder.WriteString("- 除非原文极短，整体长度控制在450-800字；宁可信息密度高，也不要流水账。\n")
-	builder.WriteString("- 每条尽量精炼，避免长段落；优先保留真正有判断价值的信息，而不是把背景反复铺开。\n")
-	builder.WriteString("- 如果是观点文/长文，不要只写发生了什么，要写论点和论证是否站得住。\n")
-	builder.WriteString("- 如果是论坛/评论，不要写成单一结论，要保留分歧、经验和上下文。\n\n")
+	builder.WriteString("- 忠于原文，不编造事实。区分“原文事实”“作者观点”“合理推断”；信息不足时可写“原文未说明”，但不要机械重复这句话。\n")
+	builder.WriteString("- 除非原文极短，整体控制在450-800字；重要细节优先于泛泛背景。\n")
+	builder.WriteString("- 同一事实只能完整解释一次；结论、依据和风险不能换说法重复。\n")
+	builder.WriteString("- 一个 bullet 只表达一个判断，避免长段落和流水账。\n\n")
 	builder.WriteString("正文：\n")
 	builder.WriteString(content)
 	return builder.String()
@@ -703,12 +695,11 @@ func buildCompactPrompt(title string, content string) string {
 		builder.WriteString(title)
 		builder.WriteString("\n\n")
 	}
-	builder.WriteString("请输出紧凑摘要。不要默认按新闻写，先识别内容类型。格式严格为：\n")
-	builder.WriteString("1) 内容类型（一句话）\n")
-	builder.WriteString("2) 三句话总结（按新闻/观点文/论坛/工具资源的真实类型总结）\n")
-	builder.WriteString("3) 关键信息（最多4条，优先事实、论点、证据、分歧或限制）\n")
-	builder.WriteString("4) 为什么值得关注（1条；如果不明显，就写“主要价值在于补充背景信息”）\n\n")
-	builder.WriteString("要求：忠于原文，不编造；不要机械凑结构；总字数控制在220-360字。\n\n")
+	builder.WriteString("请输出紧凑阅读判断。不要默认按新闻写，先识别内容类型。用 Markdown 输出：\n")
+	builder.WriteString("## 核心判断\n2-3 句说明事件、中心论点或讨论焦点。\n")
+	builder.WriteString("## 关键点\n最多 4 条 bullet，优先事实、论据、分歧或限制。\n")
+	builder.WriteString("## 值不值得读\n1 句说明价值与适合的读者。\n\n")
+	builder.WriteString("要求：忠于原文，不编造；不要机械凑结构；总字数控制在220-360字；相同信息不得重复。\n\n")
 	builder.WriteString("正文：\n")
 	builder.WriteString(content)
 	return builder.String()

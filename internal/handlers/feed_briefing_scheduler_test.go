@@ -77,3 +77,58 @@ func TestSelectSourceBriefingRows_SkipsRowsFromPreviouslyCoveredCluster(t *testi
 		t.Fatalf("selected=%v, want only brand new row", selected)
 	}
 }
+
+func TestSelectSourceBriefingRowsWithCoverage_SkipsOlderCoveredArticles(t *testing.T) {
+	rows := []feedItem{
+		{ID: 51, Title: "covered in an older briefing"},
+		{ID: 52, Title: "new"},
+	}
+	coverage := sourceBriefingCoverage{
+		articles: map[uint64]briefingCoverageItem{
+			51: {},
+		},
+		clusters: map[uint64]struct{}{},
+	}
+
+	selected, newCount, ok := selectSourceBriefingRowsWithCoverage(rows, coverage, 1, 5)
+	if !ok {
+		t.Fatal("expected briefing generation for the new article")
+	}
+	if newCount != 1 || len(selected) != 1 || selected[0].ID != 52 {
+		t.Fatalf("selected=%v newCount=%d, want only article 52", selected, newCount)
+	}
+}
+
+func TestSelectSourceBriefingRowsWithCoverage_AllowsMaterialForumUpdate(t *testing.T) {
+	coveredReplies := 10
+	updatedReplies := 15
+	rows := []feedItem{{ID: 61, Title: "forum thread", ReplyCount: &updatedReplies}}
+	coverage := sourceBriefingCoverage{
+		articles: map[uint64]briefingCoverageItem{
+			61: {ReplyCount: &coveredReplies},
+		},
+		clusters: map[uint64]struct{}{},
+	}
+
+	selected, newCount, ok := selectSourceBriefingRowsWithCoverage(rows, coverage, 1, 5)
+	if !ok || newCount != 1 || len(selected) != 1 || selected[0].ID != 61 {
+		t.Fatalf("selected=%v newCount=%d ok=%t, want updated forum thread", selected, newCount, ok)
+	}
+}
+
+func TestSelectSourceBriefingRowsWithCoverage_SkipsSmallForumUpdate(t *testing.T) {
+	coveredReplies := 10
+	updatedReplies := 14
+	rows := []feedItem{{ID: 71, Title: "forum thread", ReplyCount: &updatedReplies}}
+	coverage := sourceBriefingCoverage{
+		articles: map[uint64]briefingCoverageItem{
+			71: {ReplyCount: &coveredReplies},
+		},
+		clusters: map[uint64]struct{}{},
+	}
+
+	selected, newCount, ok := selectSourceBriefingRowsWithCoverage(rows, coverage, 1, 5)
+	if ok || newCount != 0 || selected != nil {
+		t.Fatalf("selected=%v newCount=%d ok=%t, want small update skipped", selected, newCount, ok)
+	}
+}

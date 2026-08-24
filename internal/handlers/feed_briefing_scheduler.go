@@ -11,6 +11,7 @@ import (
 	"quick/internal/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FeedBriefingScheduler struct {
@@ -21,6 +22,8 @@ type FeedBriefingScheduler struct {
 	limit             int
 	maxSourcesPerTick int
 	minNewArticles    int
+	dedupWindow       time.Duration
+	minReplyDelta     int
 }
 
 type FeedBriefingSchedulerOptions struct {
@@ -28,6 +31,18 @@ type FeedBriefingSchedulerOptions struct {
 	Limit             int
 	MaxSourcesPerTick int
 	MinNewArticles    int
+	DedupWindowHours  int
+	MinReplyDelta     int
+}
+
+type briefingCoverageItem struct {
+	ContentHash string
+	ReplyCount  *int
+}
+
+type sourceBriefingCoverage struct {
+	articles map[uint64]briefingCoverageItem
+	clusters map[uint64]struct{}
 }
 
 func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options FeedBriefingSchedulerOptions) *FeedBriefingScheduler {
@@ -47,6 +62,14 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 	if minNewArticles <= 0 {
 		minNewArticles = 3
 	}
+	dedupWindowHours := options.DedupWindowHours
+	if dedupWindowHours <= 0 {
+		dedupWindowHours = 14 * 24
+	}
+	minReplyDelta := options.MinReplyDelta
+	if minReplyDelta <= 0 {
+		minReplyDelta = 5
+	}
 	return &FeedBriefingScheduler{
 		db:                db,
 		summarizer:        summarizer,
@@ -55,6 +78,8 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 		limit:             limit,
 		maxSourcesPerTick: maxSources,
 		minNewArticles:    minNewArticles,
+		dedupWindow:       time.Duration(dedupWindowHours) * time.Hour,
+		minReplyDelta:     minReplyDelta,
 	}
 }
 
@@ -126,6 +151,11 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 	}
 
 	model := resolveFeedBriefingModel("", s.summarizer, true)
+	coverage, err := s.loadRecentSourceCoverage(ctx, source.ID, now.Add(-s.dedupWindow))
+	if err != nil {
+		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+		return err
+	}
 	promptRows := rows
 	previous, err := s.loadLatestSourceBriefing(ctx, source.ID)
 	if err != nil {
@@ -133,13 +163,7 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		return err
 	}
 	if previous != nil {
-		previousArticleIDs := parseCSVUint64Loose(previous.ArticleIDs)
-		previousClusterIDs, err := s.loadArticleClusterIDs(ctx, previousArticleIDs)
-		if err != nil {
-			_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-			return err
-		}
-		selectedRows, newCount, shouldGenerate := selectSourceBriefingRows(rows, previousArticleIDs, previousClusterIDs, s.minNewArticles)
+		selectedRows, newCount, shouldGenerate := selectSourceBriefingRowsWithCoverage(rows, coverage, s.minNewArticles, s.minReplyDelta)
 		if !shouldGenerate {
 			log.Printf(
 				"auto ai briefing source=%d name=%q skipped: only %d new articles (threshold=%d)",
@@ -204,6 +228,10 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
 		return err
 	}
+	if err := s.saveBriefingCoverage(ctx, record, source.ID, promptRows); err != nil {
+		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+		return err
+	}
 
 	if err := s.touchSourceBriefingRun(ctx, source.ID, now, &result.GeneratedAt); err != nil {
 		return err
@@ -216,6 +244,130 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		len(promptRows),
 	)
 	return nil
+}
+
+func (s *FeedBriefingScheduler) loadRecentSourceCoverage(ctx context.Context, sourceID uint64, cutoff time.Time) (sourceBriefingCoverage, error) {
+	coverage := sourceBriefingCoverage{
+		articles: make(map[uint64]briefingCoverageItem),
+		clusters: make(map[uint64]struct{}),
+	}
+
+	var briefings []models.FeedBriefing
+	if err := s.db.WithContext(ctx).
+		Where("tag = ? AND keyword = ? AND source_ids = ? AND generated_at >= ?", "", "", joinUint64([]uint64{sourceID}), cutoff).
+		Find(&briefings).Error; err != nil {
+		return coverage, err
+	}
+	if err := s.backfillBriefingCoverage(ctx, sourceID, briefings); err != nil {
+		return coverage, err
+	}
+
+	var rows []models.FeedBriefingArticle
+	if err := s.db.WithContext(ctx).
+		Where("source_id = ? AND briefing_created >= ?", sourceID, cutoff).
+		Order("briefing_created ASC").
+		Order("id ASC").
+		Find(&rows).Error; err != nil {
+		return coverage, err
+	}
+	for _, row := range rows {
+		coverage.articles[row.ArticleID] = briefingCoverageItem{
+			ContentHash: strings.TrimSpace(row.ContentHash),
+			ReplyCount:  row.ReplyCount,
+		}
+		if row.ClusterID != nil && *row.ClusterID != 0 {
+			coverage.clusters[*row.ClusterID] = struct{}{}
+		}
+	}
+	return coverage, nil
+}
+
+func (s *FeedBriefingScheduler) backfillBriefingCoverage(ctx context.Context, sourceID uint64, briefings []models.FeedBriefing) error {
+	if len(briefings) == 0 {
+		return nil
+	}
+
+	articleIDs := make([]uint64, 0)
+	for _, briefing := range briefings {
+		articleIDs = append(articleIDs, parseCSVUint64Loose(briefing.ArticleIDs)...)
+	}
+	articleIDs = uniqueSortedUint64(articleIDs)
+	if len(articleIDs) == 0 {
+		return nil
+	}
+
+	type articleSnapshot struct {
+		ID          uint64
+		ClusterID   *uint64
+		ContentHash string
+		ReplyCount  *int
+	}
+	var snapshots []articleSnapshot
+	if err := s.db.WithContext(ctx).
+		Table("articles").
+		Select("id, cluster_id, content_hash, reply_count").
+		Where("source_id = ? AND id IN ?", sourceID, articleIDs).
+		Scan(&snapshots).Error; err != nil {
+		return err
+	}
+	byID := make(map[uint64]articleSnapshot, len(snapshots))
+	for _, snapshot := range snapshots {
+		byID[snapshot.ID] = snapshot
+	}
+
+	records := make([]models.FeedBriefingArticle, 0, len(articleIDs))
+	for _, briefing := range briefings {
+		for _, articleID := range parseCSVUint64Loose(briefing.ArticleIDs) {
+			snapshot, ok := byID[articleID]
+			if !ok {
+				continue
+			}
+			records = append(records, models.FeedBriefingArticle{
+				FeedBriefingID:  briefing.ID,
+				SourceID:        sourceID,
+				ArticleID:       articleID,
+				ClusterID:       snapshot.ClusterID,
+				ContentHash:     strings.TrimSpace(snapshot.ContentHash),
+				ReplyCount:      snapshot.ReplyCount,
+				BriefingCreated: briefing.GeneratedAt.UTC(),
+			})
+		}
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&records).Error
+}
+
+func (s *FeedBriefingScheduler) saveBriefingCoverage(ctx context.Context, briefing models.FeedBriefing, sourceID uint64, rows []feedItem) error {
+	records := make([]models.FeedBriefingArticle, 0, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
+	for _, row := range rows {
+		if row.ID == 0 {
+			continue
+		}
+		if _, exists := seen[row.ID]; exists {
+			continue
+		}
+		seen[row.ID] = struct{}{}
+		records = append(records, models.FeedBriefingArticle{
+			FeedBriefingID:  briefing.ID,
+			SourceID:        sourceID,
+			ArticleID:       row.ID,
+			ClusterID:       row.ClusterID,
+			ContentHash:     strings.TrimSpace(row.ContentHash),
+			ReplyCount:      row.ReplyCount,
+			BriefingCreated: briefing.GeneratedAt.UTC(),
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&records).Error
 }
 
 func (s *FeedBriefingScheduler) loadLatestSourceBriefing(ctx context.Context, sourceID uint64) (*models.FeedBriefing, error) {
@@ -234,63 +386,51 @@ func (s *FeedBriefingScheduler) loadLatestSourceBriefing(ctx context.Context, so
 	return &briefing, nil
 }
 
-func (s *FeedBriefingScheduler) loadArticleClusterIDs(ctx context.Context, articleIDs []uint64) ([]uint64, error) {
-	articleIDs = uniqueSortedUint64(articleIDs)
-	if len(articleIDs) == 0 {
-		return nil, nil
+func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, previousClusterIDs []uint64, minNewArticles int) ([]feedItem, int, bool) {
+	coverage := sourceBriefingCoverage{
+		articles: make(map[uint64]briefingCoverageItem, len(previousArticleIDs)),
+		clusters: make(map[uint64]struct{}, len(previousClusterIDs)),
 	}
-
-	var rows []struct {
-		ClusterID *uint64 `gorm:"column:cluster_id"`
+	for _, articleID := range previousArticleIDs {
+		coverage.articles[articleID] = briefingCoverageItem{}
 	}
-	if err := s.db.WithContext(ctx).
-		Table("articles").
-		Select("cluster_id").
-		Where("id IN ?", articleIDs).
-		Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-
-	clusterIDs := make([]uint64, 0, len(rows))
-	for _, row := range rows {
-		if row.ClusterID == nil || *row.ClusterID == 0 {
-			continue
+	for _, clusterID := range previousClusterIDs {
+		if clusterID != 0 {
+			coverage.clusters[clusterID] = struct{}{}
 		}
-		clusterIDs = append(clusterIDs, *row.ClusterID)
 	}
-	return uniqueSortedUint64(clusterIDs), nil
+	return selectSourceBriefingRowsWithCoverage(rows, coverage, minNewArticles, 1)
 }
 
-func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, previousClusterIDs []uint64, minNewArticles int) ([]feedItem, int, bool) {
+func selectSourceBriefingRowsWithCoverage(
+	rows []feedItem,
+	coverage sourceBriefingCoverage,
+	minNewArticles int,
+	minReplyDelta int,
+) ([]feedItem, int, bool) {
 	if len(rows) == 0 {
 		return nil, 0, false
 	}
-	if len(previousArticleIDs) == 0 && len(previousClusterIDs) == 0 {
+	if len(coverage.articles) == 0 && len(coverage.clusters) == 0 {
 		return rows, len(rows), true
 	}
 	if minNewArticles <= 0 {
 		minNewArticles = 1
 	}
-
-	seen := make(map[uint64]struct{}, len(previousArticleIDs))
-	for _, articleID := range previousArticleIDs {
-		seen[articleID] = struct{}{}
-	}
-	seenClusters := make(map[uint64]struct{}, len(previousClusterIDs))
-	for _, clusterID := range previousClusterIDs {
-		if clusterID == 0 {
-			continue
-		}
-		seenClusters[clusterID] = struct{}{}
+	if minReplyDelta <= 0 {
+		minReplyDelta = 1
 	}
 
 	newRows := make([]feedItem, 0, len(rows))
 	for _, row := range rows {
-		if _, ok := seen[row.ID]; ok {
+		if previous, seen := coverage.articles[row.ID]; seen {
+			if briefingRowChanged(row, previous, minReplyDelta) {
+				newRows = append(newRows, row)
+			}
 			continue
 		}
 		if row.ClusterID != nil && *row.ClusterID != 0 {
-			if _, ok := seenClusters[*row.ClusterID]; ok {
+			if _, ok := coverage.clusters[*row.ClusterID]; ok {
 				continue
 			}
 		}
@@ -301,6 +441,17 @@ func selectSourceBriefingRows(rows []feedItem, previousArticleIDs []uint64, prev
 		return nil, len(newRows), false
 	}
 	return newRows, len(newRows), true
+}
+
+func briefingRowChanged(row feedItem, previous briefingCoverageItem, minReplyDelta int) bool {
+	currentHash := strings.TrimSpace(row.ContentHash)
+	if currentHash != "" && previous.ContentHash != "" && currentHash != previous.ContentHash {
+		return true
+	}
+	if row.ReplyCount == nil || previous.ReplyCount == nil {
+		return false
+	}
+	return *row.ReplyCount-*previous.ReplyCount >= minReplyDelta
 }
 
 func (s *FeedBriefingScheduler) touchSourceBriefingRun(ctx context.Context, sourceID uint64, runAt time.Time, generatedAt *time.Time) error {

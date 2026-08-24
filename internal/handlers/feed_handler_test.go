@@ -48,9 +48,11 @@ func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
 		"essay_argument",
 		"forum_discussion",
 		"resource_tool",
-		"长文论点与讨论焦点",
-		"最多4条",
-		"一句推荐理由",
+		"优先阅读",
+		"主要判断",
+		"继续关注",
+		"每个 bullet 最多一个引用",
+		"不要输出裸 URL",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("buildFeedBriefingPrompt() missing %q in prompt:\n%s", want, prompt)

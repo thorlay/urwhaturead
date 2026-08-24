@@ -1312,7 +1312,8 @@
 }
 
 .ai-article-reader-close,
-.ai-article-reader-source-link {
+.ai-article-reader-source-link,
+.ai-article-reader-favorite {
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
@@ -1326,14 +1327,33 @@
 }
 
 .ai-article-reader-close:hover,
-.ai-article-reader-source-link:hover {
+.ai-article-reader-source-link:hover,
+.ai-article-reader-favorite:hover {
   color: var(--text);
 }
 
 .ai-article-reader-close svg,
-.ai-article-reader-source-link svg {
+.ai-article-reader-source-link svg,
+.ai-article-reader-favorite svg {
   width: 0.92rem;
   height: 0.92rem;
+}
+
+.ai-article-reader-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.62rem;
+  min-width: 0;
+}
+
+.ai-article-reader-favorite {
+  padding: 0;
+  cursor: pointer;
+}
+
+.ai-article-reader-favorite.active {
+  color: #b66b00;
 }
 
 .ai-article-reader-loading,

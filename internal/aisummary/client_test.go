@@ -80,14 +80,14 @@ func TestBuildPrompt_RequiresContentTypeAwareSummary(t *testing.T) {
 	}
 }
 
-func TestBuildCompactPrompt_RequiresContentType(t *testing.T) {
+func TestBuildCompactPrompt_UsesCompactReadingStructure(t *testing.T) {
 	prompt := buildCompactPrompt("Title", "Body")
 	for _, want := range []string{
-		"内容类型",
 		"不要默认按新闻写",
-		"观点文",
-		"论坛",
-		"工具资源",
+		"核心判断",
+		"关键点",
+		"值不值得读",
+		"相同信息不得重复",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("buildCompactPrompt() missing %q in prompt:\n%s", want, prompt)
@@ -351,7 +351,7 @@ func TestSummarize_RetryOnMaxTokensEmpty(t *testing.T) {
 	if got := atomic.LoadInt32(&calls); got != 2 {
 		t.Fatalf("calls=%d, want=2", got)
 	}
-	if !strings.Contains(secondCallUserContent, "紧凑摘要") {
+	if !strings.Contains(secondCallUserContent, "紧凑阅读判断") {
 		t.Fatalf("expected compact retry prompt, got=%q", secondCallUserContent)
 	}
 }

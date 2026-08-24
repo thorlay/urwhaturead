@@ -42,6 +42,7 @@ func main() {
 		&models.Article{},
 		&models.ArticleSummary{},
 		&models.FeedBriefing{},
+		&models.FeedBriefingArticle{},
 		&models.SourceFetchLog{},
 	); err != nil {
 		log.Fatalf("auto-migrate models: %v", err)
@@ -92,6 +93,8 @@ func main() {
 		Limit:             cfg.AutoAIBriefingLimit,
 		MaxSourcesPerTick: cfg.AutoAIBriefingMaxSourcesPerTick,
 		MinNewArticles:    cfg.AutoAIBriefingMinNewArticles,
+		DedupWindowHours:  cfg.AutoAIBriefingDedupWindowHours,
+		MinReplyDelta:     cfg.AutoAIBriefingMinReplyDelta,
 	})
 	go briefingScheduler.Start(ctx)
 

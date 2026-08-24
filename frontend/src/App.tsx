@@ -192,6 +192,7 @@ function App() {
     pendingFeedCount,
     checkingFeedUpdates,
     applyPendingFeedUpdates,
+    onToggleFavoriteArticle,
     onOpenSummaryTask,
     onDismissSummaryTask,
     onChangeAIModel,
@@ -518,6 +519,7 @@ function App() {
             readerArticle={aiLibrarySection.readerArticle}
             readerArticleLoading={aiLibrarySection.readerArticleLoading}
             readerArticleError={aiLibrarySection.readerArticleError}
+            favoriteArticleIDSet={favoriteArticleIDSet}
             sources={sources}
             formatTimeAgo={formatTimeAgo}
             onChangeSearch={aiLibrarySection.setSearch}
@@ -529,6 +531,7 @@ function App() {
             onChangeStatusFilter={aiLibrarySection.setStatusFilter}
             onOpenArticleSummary={aiLibrarySection.openArticleSummary}
             onCloseArticleReader={aiLibrarySection.closeArticleReader}
+            onToggleFavoriteArticle={onToggleFavoriteArticle}
             onOpenFeedBriefing={aiLibrarySection.openFeedBriefingSummary}
           />
         </Suspense>

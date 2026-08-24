@@ -35,7 +35,7 @@ type FeedHandler struct {
 	briefingCooldown *briefingCooldownStore
 }
 
-const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。你的输出首先要好读，其次才是完整。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。请先在心里合并重复事件和相似讨论，按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
+const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。输出首先要好读，其次才是完整。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。请先在心里合并重复事件和相似讨论，按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
 
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
@@ -91,6 +91,7 @@ type feedItem struct {
 	PublishedAt    *time.Time     `json:"published_at,omitempty"`
 	ImageURL       *string        `json:"image_url,omitempty"`
 	ReplyCount     *int           `json:"reply_count,omitempty"`
+	ContentHash    string         `json:"-" gorm:"column:content_hash"`
 	DuplicateCount int            `json:"duplicate_count"`
 	CreatedAt      time.Time      `json:"created_at"`
 	SortTime       time.Time      `json:"-"`
@@ -740,8 +741,9 @@ func (h *FeedHandler) queryBriefingFeedRows(
 			a.author,
 			a.published_at,
 			a.image_url,
-			a.reply_count,
-			a.created_at,
+			 a.reply_count,
+			 a.content_hash,
+			 a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
 		`).
 		Joins("JOIN sources AS s ON s.id = a.source_id")
@@ -999,13 +1001,11 @@ func parseCSVUint64OrderedLoose(raw string) []uint64 {
 func buildFeedBriefingPrompt(items []feedItem) string {
 	var builder strings.Builder
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
-	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。\n")
-	builder.WriteString("输出格式严格为：\n")
-	builder.WriteString("1) 先看这个（2-3条 bullet；每条 1-2 句；只写最重要判断、关键依据和为什么值得看）\n")
-	builder.WriteString("2) 主要线索（仅当条目超过5条或存在至少2组明显不同的主题时输出；2-4组，每组一个短标题 + 1-3条 bullet）\n")
-	builder.WriteString("3) 观点与讨论（即长文论点与讨论焦点；只有存在长文、论坛或争议时才写；提炼论点、论证链条、主要分歧、经验信息；没有就省略本节）\n")
-	builder.WriteString("4) 风险与不确定（最多4条；写风险来源、可能影响、需要继续观察什么；不要重复前文）\n")
-	builder.WriteString("5) 值得深读（最多4条，格式：[A01] 标题｜[原文](链接URL)｜一句推荐理由）\n\n")
+	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。用 Markdown 输出，并且只输出存在独立信息价值的 section。\n")
+	builder.WriteString("输出结构：\n")
+	builder.WriteString("## 优先阅读\n2-4 条 bullet。每条只给文章标题、一个核心判断和一句为什么值得打开；不在这里展开背景。\n")
+	builder.WriteString("## 主要判断\n按主题组织 2-4 个小标题；每个主题 1-3 条 bullet。新闻写变化、影响与后续变量；长文写论点、证据和漏洞；论坛写共识、分歧与经验；工具写用途、适用对象与限制。\n")
+	builder.WriteString("## 继续关注\n仅在存在未被前文说明的风险、不确定性或待验证事项时输出，最多 3 条。\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
 	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
@@ -1017,13 +1017,11 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("- 保持中等信息密度：不要一句话带过重点；重要条目要补充关键数字、因果关系、市场/技术/用户影响或后续观察点。\n")
 	builder.WriteString("- 段落必须短。一个自然段最多 4 行；优先使用 bullet；避免 5 句以上的大段文字。\n")
 	builder.WriteString("- 每个 bullet 只表达一个主判断，但可以补充 1-2 个支撑细节。不要把多个不相关事件塞进同一句。\n")
-	builder.WriteString("- 同一核心事实只能完整表述一次；后续 section 如果需要引用，只能极短指代，不得重复铺陈背景。\n")
-	builder.WriteString("- 如果某条信息已经在“重点主题分组”里展开，就不要在“风险/争议/不确定性”里再次完整重写。\n")
+	builder.WriteString("- 同一核心事实只能完整表述一次；“优先阅读”只给推荐理由，“主要判断”才展开事实与推理。\n")
+	builder.WriteString("- “继续关注”只能写前文没有解释过的独立不确定性，不得重复主题背景。\n")
 	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")
-	builder.WriteString("- 引用具体条目时尽量保留条目编号，例如 [A03]，方便读者定位原文章。\n")
-	builder.WriteString("- 第5部分每一条都必须包含对应的信息条目编号和可访问的原始链接 URL。\n")
-	builder.WriteString("- 第5部分链接必须使用 Markdown 链接语法：[原文](URL)，不要直接输出裸 URL。\n")
-	builder.WriteString("- 链接必须来自下面提供的信息条目，不要编造新链接。\n\n")
+	builder.WriteString("- 只有需要读者定位原文的具体事实、关键判断或“优先阅读”条目才使用 [Axx] 引用。每个 bullet 最多一个引用；多源佐证时选择最直接的一篇，不要堆叠引用。\n")
+	builder.WriteString("- 不要输出裸 URL、Markdown 外链或“原文”链接；阅读器会把 [Axx] 自动变成可点击的原文章入口。\n\n")
 	builder.WriteString("信息条目：\n")
 	for i, item := range items {
 		builder.WriteString(fmt.Sprintf(

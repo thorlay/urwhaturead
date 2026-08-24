@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import { formatAIStopReason, normalizeImageURL } from '../lib/app-utils'
 import type { ArticleDetail, ArticleSummaryLibraryItem, FeedBriefingLibraryItem, Source } from '../types'
-import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, RefreshCw, Search, SlidersHorizontal, Star, X } from 'lucide-react'
 
 type AILibraryView = 'articles' | 'briefings'
 type AILibraryRange = '24h' | '7d' | '30d' | 'all'
@@ -27,6 +27,7 @@ type AILibraryPanelProps = {
   readerArticle: ArticleDetail | null
   readerArticleLoading: boolean
   readerArticleError: string | null
+  favoriteArticleIDSet: Set<number>
   sources: Source[]
   formatTimeAgo: (input: string) => string
   onChangeSearch: (value: string) => void
@@ -38,6 +39,7 @@ type AILibraryPanelProps = {
   onChangeStatusFilter: (value: AILibraryStatusFilter) => void
   onOpenArticleSummary: (articleID: number) => Promise<void>
   onCloseArticleReader: () => void
+  onToggleFavoriteArticle: (articleID: number) => void
   onOpenFeedBriefing: (item: FeedBriefingLibraryItem) => void
 }
 
@@ -436,8 +438,10 @@ function AIArticleReader(props: {
   error: string | null
   formatTimeAgo: (input: string) => string
   onClose: () => void
+  isFavorite: boolean
+  onToggleFavorite: (articleID: number) => void
 }) {
-  const { article, loading, error, formatTimeAgo, onClose } = props
+  const { article, loading, error, formatTimeAgo, onClose, isFavorite, onToggleFavorite } = props
   const imageURL = normalizeImageURL(article?.image_url)
   const hasExternal = Boolean(article?.external?.content?.trim())
   const hasThread = Boolean(article?.thread)
@@ -456,12 +460,26 @@ function AIArticleReader(props: {
             <X aria-hidden="true" />
             返回 AI 速览
           </button>
-          {article?.link && (
-            <a className="ai-article-reader-source-link" href={article.link} target="_blank" rel="noreferrer">
-              <ExternalLink aria-hidden="true" />
-              打开原文
-            </a>
-          )}
+          <div className="ai-article-reader-actions">
+            {article && (
+              <button
+                type="button"
+                className={`ai-article-reader-favorite ${isFavorite ? 'active' : ''}`}
+                aria-label={isFavorite ? '取消收藏' : '收藏文章'}
+                aria-pressed={isFavorite}
+                onClick={() => onToggleFavorite(article.id)}
+              >
+                <Star aria-hidden="true" fill={isFavorite ? 'currentColor' : 'none'} />
+                {isFavorite ? '已收藏' : '收藏'}
+              </button>
+            )}
+            {article?.link && (
+              <a className="ai-article-reader-source-link" href={article.link} target="_blank" rel="noreferrer">
+                <ExternalLink aria-hidden="true" />
+                打开原文
+              </a>
+            )}
+          </div>
         </header>
 
         {loading && (
@@ -565,6 +583,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     readerArticle,
     readerArticleLoading,
     readerArticleError,
+    favoriteArticleIDSet,
     formatTimeAgo,
     onChangeSearch,
     onApplySearch,
@@ -575,6 +594,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     onChangeStatusFilter,
     onOpenArticleSummary,
     onCloseArticleReader,
+    onToggleFavoriteArticle,
     onOpenFeedBriefing,
   } = props
 
@@ -1235,6 +1255,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
         error={readerArticleError}
         formatTimeAgo={formatTimeAgo}
         onClose={onCloseArticleReader}
+        isFavorite={Boolean(readerArticle && favoriteArticleIDSet.has(readerArticle.id))}
+        onToggleFavorite={onToggleFavoriteArticle}
       />
     </main>
   )
