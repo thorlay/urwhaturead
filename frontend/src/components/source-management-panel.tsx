@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { ExternalLink } from 'lucide-react'
 import { getSystemStatus } from '../api'
 import type {
   BatchCreateResult,
@@ -131,6 +132,31 @@ export type SourceManagementPanelController = SourceManagementPanelProps
 
 type SourceManagementPanelContainerProps = {
   controller: SourceManagementPanelController
+}
+
+function safeExternalURL(rawURL: string): string | null {
+  try {
+    const url = new URL(rawURL.trim())
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null
+    }
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function SourceURLLink({ url }: { url: string }) {
+  const href = safeExternalURL(url)
+  if (!href) {
+    return <>{url}</>
+  }
+  return (
+    <a className="source-url-link" href={href} target="_blank" rel="noreferrer" title={`打开 RSS：${url}`}>
+      <span>{url}</span>
+      <ExternalLink aria-hidden="true" />
+    </a>
+  )
 }
 
 export function SourceManagementPanel({ controller }: SourceManagementPanelContainerProps) {
@@ -734,7 +760,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                   <article key={candidate.rss_url} className="discover-item">
                     <div className="discover-item-main">
                       <p className="discover-title">{candidate.name}</p>
-                      <p className="discover-url">{candidate.rss_url}</p>
+                      <p className="discover-url"><SourceURLLink url={candidate.rss_url} /></p>
                       <p className="discover-meta">
                         <span>{candidate.feed_type.toUpperCase()}</span>
                         <span>{candidate.item_count} 条</span>
@@ -1106,7 +1132,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                         {isEditing ? (
                           <Input value={editSourceURL} onChange={(event) => onSetEditSourceURL(event.target.value)} />
                         ) : (
-                          <p className="source-url">{source.rss_url}</p>
+                          <p className="source-url"><SourceURLLink url={source.rss_url} /></p>
                         )}
                       </td>}
                       <td className="source-actions-col">
