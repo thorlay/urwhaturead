@@ -113,11 +113,22 @@ Main vars:
 - `AI_SUMMARY_API_KEY_HEADER`
 - `AI_SUMMARY_API_KEY_PREFIX`
 - `AI_SUMMARY_THINKING_MODE` (`auto` / `disabled` / `enabled`; DeepSeek defaults to disabled in `auto`)
+- `AUTO_AI_BRIEFING_TIMEZONE` (default `Asia/Shanghai`; timezone used by scheduled briefing windows)
+- `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` (optional `DAYS@HH:MM-HH:MM` list; scheduled briefings wait outside these windows)
 - `FEED_BRIEFING_RATE_LIMIT_PER_HOUR` (default `10` for non-admin requests)
 - `FEED_BRIEFING_COOLDOWN_SEC` (default `600`; same digest cooldown for non-admin requests)
 - `PGADMIN_PORT`
 - `PGADMIN_DEFAULT_EMAIL`
 - `PGADMIN_DEFAULT_PASSWORD`
+
+To keep scheduled DeepSeek briefings in the current off-peak periods, use:
+
+```env
+AUTO_AI_BRIEFING_TIMEZONE=Asia/Shanghai
+AUTO_AI_BRIEFING_BLOCKED_WINDOWS=Mon-Fri@09:00-12:00,Mon-Fri@14:00-18:00
+```
+
+The scheduler leaves due work pending during blocked windows and runs it on a later tick. Empty `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` means no time restriction. Invalid window configuration fails closed and pauses scheduled briefings; manual AI actions remain available.
 
 Admin read-only mode (recommended for public deployment):
 

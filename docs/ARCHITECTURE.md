@@ -207,6 +207,9 @@
 3. 命中 `feed_briefings` 则返回缓存。
 4. 未命中则调用 AI 生成并持久化。
 
+定时来源速览由 `FeedBriefingScheduler` 执行。可通过 `AUTO_AI_BRIEFING_TIMEZONE` 和
+`AUTO_AI_BRIEFING_BLOCKED_WINDOWS` 禁止后台任务在高价时段运行；到期任务不会丢失，而是在下一个允许时段继续执行。该限制不影响用户手动触发的文章摘要或聚合速览。
+
 ## 6. 数据模型速查
 
 模型目录：`internal/models/`

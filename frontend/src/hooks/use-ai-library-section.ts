@@ -30,7 +30,7 @@ export function useAILibrarySection({
   const [error, setError] = useState<string | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
   const [activeView, setActiveView] = useState<AILibraryView>('briefings')
-  const [timeRange, setTimeRange] = useState<AILibraryRange>('7d')
+  const [timeRange, setTimeRange] = useState<AILibraryRange>('30d')
   const [sourceFilter, setSourceFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<AILibraryStatusFilter>('all')
   const [readerArticle, setReaderArticle] = useState<ArticleDetail | null>(null)
@@ -101,8 +101,8 @@ export function useAILibrarySection({
     aiTabActiveRef.current = isActive
   }, [activeTab, loadAILibrary, search])
 
-  const applySearch = useCallback(() => {
-    void loadAILibrary(search)
+  const applySearch = useCallback((keywordOverride?: string) => {
+    void loadAILibrary(keywordOverride ?? search)
   }, [loadAILibrary, search])
 
   const refresh = useCallback(() => {

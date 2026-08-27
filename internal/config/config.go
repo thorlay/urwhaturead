@@ -41,6 +41,8 @@ type Config struct {
 	AutoAIBriefingMinNewArticles    int
 	AutoAIBriefingDedupWindowHours  int
 	AutoAIBriefingMinReplyDelta     int
+	AutoAIBriefingTimezone          string
+	AutoAIBriefingBlockedWindows    string
 	FeedBriefingRateLimitPerHour    int
 	FeedBriefingCooldownSec         int
 	ExternalFetchEnabled            bool
@@ -97,6 +99,8 @@ func Load() Config {
 		AutoAIBriefingMinNewArticles:    envOrDefaultInt("AUTO_AI_BRIEFING_MIN_NEW_ARTICLES", 3),
 		AutoAIBriefingDedupWindowHours:  envOrDefaultInt("AUTO_AI_BRIEFING_DEDUP_WINDOW_HOURS", 336),
 		AutoAIBriefingMinReplyDelta:     envOrDefaultInt("AUTO_AI_BRIEFING_MIN_REPLY_DELTA", 5),
+		AutoAIBriefingTimezone:          envOrDefault("AUTO_AI_BRIEFING_TIMEZONE", "Asia/Shanghai"),
+		AutoAIBriefingBlockedWindows:    envOrDefault("AUTO_AI_BRIEFING_BLOCKED_WINDOWS", ""),
 		FeedBriefingRateLimitPerHour:    envOrDefaultInt("FEED_BRIEFING_RATE_LIMIT_PER_HOUR", 10),
 		FeedBriefingCooldownSec:         envOrDefaultInt("FEED_BRIEFING_COOLDOWN_SEC", 600),
 		ExternalFetchEnabled:            envOrDefaultBool("EXTERNAL_FETCH_ENABLED", true),

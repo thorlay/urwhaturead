@@ -24,6 +24,9 @@ type FeedBriefingScheduler struct {
 	minNewArticles    int
 	dedupWindow       time.Duration
 	minReplyDelta     int
+	scheduleLocation  *time.Location
+	blockedWindows    []weeklyScheduleWindow
+	scheduleLabel     string
 }
 
 type FeedBriefingSchedulerOptions struct {
@@ -33,6 +36,8 @@ type FeedBriefingSchedulerOptions struct {
 	MinNewArticles    int
 	DedupWindowHours  int
 	MinReplyDelta     int
+	Timezone          string
+	BlockedWindows    string
 }
 
 type briefingCoverageItem struct {
@@ -70,6 +75,7 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 	if minReplyDelta <= 0 {
 		minReplyDelta = 5
 	}
+	scheduleLocation, blockedWindows := parseBriefingSchedule(options.Timezone, options.BlockedWindows)
 	return &FeedBriefingScheduler{
 		db:                db,
 		summarizer:        summarizer,
@@ -80,6 +86,9 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 		minNewArticles:    minNewArticles,
 		dedupWindow:       time.Duration(dedupWindowHours) * time.Hour,
 		minReplyDelta:     minReplyDelta,
+		scheduleLocation:  scheduleLocation,
+		blockedWindows:    blockedWindows,
+		scheduleLabel:     strings.TrimSpace(options.BlockedWindows),
 	}
 }
 
@@ -89,7 +98,16 @@ func (s *FeedBriefingScheduler) Start(ctx context.Context) {
 	}
 	ticker := time.NewTicker(s.tick)
 	defer ticker.Stop()
-	log.Printf("auto ai briefing scheduler started; tick=%s", s.tick)
+	if len(s.blockedWindows) > 0 {
+		log.Printf(
+			"auto ai briefing scheduler started; tick=%s timezone=%s blocked_windows=%q",
+			s.tick,
+			s.scheduleLocation.String(),
+			s.scheduleLabel,
+		)
+	} else {
+		log.Printf("auto ai briefing scheduler started; tick=%s", s.tick)
+	}
 	s.runDueSources(ctx)
 	for {
 		select {
@@ -102,6 +120,11 @@ func (s *FeedBriefingScheduler) Start(ctx context.Context) {
 }
 
 func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
+	now := time.Now().UTC()
+	if briefingScheduleBlocked(now, s.scheduleLocation, s.blockedWindows) {
+		return
+	}
+
 	var sources []models.Source
 	if err := s.db.WithContext(ctx).
 		Where("enabled = ? AND ai_briefing_enabled = ?", true, true).
@@ -113,7 +136,6 @@ func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 		return
 	}
 
-	now := time.Now().UTC()
 	processed := 0
 	for _, source := range sources {
 		if !sourceAIBriefingDue(source, now) {

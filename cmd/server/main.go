@@ -95,6 +95,8 @@ func main() {
 		MinNewArticles:    cfg.AutoAIBriefingMinNewArticles,
 		DedupWindowHours:  cfg.AutoAIBriefingDedupWindowHours,
 		MinReplyDelta:     cfg.AutoAIBriefingMinReplyDelta,
+		Timezone:          cfg.AutoAIBriefingTimezone,
+		BlockedWindows:    cfg.AutoAIBriefingBlockedWindows,
 	})
 	go briefingScheduler.Start(ctx)
 
