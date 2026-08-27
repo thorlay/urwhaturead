@@ -159,6 +159,123 @@ function SourceURLLink({ url }: { url: string }) {
   )
 }
 
+function SourceURLIconLink({ url }: { url: string }) {
+  const href = safeExternalURL(url)
+  if (!href) return null
+  return (
+    <a className="source-url-icon" href={href} target="_blank" rel="noreferrer" aria-label={`打开 RSS：${url}`} title={`打开 RSS：${url}`}>
+      <ExternalLink aria-hidden="true" />
+    </a>
+  )
+}
+
+function sourceFailureSummary(source: Source, status?: SourceStatus): string {
+  if (!source.enabled) return '已停用'
+  const httpStatus = status?.latest_http_status
+  const rawError = status?.last_error?.trim().toLowerCase() ?? ''
+  if (httpStatus === 429) return '来源限流'
+  if (typeof httpStatus === 'number' && httpStatus >= 500) return '上游暂时不可用'
+  if (rawError.includes('context deadline exceeded') || rawError.includes('client.timeout')) return 'RSSHub 或网络无响应'
+  if (rawError.includes('parse feed failed') || rawError.includes('xml syntax error')) return '订阅源内容无法解析'
+  if (rawError) return '抓取失败'
+  if (status?.health === 'stale') return '长时间未更新'
+  if (status?.health === 'warn') return '需要检查'
+  if (!status?.latest_fetched_at) return '等待首次抓取'
+  return '近期抓取正常'
+}
+
+function SourceHealthState({
+  source,
+  status,
+  health,
+  healthLabel,
+  detailed = false,
+}: {
+  source: Source
+  status?: SourceStatus
+  health: SourceStatus['health']
+  healthLabel: (health: SourceStatus['health']) => string
+  detailed?: boolean
+}) {
+  const hasFailure = health === 'error' || Boolean(status?.last_error) || (status?.latest_http_status ?? 0) >= 400
+  const summary = sourceFailureSummary(source, status)
+  return (
+    <div className="source-health-state-wrap">
+      <span className={cn('source-health-state', `is-${health}`)}>{healthLabel(health)}</span>
+      <p className={cn('source-health-summary', hasFailure && 'is-failure')}>{summary}</p>
+      {detailed && status?.last_error && (
+        <details className="source-health-details">
+          <summary>技术详情</summary>
+          <code>{status.last_error}</code>
+        </details>
+      )}
+    </div>
+  )
+}
+
+type SourceActionMenuProps = {
+  source: Source
+  siteKey: string
+  rowBusy: boolean
+  hasFetchError: boolean
+  muted: boolean
+  onTest: (sourceID: number) => Promise<void>
+  onRefresh: (sourceID: number) => Promise<void>
+  onEdit: (source: Source) => void
+  onToggleEnabled: (source: Source) => Promise<void>
+  onToggleSiteMuted: (siteKey: string) => void
+  onDelete: (source: Source) => Promise<void>
+}
+
+function SourceActionMenu({
+  source,
+  siteKey,
+  rowBusy,
+  hasFetchError,
+  muted,
+  onTest,
+  onRefresh,
+  onEdit,
+  onToggleEnabled,
+  onToggleSiteMuted,
+  onDelete,
+}: SourceActionMenuProps) {
+  return (
+    <div className="source-row-actions">
+      {hasFetchError && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => void onTest(source.id)} disabled={rowBusy}>
+          重试
+        </Button>
+      )}
+      <details className="source-row-more">
+        <summary className="button button-outline button-sm">更多</summary>
+        <div className="source-row-more-menu">
+          <Button type="button" variant="outline" size="sm" onClick={() => onEdit(source)} disabled={rowBusy}>
+            编辑
+          </Button>
+          {!hasFetchError && (
+            <Button type="button" variant="outline" size="sm" onClick={() => void onTest(source.id)} disabled={rowBusy}>
+              测试
+            </Button>
+          )}
+          <Button type="button" variant="outline" size="sm" onClick={() => void onRefresh(source.id)} disabled={rowBusy}>
+            强制刷新
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => void onToggleEnabled(source)} disabled={rowBusy}>
+            {source.enabled ? '停用' : '启用'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onToggleSiteMuted(siteKey)} disabled={rowBusy}>
+            {muted ? '恢复展示' : '隐藏站点'}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => void onDelete(source)} disabled={rowBusy}>
+            删除
+          </Button>
+        </div>
+      </details>
+    </div>
+  )
+}
+
 export function SourceManagementPanel({ controller }: SourceManagementPanelContainerProps) {
   const {
     aiModel,
@@ -171,7 +288,6 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     unhealthySourceCount,
     mutedSiteKeys,
     sourceHealthCounts,
-    healthToneClass,
     loadingStatus,
     onLoadStatus,
     reclassifyingSources,
@@ -270,7 +386,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
   } = controller
   const importFileInputRef = useRef<HTMLInputElement | null>(null)
   const [manageTab, setManageTab] = useState<'sources' | 'status'>('sources')
-  const [densityMode, setDensityMode] = useState<'compact' | 'standard' | 'detailed'>('standard')
+  const [showSourceTools, setShowSourceTools] = useState(false)
   const [systemStatus, setSystemStatus] = useState<SystemStatusResponse['data'] | null>(null)
   const [loadingSystemStatus, setLoadingSystemStatus] = useState(false)
   const [systemStatusError, setSystemStatusError] = useState<string | null>(null)
@@ -322,16 +438,12 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
         continue
       }
 
-      const rawReason = (status.last_error ?? '').trim()
-      const reason = rawReason.length > 120 ? `${rawReason.slice(0, 120)}...` : rawReason
-      if (reason || typeof status.latest_http_status === 'number') {
-        highlights.push({
-          sourceID: source.id,
-          name: source.name,
-          httpStatus: status.latest_http_status,
-          reason: reason || '抓取状态异常',
-        })
-      }
+      highlights.push({
+        sourceID: source.id,
+        name: source.name,
+        httpStatus: status.latest_http_status,
+        reason: sourceFailureSummary(source, status),
+      })
     }
 
     return highlights.slice(0, 4)
@@ -398,92 +510,48 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
     <main className="source-management-page">
       <section className="panel sources source-manage-panel">
         <div className="source-manage-head">
-          <div>
+          <div className="source-manage-title">
+            <p className="source-manage-eyebrow">SOURCE OPERATIONS</p>
             <h2>来源管理</h2>
-            <p className="hint">高频操作集中在一张表内，支持筛选、批量与单条快速处理。</p>
+            <p className="hint">优先处理异常来源，其余来源保持轻量维护。</p>
           </div>
           <div className="source-manage-head-actions">
-            <div className="source-health-overview">
-              <Badge variant="outline">总数 {sources.length}</Badge>
-              <Badge variant="outline">启用 {enabledSourceCount}</Badge>
-              <Badge variant="outline">异常 {unhealthySourceCount}</Badge>
-              <Badge variant="outline">隐藏站点 {mutedSiteKeys.length}</Badge>
-              <Badge className={cn('health-badge', healthToneClass('error'))} variant="outline">
-                错误 {sourceHealthCounts.error}
-              </Badge>
-              <Badge className={cn('health-badge', healthToneClass('warn'))} variant="outline">
-                警告 {sourceHealthCounts.warn}
-              </Badge>
-              <Badge className={cn('health-badge', healthToneClass('stale'))} variant="outline">
-                陈旧 {sourceHealthCounts.stale}
-              </Badge>
-            </div>
-            <div className="manage-model-entry">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="manage-model-button"
-                onClick={onToggleManageModelPicker}
-              >
-                模型：{aiModel}
-              </Button>
-              {showManageModelPicker && (
-                <div className="manage-model-panel">
-                  <Select value={aiModel} onChange={(event) => onChangeAIModel(event.target.value)}>
-                    {aiModelOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                    {!aiModelOptions.includes(aiModel) && (
-                      <option value={aiModel}>
-                        {aiModel}
-                      </option>
-                    )}
-                  </Select>
-                </div>
-              )}
-            </div>
+            <Button type="button" size="sm" onClick={() => setShowSourceTools((value) => !value)}>
+              {showSourceTools ? '收起来源工具' : '添加来源'}
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
-              {loadingStatus ? '更新状态中...' : '更新状态'}
+              {loadingStatus ? '更新中...' : '刷新状态'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadSystemStatus()}
-              disabled={loadingSystemStatus}
-            >
-              {loadingSystemStatus ? '检查中...' : '检查系统'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void onReclassifySources()}
-              disabled={reclassifyingSources}
-            >
-              {reclassifyingSources ? '重分类中...' : '自动重分类'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void onExportSources()}
-              disabled={exportingSources || importingSources}
-            >
-              {exportingSources ? '导出中...' : '导出来源 JSON'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => importFileInputRef.current?.click()}
-              disabled={importingSources || exportingSources}
-            >
-              {importingSources ? '导入中...' : '导入来源 JSON'}
-            </Button>
+            <details className="source-manage-more-actions">
+              <summary className="button button-outline button-sm">更多管理</summary>
+              <div className="source-manage-more-menu">
+                <div className="manage-model-entry">
+                  <Button type="button" variant="ghost" size="sm" className="manage-model-button" onClick={onToggleManageModelPicker}>
+                    模型：{aiModel}
+                  </Button>
+                  {showManageModelPicker && (
+                    <div className="manage-model-panel">
+                      <Select value={aiModel} onChange={(event) => onChangeAIModel(event.target.value)}>
+                        {aiModelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                        {!aiModelOptions.includes(aiModel) && <option value={aiModel}>{aiModel}</option>}
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => void loadSystemStatus()} disabled={loadingSystemStatus}>
+                  {loadingSystemStatus ? '检查中...' : '检查系统'}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onReclassifySources()} disabled={reclassifyingSources}>
+                  {reclassifyingSources ? '重分类中...' : '自动重分类'}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onExportSources()} disabled={exportingSources || importingSources}>
+                  {exportingSources ? '导出中...' : '导出来源 JSON'}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => importFileInputRef.current?.click()} disabled={importingSources || exportingSources}>
+                  {importingSources ? '导入中...' : '导入来源 JSON'}
+                </Button>
+              </div>
+            </details>
             <input
               ref={importFileInputRef}
               type="file"
@@ -492,6 +560,24 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               onChange={handleImportFileChange}
             />
           </div>
+        </div>
+
+        <div className="source-management-summary" aria-label="来源概览">
+          <button type="button" className="source-summary-stat" onClick={() => onSetSourceManageQuickView('all')}>
+            <span>全部来源</span><strong>{sources.length}</strong>
+          </button>
+          <button type="button" className="source-summary-stat" onClick={() => onSetSourceManageQuickView('attention')}>
+            <span>需要处理</span><strong>{unhealthySourceCount}</strong>
+            <small>错误 {sourceHealthCounts.error} · 警告 {sourceHealthCounts.warn}</small>
+          </button>
+          <button type="button" className="source-summary-stat" onClick={() => onSetSourceManageQuickView('all')}>
+            <span>正常运行</span><strong>{Math.max(0, enabledSourceCount - unhealthySourceCount)}</strong>
+            <small>已启用 {enabledSourceCount}</small>
+          </button>
+          <button type="button" className="source-summary-stat" onClick={() => onSetSourceManageQuickView('thread')}>
+            <span>跟踪与静默</span><strong>{quickViewCounts.thread + mutedSiteKeys.length}</strong>
+            <small>跟踪帖 {quickViewCounts.thread} · 隐藏站点 {mutedSiteKeys.length}</small>
+          </button>
         </div>
 
         <div className="source-manage-nav" role="tablist" aria-label="管理页面视图">
@@ -546,17 +632,10 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           <div className="source-failure-banner" role="status" aria-live="polite">
             <div className="source-failure-banner-main">
               <p className="source-failure-title">抓取异常：{unhealthySourceCount} 个来源需要关注</p>
-              <p className="source-failure-list">
-                {failingSourceHighlights.map((item) => (
-                  <span key={item.sourceID}>
-                    {item.name}
-                    {typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}：{item.reason}
-                  </span>
-                ))}
-              </p>
+              <p className="source-failure-list">优先检查限流、上游不可用与长期未更新的来源。</p>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
-              {loadingStatus ? '刷新中...' : '立即复查'}
+            <Button type="button" variant="outline" size="sm" onClick={() => onSetSourceManageQuickView('attention')}>
+              查看需处理来源
             </Button>
           </div>
         )}
@@ -658,7 +737,9 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
 
         {manageTab === 'sources' && (
         <>
-        <section className="panel source-manage-forms">
+        <details className="source-manage-tools" open={showSourceTools} onToggle={(event) => setShowSourceTools(event.currentTarget.open)}>
+          <summary>添加、导入与发现来源</summary>
+          <section className="panel source-manage-forms">
           <div className="source-manage-form-grid">
             <section className="source-manage-form-block">
               <h4>新增来源</h4>
@@ -782,81 +863,68 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               </div>
             )}
           </section>
+          </section>
+        </details>
+
+        <section className="source-list-controls" aria-label="来源筛选与排序">
+          <div className="source-toolbar">
+            <Input
+              value={sourceManageKeyword}
+              onChange={(event) => onSetSourceManageKeyword(event.target.value)}
+              placeholder="搜索名称、URL、标签或站点"
+            />
+            <Select value={sourceManageTagFilter} onChange={(event) => onSetSourceManageTagFilter(event.target.value)}>
+              <option value="">全部标签</option>
+              {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+            </Select>
+            <Select value={sourceManageHealthFilter} onChange={(event) => onSetSourceManageHealthFilter(event.target.value as SourceHealthFilter)}>
+              <option value="all">所有状态</option>
+              <option value="error">需要处理</option>
+              <option value="warn">警告</option>
+              <option value="stale">陈旧</option>
+              <option value="ok">健康</option>
+              <option value="disabled">停用</option>
+              <option value="new">新来源</option>
+            </Select>
+            <div className="source-toolbar-inline-group">
+              <Select value={sourceManageSortKey} aria-label="来源排序" onChange={(event) => onSetSourceManageSortKey(event.target.value as SourceSortKey)}>
+                <option value="health">风险优先</option>
+                <option value="new_articles">24h 新增</option>
+                <option value="clicks">总点击</option>
+                <option value="last_fetched">最近抓取</option>
+                <option value="last_clicked">最近点击</option>
+                <option value="ai_generated">AI 最近生成</option>
+                <option value="name">名称</option>
+              </Select>
+              <Button type="button" variant="ghost" size="sm" onClick={() => onSetSourceManageSortDesc(!sourceManageSortDesc)}>
+                {sourceManageSortDesc ? '降序' : '升序'}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => void onLoadSources()} disabled={loadingSources}>
+                {loadingSources ? '刷新中...' : '刷新列表'}
+              </Button>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={onClearSourceManageFilters}>清空</Button>
+          </div>
+
+          <div className="source-quickviews">
+            <div className="source-quickview-list" role="group" aria-label="来源快捷视图">
+              {quickViews.map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  className={cn('source-quickview-pill', sourceManageQuickView === view.key && 'active')}
+                  onClick={() => onSetSourceManageQuickView(view.key)}
+                >
+                  <span>{view.label}</span><em>{quickViewCounts[view.key]}</em>
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
 
-        <div className="source-toolbar">
-          <Input
-            value={sourceManageKeyword}
-            onChange={(event) => onSetSourceManageKeyword(event.target.value)}
-            placeholder="搜索名称 / URL / 标签 / 站点"
-          />
-          <Select
-            value={sourceManageTagFilter}
-            onChange={(event) => onSetSourceManageTagFilter(event.target.value)}
-          >
-            <option value="">全部标签</option>
-            {availableTags.map((tag) => (
-              <option key={tag} value={tag}>
-                {tag}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={sourceManageHealthFilter}
-            onChange={(event) => onSetSourceManageHealthFilter(event.target.value as SourceHealthFilter)}
-          >
-            <option value="all">全部健康状态</option>
-            <option value="error">错误</option>
-            <option value="warn">警告</option>
-            <option value="stale">陈旧</option>
-            <option value="ok">健康</option>
-            <option value="disabled">停用</option>
-            <option value="new">新来源</option>
-          </Select>
-          <Button type="button" variant="outline" size="sm" onClick={onClearSourceManageFilters}>
-            清空筛选
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => void onLoadSources()} disabled={loadingSources}>
-            {loadingSources ? '更新列表中...' : '更新来源列表'}
-          </Button>
-        </div>
-
-        <div className="source-quickviews">
-          {quickViews.map((view) => (
-            <button
-              key={view.key}
-              type="button"
-              className={cn('source-quickview-pill', sourceManageQuickView === view.key && 'active')}
-              onClick={() => onSetSourceManageQuickView(view.key)}
-            >
-              <span>{view.label}</span>
-              <em>{quickViewCounts[view.key]}</em>
-            </button>
-          ))}
-          <div className="source-toolbar-inline-group">
-            <Select value={sourceManageSortKey} onChange={(event) => onSetSourceManageSortKey(event.target.value as SourceSortKey)}>
-              <option value="health">按风险优先</option>
-              <option value="new_articles">按 24h 新增</option>
-              <option value="clicks">按总点击</option>
-              <option value="last_fetched">按最近抓取</option>
-              <option value="last_clicked">按最近点击</option>
-              <option value="ai_generated">按 AI 最近生成</option>
-              <option value="name">按名称</option>
-            </Select>
-            <Button type="button" variant="outline" size="sm" onClick={() => onSetSourceManageSortDesc(!sourceManageSortDesc)}>
-              {sourceManageSortDesc ? '降序' : '升序'}
-            </Button>
-            <Select value={densityMode} onChange={(event) => setDensityMode(event.target.value as 'compact' | 'standard' | 'detailed')}>
-              <option value="compact">紧凑</option>
-              <option value="standard">标准</option>
-              <option value="detailed">详细</option>
-            </Select>
-          </div>
-        </div>
-
-        <div className="source-bulkbar">
+        {hasSelectedSources ? <div className="source-bulkbar">
           <p className="hint">
-            已选 {selectedSourceIDs.length} / 当前筛选 {visibleSourceIDs.length} / 全部 {sources.length}
+            已选择 {selectedSourceIDs.length} 个来源
           </p>
           <div className="source-bulk-actions">
             <Input
@@ -973,13 +1041,15 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               清空勾选
             </Button>
           </div>
-        </div>
+        </div> : (
+          <p className="source-list-count">当前显示 {visibleSourceIDs.length} / {sources.length} 个来源。勾选来源后可进行批量操作。</p>
+        )}
 
         <div className="source-table-wrap">
           {!loadingSources && sources.length === 0 && <p className="hint">暂无来源</p>}
           {!loadingSources && sources.length > 0 && filteredSources.length === 0 && <p className="hint">当前筛选下没有来源</p>}
           {sources.length > 0 && filteredSources.length > 0 && (
-            <table className={cn('source-table', `source-table-${densityMode}`)}>
+            <table className="source-table">
               <thead>
                 <tr>
                   <th className="source-checkbox-col">
@@ -991,13 +1061,10 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                       aria-label="全选当前筛选来源"
                     />
                   </th>
-                  <th>ID</th>
                   <th>来源</th>
-                  {densityMode !== 'compact' && <th>标签</th>}
-                  <th>点击</th>
-                  <th>健康状态</th>
-                  {densityMode !== 'compact' && <th>抓取配置</th>}
-                  {densityMode === 'detailed' && <th>RSS URL</th>}
+                  <th>动态</th>
+                  <th>状态</th>
+                  <th>抓取</th>
                   <th className="source-actions-col">操作</th>
                 </tr>
               </thead>
@@ -1031,110 +1098,59 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                         />
                       </td>
                       <td>
-                        <span className="source-id-cell">#{source.id}</span>
-                      </td>
-                      <td>
                         {isEditing ? (
-                          <Input value={editSourceName} onChange={(event) => onSetEditSourceName(event.target.value)} />
+                          <div className="source-desktop-edit-fields">
+                            <Input value={editSourceName} onChange={(event) => onSetEditSourceName(event.target.value)} aria-label="来源名称" />
+                            <Input value={editSourceTags} onChange={(event) => onSetEditSourceTags(event.target.value)} placeholder="tech, ai, startup" aria-label="来源标签" />
+                            <Input value={editSourceURL} onChange={(event) => onSetEditSourceURL(event.target.value)} placeholder="RSS URL" aria-label="RSS URL" />
+                          </div>
                         ) : (
                           <div className="source-cell-main">
                             <div className="source-title-row">
                               <p className="source-title">{source.name}</p>
+                              <SourceURLIconLink url={source.rss_url} />
                               {source.ai_briefing_enabled && (
                                 <Badge variant="outline">AI {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h</Badge>
                               )}
-                              {hasFetchError && <Badge variant="outline" className={cn('health-badge', healthToneClass('error'))}>异常</Badge>}
                             </div>
                             <p className="source-cell-meta">
-                              {siteKey} · {source.enabled ? '启用' : '停用'} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}
+                              #{source.id} · {siteKey} · {source.enabled ? '启用' : '停用'} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}
                             </p>
+                            <div className="source-tag-list">
+                              {sourceTagList(source).map((tag) => (
+                                <Badge
+                                  key={`${source.id}-${tag}`}
+                                  variant="outline"
+                                  className="source-tag-badge"
+                                  onClick={() => onSetSourceManageTagFilter(tag)}
+                                >
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </td>
-                      {densityMode !== 'compact' && <td>
-                        {isEditing ? (
-                          <Input
-                            value={editSourceTags}
-                            onChange={(event) => onSetEditSourceTags(event.target.value)}
-                            placeholder="tech, ai, startup"
-                          />
-                        ) : (
-                          <div className="source-tag-list">
-                            {sourceTagList(source).map((tag) => (
-                              <Badge
-                                key={`${source.id}-${tag}`}
-                                variant="outline"
-                                className="source-tag-badge"
-                                onClick={() => onSetSourceManageTagFilter(tag)}
-                              >
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </td>}
                       <td>
-                        <div className="source-cell-main">
-                          <p className="source-cell-meta">24h 新增 {source.new_articles_24h ?? 0}</p>
-                          <p className="source-cell-meta">总点击 {sourceClickCount(source)}</p>
-                          <p className="source-cell-meta">最近点击 {source.last_clicked_at ? formatTimeAgo(source.last_clicked_at) : '-'}</p>
-                          <p
-                            className={cn(
-                              'source-cell-meta',
-                              source.ai_briefing_enabled && 'source-cell-meta-accent',
-                            )}
-                          >
-                            AI 速览{' '}
-                            {source.ai_briefing_enabled
-                              ? `${Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h`
-                              : '关闭'}
-                          </p>
-                          <p className="source-cell-meta">
-                            最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
-                          </p>
+                        <div className="source-activity-cell">
+                          <strong>{source.new_articles_24h ?? 0}</strong>
+                          <span>24h 新增</span>
                         </div>
                       </td>
                       <td>
-                        <div className="source-cell-main">
-                          <Badge className={cn('health-badge', healthToneClass(health))} variant="outline">
-                            {healthLabel(health)}
-                          </Badge>
-                          <p className="source-cell-meta">
-                            成功率 {status ? `${status.window_success_rate.toFixed(0)}%` : '-'} · 失败 {status?.window_failed ?? '-'}
-                          </p>
-                          <p className="source-cell-meta">
-                            最近抓取 {status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '-'}
-                          </p>
-                          {hasFetchError && (
-                            <p className="source-cell-error">
-                              拉取失败
-                              {typeof status?.latest_http_status === 'number' ? ` · HTTP ${status.latest_http_status}` : ''}
-                              {status?.last_error ? ` · ${status.last_error}` : ''}
-                            </p>
-                          )}
-                        </div>
+                        <SourceHealthState source={source} status={status} health={health} healthLabel={healthLabel} detailed={hasFetchError} />
                       </td>
-                      {densityMode !== 'compact' && <td>
+                      <td>
                         {isEditing ? (
                           <Input value={editSourcePollSec} onChange={(event) => onSetEditSourcePollSec(event.target.value)} />
                         ) : (
-                          <div className="source-cell-main">
-                            <p className="source-cell-meta">间隔 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</p>
-                            <p className="source-cell-meta">连续失败 {status?.consecutive_failures ?? 0}</p>
-                            <p className="source-cell-meta">最近状态 {status?.latest_status ?? '-'}</p>
-                            <p className={cn('source-cell-meta', hasFetchError && 'source-cell-error')}>
-                              最近错误 {status?.last_error_at ? formatTimeAgo(status.last_error_at) : '-'}
-                            </p>
+                          <div className="source-fetch-cell">
+                            <span>{status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '尚未抓取'}</span>
+                            <small>每 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</small>
+                            {hasFetchError && <small className="is-failure">失败 {status?.consecutive_failures ?? 0} 次</small>}
                           </div>
                         )}
-                      </td>}
-                      {densityMode === 'detailed' && <td>
-                        {isEditing ? (
-                          <Input value={editSourceURL} onChange={(event) => onSetEditSourceURL(event.target.value)} />
-                        ) : (
-                          <p className="source-url"><SourceURLLink url={source.rss_url} /></p>
-                        )}
-                      </td>}
+                      </td>
                       <td className="source-actions-col">
                         {isEditing ? (
                           <div className="source-row-actions">
@@ -1146,55 +1162,19 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                             </Button>
                           </div>
                         ) : (
-                          <div className="source-row-actions">
-                            <Button type="button" variant="secondary" size="sm" onClick={() => void onTestSource(source.id)} disabled={rowBusy}>
-                              测试
-                            </Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => onStartEdit(source)} disabled={rowBusy}>
-                              编辑
-                            </Button>
-                            <details className="source-row-more">
-                              <summary className="button button-outline button-sm">更多</summary>
-                              <div className="source-row-more-menu">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void onRefreshSource(source.id)}
-                                  disabled={rowBusy}
-                                >
-                                  强制刷新
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void onToggleSourceEnabled(source)}
-                                  disabled={rowBusy}
-                                >
-                                  {source.enabled ? '停用' : '启用'}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => onToggleSiteMuted(siteKey)}
-                                  disabled={rowBusy}
-                                >
-                                  {mutedSiteSet.has(siteKey) ? '恢复展示' : '隐藏站点'}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => void onDeleteSource(source)}
-                                  disabled={rowBusy}
-                                >
-                                  删除
-                                </Button>
-                              </div>
-                            </details>
-                          </div>
+                          <SourceActionMenu
+                            source={source}
+                            siteKey={siteKey}
+                            rowBusy={rowBusy}
+                            hasFetchError={hasFetchError}
+                            muted={mutedSiteSet.has(siteKey)}
+                            onTest={onTestSource}
+                            onRefresh={onRefreshSource}
+                            onEdit={onStartEdit}
+                            onToggleEnabled={onToggleSourceEnabled}
+                            onToggleSiteMuted={onToggleSiteMuted}
+                            onDelete={onDeleteSource}
+                          />
                         )}
                       </td>
                     </tr>
@@ -1204,6 +1184,58 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
             </table>
           )}
           {loadingSources && <p className="hint">加载来源中...</p>}
+        </div>
+        <div className="source-mobile-list">
+          {!loadingSources && sources.length > 0 && filteredSources.map((source) => {
+            const status = sourceStatusMap.get(source.id)
+            const health = resolveSourceHealth(source, sourceStatusMap)
+            const siteKey = sourceSiteKeyMap.get(source.id) ?? resolveSourceSiteKey(source)
+            const rowBusy = busySourceID === source.id || bulkSourceAction !== null
+            const isEditing = editingSourceID === source.id
+            const hasFetchError = health === 'error' || (status?.latest_http_status ?? 0) >= 400 || Boolean(status?.last_error)
+            const hasFetchWarning = !hasFetchError && (health === 'warn' || health === 'stale')
+            return (
+              <article key={source.id} className={cn('source-mobile-card', hasFetchError && 'source-row-error', hasFetchWarning && 'source-row-warning')}>
+                <div className="source-mobile-card-head">
+                  <input type="checkbox" checked={selectedSourceIDSet.has(source.id)} onChange={() => onToggleSourceSelection(source.id)} aria-label={`选择来源 ${source.name}`} />
+                  <div className="source-mobile-card-title">
+                    {isEditing ? <Input value={editSourceName} onChange={(event) => onSetEditSourceName(event.target.value)} /> : <>
+                      <p className="source-title">{source.name}</p>
+                      <p className="source-cell-meta">#{source.id} · {siteKey} · {normalizeSourceKind(source.kind) === 'thread' ? '跟踪帖' : '订阅源'}</p>
+                    </>}
+                  </div>
+                  <SourceHealthState source={source} status={status} health={health} healthLabel={healthLabel} />
+                </div>
+
+                {isEditing ? (
+                  <div className="source-mobile-edit-fields">
+                    <Input value={editSourceTags} onChange={(event) => onSetEditSourceTags(event.target.value)} placeholder="标签" />
+                    <Input value={editSourcePollSec} onChange={(event) => onSetEditSourcePollSec(event.target.value)} placeholder="抓取间隔（秒）" />
+                    <Input value={editSourceURL} onChange={(event) => onSetEditSourceURL(event.target.value)} placeholder="RSS URL" />
+                    <div className="source-row-actions">
+                      <Button type="button" size="sm" onClick={() => void onSaveSourceEdit(source.id)} disabled={rowBusy}>保存</Button>
+                      <Button type="button" variant="outline" size="sm" onClick={onCancelEdit} disabled={rowBusy}>取消</Button>
+                    </div>
+                  </div>
+                ) : <>
+                  <div className="source-mobile-metrics">
+                    <span><strong>{source.new_articles_24h ?? 0}</strong> 24h 新增</span>
+                    <span>最近抓取 {status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '未开始'}</span>
+                    <span>每 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</span>
+                  </div>
+                  <div className="source-mobile-meta-row">
+                    <div className="source-tag-list">
+                      {sourceTagList(source).map((tag) => <Badge key={`${source.id}-${tag}`} variant="outline" className="source-tag-badge" onClick={() => onSetSourceManageTagFilter(tag)}>{tag}</Badge>)}
+                    </div>
+                    <span className="source-cell-meta">{source.ai_briefing_enabled ? `AI ${Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h` : 'AI 关闭'}</span>
+                  </div>
+                  <p className="source-url"><SourceURLLink url={source.rss_url} /></p>
+                  {hasFetchError && <details className="source-health-details"><summary>查看技术详情</summary><code>{status?.last_error || `HTTP ${status?.latest_http_status}`}</code></details>}
+                  <SourceActionMenu source={source} siteKey={siteKey} rowBusy={rowBusy} hasFetchError={hasFetchError} muted={mutedSiteSet.has(siteKey)} onTest={onTestSource} onRefresh={onRefreshSource} onEdit={onStartEdit} onToggleEnabled={onToggleSourceEnabled} onToggleSiteMuted={onToggleSiteMuted} onDelete={onDeleteSource} />
+                </>}
+              </article>
+            )
+          })}
         </div>
         </>
         )}

@@ -996,7 +996,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           </div>
                           {isArticleSelected(item) ? (
                             <div className="ai-library-entry-expanded">
-                              <div className="ai-library-detail-body">
+                              <div className="ai-library-detail-body ai-library-article-reading">
                                 <MarkdownBlock content={item.summary} />
                               </div>
                             </div>
@@ -1100,7 +1100,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                           </div>
                           {isBriefingSelected(item) ? (
                             <div className="ai-library-entry-expanded">
-                              <div className="ai-library-detail-body">
+                              <div className="ai-library-detail-body ai-library-briefing-reading">
                                 {deepReadRecommendations.length > 0 && (
                                   <div className="ai-library-deep-read">
                                     <div className="ai-library-deep-read-head">
