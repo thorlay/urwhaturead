@@ -45,6 +45,7 @@ type AILibraryPanelProps = {
 }
 
 type DateSection = { key: string; label: string; shortLabel: string; count: number }
+type BriefingAnchor = { id: string; key: string; item: FeedBriefingLibraryItem }
 
 const READ_BRIEFINGS_STORAGE_KEY = 'quick.ai-library.read-briefings.v1'
 
@@ -146,6 +147,36 @@ function DateRail(props: {
   )
 }
 
+function BriefingRail(props: {
+  anchors: BriefingAnchor[]
+  activeID: string
+  readBriefings: Set<string>
+  className: string
+  onSelect: (id: string) => void
+}) {
+  if (props.anchors.length < 2) return null
+  return (
+    <aside className={`ai-briefing-rail ${props.className}`} aria-label="今日简报导航">
+      <div className="ai-briefing-rail-label">今日来源</div>
+      <nav>
+        {props.anchors.map(({ id, key, item }) => (
+          <Button
+            key={id}
+            type="button"
+            variant="ghost"
+            className={`${id === props.activeID ? 'active' : ''} ${props.readBriefings.has(key) ? 'is-read' : ''}`}
+            aria-current={id === props.activeID ? 'location' : undefined}
+            onClick={() => props.onSelect(id)}
+          >
+            <span>{item.scope_label || '当前阅读流'}</span>
+            <small>{item.article_count || item.article_refs.length} 篇</small>
+          </Button>
+        ))}
+      </nav>
+    </aside>
+  )
+}
+
 function ArticleSummaryDocument(props: {
   item: ArticleSummaryLibraryItem
   expanded: boolean
@@ -188,6 +219,7 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const [collapsedBriefings, setCollapsedBriefings] = useState<Record<string, boolean>>({})
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null)
   const [readBriefings, setReadBriefings] = useState(loadReadBriefings)
+  const [activeBriefingID, setActiveBriefingID] = useState('')
   const articleRefs = useRef<Record<string, HTMLElement | null>>({})
 
   const articleSourceOptions = useMemo(() => Array.from(new Set(articleSummaries.map((item) => item.source_name).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')), [articleSummaries])
@@ -233,11 +265,35 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   const selectedArticleCount = new Set(selectedBriefings.flatMap((item) => item.article_refs.map((article) => article.id))).size
   const selectedSourceCount = new Set(selectedBriefings.map((item) => item.scope_label || '当前阅读流')).size
   const lead = selectedBriefings[0] ? extractBriefingLead(selectedBriefings[0].summary) : ''
-  const contextTags = Array.from(new Set(selectedBriefings.flatMap((item) => [item.tag, item.keyword]).filter((value): value is string => Boolean(value)))).slice(0, 5)
+  const briefingAnchors = selectedBriefings.map((item, index) => ({
+    id: `ai-briefing-${selectedDate || 'unknown'}-${index + 1}`,
+    key: briefingKey(item),
+    item,
+  }))
+  const briefingAnchorIDs = briefingAnchors.map((anchor) => anchor.id).join('|')
+  const resolvedActiveBriefingID = briefingAnchors.some((anchor) => anchor.id === activeBriefingID)
+    ? activeBriefingID
+    : briefingAnchors[0]?.id ?? ''
 
   useEffect(() => {
     if (typeof window !== 'undefined') window.localStorage.setItem(READ_BRIEFINGS_STORAGE_KEY, JSON.stringify(Array.from(readBriefings)))
   }, [readBriefings])
+
+  useEffect(() => {
+    const anchorIDs = briefingAnchorIDs ? briefingAnchorIDs.split('|') : []
+    if (activeView !== 'briefings' || anchorIDs.length === 0) return
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+      if (visible[0]) setActiveBriefingID(visible[0].target.id)
+    }, { rootMargin: '-18% 0px -62% 0px', threshold: [0, 0.01] })
+    anchorIDs.forEach((id) => {
+      const element = document.getElementById(id)
+      if (element) observer.observe(element)
+    })
+    return () => observer.disconnect()
+  }, [activeView, briefingAnchorIDs])
 
   const switchView = (view: AILibraryView) => {
     onChangeView(view)
@@ -265,6 +321,11 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
     if (next) requestAnimationFrame(() => articleRefs.current[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     return next
   })
+
+  const scrollToBriefing = (id: string) => {
+    setActiveBriefingID(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <main className="ai-library-page">
@@ -334,10 +395,13 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
                   <div className="ai-daily-overview">
                     <p className="ai-daily-stats">{selectedBriefings.length} 份简报 · {selectedArticleCount} 篇文章 · {selectedSourceCount} 个阅读视角 · 已读 {selectedReadCount}/{selectedBriefings.length}</p>
                     {lead && <p className="ai-daily-lead">{lead}</p>}
-                    {contextTags.length > 0 && <div className="ai-daily-tags">{contextTags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
                   </div>
                 ) : <p className="ai-daily-stats">{selectedArticles.length} 篇摘要</p>}
               </header>
+            )}
+
+            {activeView === 'briefings' && (
+              <BriefingRail anchors={briefingAnchors} activeID={resolvedActiveBriefingID} readBriefings={readBriefings} className="ai-briefing-rail-mobile" onSelect={scrollToBriefing} />
             )}
 
             {loading && activeItems.length === 0 && <div className="ai-library-loading" aria-label="正在加载 AI 内容"><div className="skeleton skeleton-title" /><div className="skeleton skeleton-line" /><div className="skeleton skeleton-line short" /></div>}
@@ -352,9 +416,8 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
 
             {activeView === 'briefings' && selectedBriefings.length > 0 && (
               <div className="ai-briefing-stream">
-                {selectedBriefings.map((item) => {
-                  const key = briefingKey(item)
-                  return <BriefingDocument key={key} item={item} articleSummaries={articleSummaries} collapsed={collapsedBriefings[key] ?? false} read={readBriefings.has(key)} formatTimeAgo={formatTimeAgo} onToggleCollapsed={() => setCollapsedBriefings((current) => ({ ...current, [key]: !(current[key] ?? false) }))} onToggleRead={() => toggleRead(key)} onOpenArticle={(articleID) => void onOpenArticleSummary(articleID)} onOpenReadingContext={() => onOpenFeedBriefing(item)} />
+                {briefingAnchors.map(({ id, key, item }) => {
+                  return <div key={key} id={id} className="ai-briefing-anchor"><BriefingDocument item={item} articleSummaries={articleSummaries} collapsed={collapsedBriefings[key] ?? false} read={readBriefings.has(key)} formatTimeAgo={formatTimeAgo} onToggleCollapsed={() => setCollapsedBriefings((current) => ({ ...current, [key]: !(current[key] ?? false) }))} onToggleRead={() => toggleRead(key)} onOpenArticle={(articleID) => void onOpenArticleSummary(articleID)} onOpenReadingContext={() => onOpenFeedBriefing(item)} /></div>
                 })}
               </div>
             )}
@@ -368,6 +431,9 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
               </div>
             )}
           </div>
+          {activeView === 'briefings' && (
+            <BriefingRail anchors={briefingAnchors} activeID={resolvedActiveBriefingID} readBriefings={readBriefings} className="ai-briefing-rail-desktop" onSelect={scrollToBriefing} />
+          )}
         </div>
       </section>
 
