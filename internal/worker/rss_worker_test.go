@@ -165,6 +165,22 @@ func TestNewRSSWorker_CustomUserAgent(t *testing.T) {
 	}
 }
 
+func TestEnqueueArticleClustering_DeduplicatesPendingArticle(t *testing.T) {
+	worker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{TickSec: 30})
+	if !worker.enqueueArticleClustering(42) {
+		t.Fatal("first enqueue should succeed")
+	}
+	if !worker.enqueueArticleClustering(42) {
+		t.Fatal("already queued article should be treated as scheduled")
+	}
+	if got := len(worker.clusterQueue); got != 1 {
+		t.Fatalf("cluster queue len=%d, want 1", got)
+	}
+	if worker.enqueueArticleClustering(0) {
+		t.Fatal("zero article id should not be enqueued")
+	}
+}
+
 func TestNewRSSWorker_RedditClientDisablesHTTP2(t *testing.T) {
 	worker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{
 		TickSec: 30,

@@ -60,7 +60,16 @@ type RSSWorker struct {
 	userAgent        string
 	debugHTTP        bool
 	debugHosts       []string
+	clusterQueue     chan uint64
+	clusterQueued    sync.Map
 }
+
+const (
+	clusterQueueSize    = 1024
+	clusterBacklogBatch = 500
+	clusterBacklogTick  = time.Minute
+	clusterTaskTimeout  = 30 * time.Second
+)
 
 type fetchResult struct {
 	HTTPStatus   int
@@ -111,6 +120,7 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 		httpClient:       newHTTPClient(false),
 		redditHTTPClient: newHTTPClient(true),
 		parser:           gofeed.NewParser(),
+		clusterQueue:     make(chan uint64, clusterQueueSize),
 	}
 }
 
@@ -144,6 +154,8 @@ func (w *RSSWorker) clientForURL(rawURL string) *http.Client {
 
 func (w *RSSWorker) Start(ctx context.Context) {
 	log.Printf("rss worker started; tick=%s", w.tick)
+	go w.runClusterQueue(ctx)
+	go w.scanClusterBacklog(ctx)
 	w.runOnce(ctx)
 
 	ticker := time.NewTicker(w.tick)
@@ -158,6 +170,91 @@ func (w *RSSWorker) Start(ctx context.Context) {
 			w.runOnce(ctx)
 		}
 	}
+}
+
+func (w *RSSWorker) enqueueArticleClustering(articleID uint64) bool {
+	if articleID == 0 || w.clusterQueue == nil {
+		return false
+	}
+	if _, loaded := w.clusterQueued.LoadOrStore(articleID, struct{}{}); loaded {
+		return true
+	}
+	select {
+	case w.clusterQueue <- articleID:
+		return true
+	default:
+		w.clusterQueued.Delete(articleID)
+		return false
+	}
+}
+
+func (w *RSSWorker) runClusterQueue(ctx context.Context) {
+	log.Printf("article relation worker started; queue=%d", cap(w.clusterQueue))
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("article relation worker stopped")
+			return
+		case articleID := <-w.clusterQueue:
+			taskCtx, cancel := context.WithTimeout(ctx, clusterTaskTimeout)
+			err := w.assignArticleCluster(taskCtx, articleID)
+			cancel()
+			w.clusterQueued.Delete(articleID)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("assign article relation failed article_id=%d: %v", articleID, err)
+			}
+		}
+	}
+}
+
+func (w *RSSWorker) scanClusterBacklog(ctx context.Context) {
+	w.enqueueClusterBacklog(ctx)
+	ticker := time.NewTicker(clusterBacklogTick)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.enqueueClusterBacklog(ctx)
+		}
+	}
+}
+
+func (w *RSSWorker) enqueueClusterBacklog(ctx context.Context) {
+	var articleIDs []uint64
+	if err := w.db.WithContext(ctx).
+		Model(&models.Article{}).
+		Where("cluster_id IS NULL").
+		Order("id ASC").
+		Limit(clusterBacklogBatch).
+		Pluck("id", &articleIDs).Error; err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Printf("query article relation backlog failed: %v", err)
+		}
+		return
+	}
+	for _, articleID := range articleIDs {
+		if !w.enqueueArticleClustering(articleID) && len(w.clusterQueue) >= cap(w.clusterQueue) {
+			return
+		}
+	}
+}
+
+func (w *RSSWorker) assignArticleCluster(ctx context.Context, articleID uint64) error {
+	return w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var article models.Article
+		if err := tx.Where("id = ?", articleID).Take(&article).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if article.ClusterID != nil && *article.ClusterID > 0 {
+			return nil
+		}
+		return clustering.AssignArticleToCluster(tx, &article)
+	})
 }
 
 func (w *RSSWorker) runOnce(ctx context.Context) {
@@ -914,15 +1011,15 @@ func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article
 			}
 			return err
 		}
-		if err := clustering.AssignArticleToCluster(tx, &article); err != nil {
-			return err
-		}
 		return nil
 	}); err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return false, nil
 		}
 		return false, err
+	}
+	if !w.enqueueArticleClustering(article.ID) {
+		log.Printf("article relation queue deferred article_id=%d", article.ID)
 	}
 
 	return true, nil

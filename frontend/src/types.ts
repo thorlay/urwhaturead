@@ -83,6 +83,8 @@ export type FeedResponse = {
     count: number
     next_cursor: string
     elapsed_ms?: number
+    dedupe?: boolean
+    dedupe_candidate_limit?: number
   }
 }
 

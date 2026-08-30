@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { formatAIBriefingInterval } from '../lib/app-utils'
 import type { Source, SourceStatus } from '../types'
 
 type SourceContextMenuState = {
@@ -283,7 +284,7 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
                 {sourceProfileSource.ai_briefing_enabled ? '已启用' : '已关闭'}
               </Badge>
               {sourceProfileSource.ai_briefing_enabled && (
-                <span className="hint">每 {sourceProfileSource.ai_briefing_interval_min ?? 360} 分钟</span>
+                <span className="hint">每 {formatAIBriefingInterval(sourceProfileSource.ai_briefing_interval_min)}</span>
               )}
             </dd>
           </div>
@@ -328,6 +329,15 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
                 disabled={busySourceID === sourceProfileSource.id}
               >
                 6h 速览
+              </Button>
+              <Button
+                type="button"
+                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 1440 ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => void onSetSourceProfileAIBriefing(true, 1440)}
+                disabled={busySourceID === sourceProfileSource.id}
+              >
+                24h 速览
               </Button>
               <Button
                 type="button"

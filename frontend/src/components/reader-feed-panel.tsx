@@ -272,7 +272,7 @@ const FeedArticleListItem = memo(
     }, [item.content, item.summary, plainText])
     const isShortSummary = plainSummaryText.length > 0 && plainSummaryText.length <= 72
     const duplicateCountText =
-      typeof item.duplicate_count === 'number' && item.duplicate_count > 1 ? `+${item.duplicate_count - 1}源` : ''
+      typeof item.duplicate_count === 'number' && item.duplicate_count > 1 ? `+${item.duplicate_count - 1}关联` : ''
     const compactTitleParts = useMemo(
       () => buildCompactTitleParts(item.title, compactPreviewText),
       [buildCompactTitleParts, compactPreviewText, item.title],
@@ -370,7 +370,7 @@ const FeedArticleListItem = memo(
                   {item.duplicate_count && item.duplicate_count > 1 && (
                     <>
                       <span className="feed-sep">·</span>
-                      <span>合并 {item.duplicate_count} 条</span>
+                      <span>相关 {item.duplicate_count} 条</span>
                     </>
                   )}
                   {summaryTaskStatus && (
@@ -526,7 +526,6 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
   useEffect(() => {
     if (!shouldVirtualizeFeed) {
-      setVirtualRange({ start: 0, end: listRows.length })
       return
     }
 

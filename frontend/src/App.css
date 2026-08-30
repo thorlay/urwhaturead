@@ -5329,6 +5329,14 @@ button[data-slot='button'] svg,
 }
 
 /* AI daily briefing reader */
+html:has(.ai-library-page),
+body:has(.ai-library-page),
+#root:has(.ai-library-page),
+.app-shell:has(.ai-library-page) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
 .ai-library-page {
   width: 100%;
   min-width: 0;
@@ -5657,9 +5665,13 @@ button[data-slot='button'] svg,
 
 .ai-briefing-rail-desktop {
   position: sticky;
-  top: 1rem;
+  top: max(0.75rem, env(safe-area-inset-top));
   align-self: start;
+  max-height: calc(100dvh - 1.5rem - env(safe-area-inset-top));
   padding-top: 0.3rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .ai-briefing-rail-mobile {
@@ -6212,7 +6224,7 @@ button[data-slot='button'] svg,
 
   .ai-briefing-rail-mobile {
     position: sticky;
-    top: 0;
+    top: env(safe-area-inset-top);
     z-index: 4;
     display: flex;
     align-items: center;

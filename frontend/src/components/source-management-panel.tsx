@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { ExternalLink } from 'lucide-react'
 import { getSystemStatus } from '../api'
+import { formatAIBriefingInterval } from '../lib/app-utils'
 import type {
   BatchCreateResult,
   BulkSourceAction,
@@ -705,7 +706,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     {aiEnabledSources.map((source) => (
                       <div key={source.id} className="source-status-item">
                         <p className="source-status-item-title">
-                          {source.name} · {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h
+                          {source.name} · {formatAIBriefingInterval(source.ai_briefing_interval_min)}
                         </p>
                         <p className="source-cell-meta">
                           最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
@@ -990,6 +991,15 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               type="button"
               variant="outline"
               size="sm"
+              onClick={() => void onRunBulkAIBriefingAction(true, 1440)}
+              disabled={!hasSelectedSources || bulkSourceAction !== null}
+            >
+              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 24h AI'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void onRunBulkAIBriefingAction(false)}
               disabled={!hasSelectedSources || bulkSourceAction !== null}
             >
@@ -1110,7 +1120,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                               <p className="source-title">{source.name}</p>
                               <SourceURLIconLink url={source.rss_url} />
                               {source.ai_briefing_enabled && (
-                                <Badge variant="outline">AI {Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h</Badge>
+                                <Badge variant="outline">AI {formatAIBriefingInterval(source.ai_briefing_interval_min)}</Badge>
                               )}
                             </div>
                             <p className="source-cell-meta">
@@ -1227,7 +1237,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     <div className="source-tag-list">
                       {sourceTagList(source).map((tag) => <Badge key={`${source.id}-${tag}`} variant="outline" className="source-tag-badge" onClick={() => onSetSourceManageTagFilter(tag)}>{tag}</Badge>)}
                     </div>
-                    <span className="source-cell-meta">{source.ai_briefing_enabled ? `AI ${Math.max(1, Math.round((source.ai_briefing_interval_min ?? 60) / 60))}h` : 'AI 关闭'}</span>
+                    <span className="source-cell-meta">{source.ai_briefing_enabled ? `AI ${formatAIBriefingInterval(source.ai_briefing_interval_min)}` : 'AI 关闭'}</span>
                   </div>
                   <p className="source-url"><SourceURLLink url={source.rss_url} /></p>
                   {hasFetchError && <details className="source-health-details"><summary>查看技术详情</summary><code>{status?.last_error || `HTTP ${status?.latest_http_status}`}</code></details>}

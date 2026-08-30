@@ -51,12 +51,28 @@ func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
 		"优先阅读",
 		"主要判断",
 		"继续关注",
+		"今日结论",
+		"中高信息密度",
+		"共同事实 + 来源差异",
 		"每个 bullet 最多一个引用",
 		"不要输出裸 URL",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("buildFeedBriefingPrompt() missing %q in prompt:\n%s", want, prompt)
 		}
+	}
+}
+
+func TestBriefingSnippet_FallsBackToContentAndTruncatesRunes(t *testing.T) {
+	content := strings.Repeat("信息", 200)
+	item := feedItem{Content: stringPtr(content)}
+
+	got := briefingSnippet(item)
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("briefingSnippet() should mark truncated content: %q", got)
+	}
+	if gotRunes := len([]rune(strings.TrimSuffix(got, "..."))); gotRunes != 320 {
+		t.Fatalf("briefingSnippet() rune count=%d, want 320", gotRunes)
 	}
 }
 
@@ -154,29 +170,16 @@ func TestOrderFeedBriefingArticleRefs_PreservesPromptOrder(t *testing.T) {
 	}
 }
 
-func TestDedupeFeedBriefingRows(t *testing.T) {
-	clusterA := uint64(9)
-	clusterB := uint64(12)
-	rows := []feedItem{
-		{ID: 101, ClusterID: &clusterA, Title: "A newest"},
-		{ID: 102, ClusterID: &clusterA, Title: "A older"},
-		{ID: 103, ClusterID: nil, Title: "No cluster"},
-		{ID: 104, ClusterID: &clusterB, Title: "B newest"},
-		{ID: 105, ClusterID: &clusterB, Title: "B older"},
+func TestParseFeedDedupeQuery_DefaultsToCompleteStream(t *testing.T) {
+	for _, raw := range []string{"", "0", "false", "off"} {
+		if parseFeedDedupeQuery(raw) {
+			t.Fatalf("parseFeedDedupeQuery(%q)=true, want false", raw)
+		}
 	}
-
-	got := dedupeFeedBriefingRows(rows)
-	if len(got) != 3 {
-		t.Fatalf("len(got)=%d, want 3", len(got))
-	}
-	if got[0].ID != 101 {
-		t.Fatalf("got[0].ID=%d, want 101", got[0].ID)
-	}
-	if got[1].ID != 103 {
-		t.Fatalf("got[1].ID=%d, want 103", got[1].ID)
-	}
-	if got[2].ID != 104 {
-		t.Fatalf("got[2].ID=%d, want 104", got[2].ID)
+	for _, raw := range []string{"1", "true", "on"} {
+		if !parseFeedDedupeQuery(raw) {
+			t.Fatalf("parseFeedDedupeQuery(%q)=false, want true", raw)
+		}
 	}
 }
 

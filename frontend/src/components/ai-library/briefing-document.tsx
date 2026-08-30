@@ -176,7 +176,6 @@ export function BriefingDocument(props: BriefingDocumentProps) {
   const [showAllReferences, setShowAllReferences] = useState(false)
   const recommendations = parseDeepReadRecommendations(item.summary)
   const summary = recommendations.length > 0 ? summaryWithoutDeepReadSection(item.summary) : item.summary
-  const fallbackRecommendations = recommendations.length === 0 ? item.article_refs.slice(0, 4) : []
   const visibleReferences = showAllReferences ? item.article_refs : item.article_refs.slice(0, 6)
   const scope = item.scope_label || '当前阅读流'
 
@@ -211,7 +210,7 @@ export function BriefingDocument(props: BriefingDocumentProps) {
         </Button>
       ) : (
         <div className="ai-briefing-document-body">
-          {(recommendations.length > 0 || fallbackRecommendations.length > 0) && (
+          {recommendations.length > 0 && (
             <section className="ai-priority-reading" aria-labelledby={`priority-${item.digest_key}`}>
               <div className="ai-section-label" id={`priority-${item.digest_key}`}>优先阅读</div>
               <div className="ai-priority-list">
@@ -233,13 +232,6 @@ export function BriefingDocument(props: BriefingDocumentProps) {
                     <a key={`${recommendation.url}-${index}`} className="ai-priority-item" href={recommendation.url} target="_blank" rel="noreferrer">{content}</a>
                   )
                 })}
-                {fallbackRecommendations.map((article, index) => (
-                  <Button key={article.id} type="button" variant="ghost" className="ai-priority-item" onClick={() => onOpenArticle(article.id)}>
-                    <span className="ai-priority-index">{index + 1}</span>
-                    <span className="ai-priority-copy"><strong>{article.title}</strong><span>{article.source_name}</span></span>
-                    <ChevronRight aria-hidden="true" />
-                  </Button>
-                ))}
               </div>
             </section>
           )}

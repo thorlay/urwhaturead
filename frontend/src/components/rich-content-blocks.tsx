@@ -47,7 +47,7 @@ export function MarkdownBlock(props: { content?: string }) {
   )
 }
 
-export function normalizeMarkdownLinks(rawContent?: string): string {
+function normalizeMarkdownLinks(rawContent?: string): string {
   const content = rawContent?.trim()
   if (!content) return ''
 

@@ -12,6 +12,7 @@ import {
   updateSource,
 } from '../api'
 import type { DiscoverSourceCandidate, Source } from '../types'
+import { formatAIBriefingInterval } from '../lib/app-utils'
 import type { BulkSourceAction } from './use-source-management-state'
 
 type FeedLoadOverrides = {
@@ -672,7 +673,7 @@ export function useSourceManagementActions(params: UseSourceManagementActionsPar
       params.setNotice({
         kind: 'info',
         text: enabled
-          ? `已为 ${updated.name} 开启定时 AI 速览（每 ${updated.ai_briefing_interval_min ?? nextIntervalMin} 分钟）。`
+          ? `已为 ${updated.name} 开启定时 AI 速览（每 ${formatAIBriefingInterval(updated.ai_briefing_interval_min ?? nextIntervalMin)}）。`
           : `已关闭 ${updated.name} 的定时 AI 速览。`,
       })
       await Promise.allSettled([params.refreshStatusIfVisible()])

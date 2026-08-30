@@ -198,7 +198,6 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 		}
 		promptRows = selectedRows
 	}
-	promptRows = dedupeFeedBriefingRows(promptRows)
 	if len(promptRows) == 0 {
 		return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
 	}
@@ -215,7 +214,7 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 
 	prompt := buildFeedBriefingPrompt(promptRows)
 	if previous != nil {
-		prompt = "这是一轮增量 AI 速览。只总结相对上次真正新增、出现变化、或值得重新关注的信息。不要重复复述上次已经明确的背景；如果新增较少，宁可更短，也不要硬凑结构。\n\n" + prompt
+		prompt = "这是一轮增量 AI 速览。只总结相对上次真正新增、出现变化、或值得重新关注的信息。不要重复复述上次已经明确的背景；新增较少时允许更短，但每个真正新增的变化仍要说明关键事实、原因或影响，不要只给一句结论，也不要硬凑结构。\n\n" + prompt
 	}
 	result, err := s.summarizer.CompleteWithModel(
 		ctx,

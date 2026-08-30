@@ -243,7 +243,7 @@ Feed query params:
 - `tag` (source tag)
 - `source_ids` (comma-separated source IDs, e.g. `1,2,3`)
 - `q` (keyword in title/summary/content)
-- `dedupe` (`1`/`true` enable event-level dedupe, default enabled; `0`/`false` returns raw stream)
+- `dedupe` (`1`/`true` folds related articles to one representative; omitted/`0`/`false` returns the complete multi-source stream)
 
 Source status query params:
 
@@ -298,7 +298,7 @@ Event clustering and dedupe:
   - `CLUSTER_VECTOR_MIN_TOKENS` (minimum token count before building vector, default `3`)
   - `CLUSTER_VECTOR_IVFFLAT_LISTS` (index list count for new DB/index creation, default `100`)
 - `GET /api/v1/feed` defaults to representative-per-event output with `duplicate_count`.
-- Use `dedupe=0` to inspect raw item stream.
+- The default feed is the complete multi-source stream. Use `dedupe=1` only when a folded event-level view is desired.
 - Run `./scripts/cluster-backfill.sh` once to backfill clusters for existing historical rows.
 
 Create source example:

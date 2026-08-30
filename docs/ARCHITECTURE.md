@@ -152,9 +152,10 @@
 1. 读取 enabled 来源，判断是否到期。
 2. 发起 HTTP 请求（含 ETag/Last-Modified）。
 3. 解析 feed item -> 映射 article。
-4. 去重写入 `articles`。
-5. 调用聚类逻辑，更新 `event_clusters`/`articles.cluster_id`。
-6. 更新来源状态与 `source_fetch_logs`。
+4. 对同来源 GUID/链接/内容哈希做精确去重后写入 `articles`，文章立即可见。
+5. 将新文章加入后台关联队列；队列异步更新 `event_clusters`/`articles.cluster_id`，不阻塞 RSS 入库。
+6. 后台每分钟扫描未关联文章，进程重启或队列暂时满载也会自动补做。
+7. 更新来源状态与 `source_fetch_logs`。
 
 ### 5.3 聚合流查询
 
@@ -162,7 +163,8 @@
 
 特点：
 
-- 默认 `dedupe=1`，按 cluster 只返回代表文章，并带 `duplicate_count`。
+- 默认返回完整的多源阅读流，关联文章仍分别展示，并带 `duplicate_count` 作为“相关条目数”提示。
+- 显式传入 `dedupe=1` 时才按 cluster 折叠为代表文章。
 - 支持 cursor 分页（`sort_time + id` 编码）。
 - 支持 `tag/source_ids/q/include_hidden` 过滤。
 - 返回前会做文本清洗、图片/回复数补全。
@@ -202,10 +204,10 @@
 
 逻辑：
 
-1. 选取当前视图文章集（可按来源/tag/关键词）。
+1. 选取当前视图文章集（可按来源/tag/关键词），保留多源原始输入。
 2. 生成 digest key（包含 model + filter + article_ids）。
 3. 命中 `feed_briefings` 则返回缓存。
-4. 未命中则调用 AI 生成并持久化。
+4. 未命中则调用 AI 生成并持久化；共同事实合并表述，但保留各来源的新增信息、角度和分歧。
 
 定时来源速览由 `FeedBriefingScheduler` 执行。可通过 `AUTO_AI_BRIEFING_TIMEZONE` 和
 `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` 禁止后台任务在高价时段运行；到期任务不会丢失，而是在下一个允许时段继续执行。该限制不影响用户手动触发的文章摘要或聚合速览。

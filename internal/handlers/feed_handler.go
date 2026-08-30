@@ -35,7 +35,10 @@ type FeedHandler struct {
 	briefingCooldown *briefingCooldownStore
 }
 
-const feedBriefingSystemPrompt = "你是一个中文个人信息判断助手。输出首先要好读，其次才是完整。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。请先在心里合并重复事件和相似讨论，按重要性输出。优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容；不要把所有条目写成同等重要，也不要重复复述同一核心事实。"
+const (
+	feedBriefingPromptVersion = "v3"
+	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
+)
 
 type FeedHandlerOptions struct {
 	AdminAuthEnabled bool
@@ -243,10 +246,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 		limit = value
 	}
 
-	dedupe := true
-	if dedupeRaw := strings.TrimSpace(c.Query("dedupe")); dedupeRaw != "" {
-		dedupe = parseBoolQuery(dedupeRaw)
-	}
+	dedupe := parseFeedDedupeQuery(c.Query("dedupe"))
 	includeHidden := parseBoolQuery(strings.TrimSpace(c.Query("include_hidden")))
 
 	query := h.db.
@@ -264,11 +264,12 @@ func (h *FeedHandler) List(c *gin.Context) {
 			a.published_at,
 			a.image_url,
 			a.reply_count,
-			1 AS duplicate_count,
+			COALESCE(ec.article_count, 1) AS duplicate_count,
 			a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
 		`).
-		Joins("JOIN sources AS s ON s.id = a.source_id")
+		Joins("JOIN sources AS s ON s.id = a.source_id").
+		Joins("LEFT JOIN event_clusters AS ec ON ec.id = a.cluster_id")
 	if !includeHidden {
 		query = query.Where("s.hidden_in_sidebar = ? AND s.kind <> ?", false, "thread")
 	}
@@ -332,7 +333,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 				candidates.reply_count,
 				candidates.created_at,
 				candidates.sort_time,
-				COUNT(*) OVER (PARTITION BY COALESCE(candidates.cluster_id, candidates.id)) AS duplicate_count,
+				MAX(candidates.duplicate_count) OVER (PARTITION BY COALESCE(candidates.cluster_id, candidates.id)) AS duplicate_count,
 				ROW_NUMBER() OVER (
 					PARTITION BY COALESCE(candidates.cluster_id, candidates.id)
 					ORDER BY candidates.sort_time DESC, candidates.id DESC
@@ -467,7 +468,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		badRequest(c, "no feed items available for briefing")
 		return
 	}
-	promptRows := dedupeFeedBriefingRows(rows)
+	promptRows := rows
 	if len(promptRows) == 0 {
 		badRequest(c, "no feed items available for briefing")
 		return
@@ -790,7 +791,7 @@ func buildFeedBriefingDigest(
 	}
 	uniqueSources := uniqueSortedUint64(sourceIDs)
 	payload := strings.Join([]string{
-		"v1",
+		feedBriefingPromptVersion,
 		fmt.Sprintf("limit=%d", limit),
 		"tag=" + strings.TrimSpace(tag),
 		"keyword=" + normalizeBriefingKeyword(keyword),
@@ -802,25 +803,9 @@ func buildFeedBriefingDigest(
 	return hex.EncodeToString(sum[:]), articleIDs
 }
 
-func dedupeFeedBriefingRows(rows []feedItem) []feedItem {
-	if len(rows) <= 1 {
-		return rows
-	}
-	result := make([]feedItem, 0, len(rows))
-	seenClusters := make(map[uint64]struct{}, len(rows))
-	for _, row := range rows {
-		if row.ClusterID == nil || *row.ClusterID == 0 {
-			result = append(result, row)
-			continue
-		}
-		clusterID := *row.ClusterID
-		if _, ok := seenClusters[clusterID]; ok {
-			continue
-		}
-		seenClusters[clusterID] = struct{}{}
-		result = append(result, row)
-	}
-	return result
+func parseFeedDedupeQuery(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return raw != "" && parseBoolQuery(raw)
 }
 
 func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {
@@ -1003,23 +988,26 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
 	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。用 Markdown 输出，并且只输出存在独立信息价值的 section。\n")
 	builder.WriteString("输出结构：\n")
-	builder.WriteString("## 优先阅读\n2-4 条 bullet。每条只给文章标题、一个核心判断和一句为什么值得打开；不在这里展开背景。\n")
-	builder.WriteString("## 主要判断\n按主题组织 2-4 个小标题；每个主题 1-3 条 bullet。新闻写变化、影响与后续变量；长文写论点、证据和漏洞；论坛写共识、分歧与经验；工具写用途、适用对象与限制。\n")
-	builder.WriteString("## 继续关注\n仅在存在未被前文说明的风险、不确定性或待验证事项时输出，最多 3 条。\n\n")
+	builder.WriteString("## 优先阅读\n3-5 条 bullet。每条给文章标题、核心判断和一句为什么值得打开；保留最关键的数字或事实，但不在这里重复展开完整背景。\n")
+	builder.WriteString("## 主要判断\n按主题组织 2-5 个小标题；每个主题 2-4 条 bullet。每个重要主题至少解释关键事实、因果关系、影响对象和后续变量中的两项。新闻写变化、影响与后续变量；长文写论点、证据和漏洞；论坛写共识、分歧与经验；工具写用途、适用对象与限制。\n")
+	builder.WriteString("## 继续关注\n仅在存在未被前文说明的风险、不确定性或待验证事项时输出，最多 4 条。\n")
+	builder.WriteString("## 今日结论\n用 2-3 句收束本期最重要的判断：读者今天最该记住什么，以及下一步最值得观察什么。不得引入前文没有出现的新事实。\n\n")
 	builder.WriteString("要求：\n")
-	builder.WriteString("- 先合并相似事件；同一事件不要换个说法重复写多次。\n")
+	builder.WriteString("- 同一事件的共同事实只完整表述一次；不要因为事件相同就丢弃其他来源独有的数字、背景、观点、质疑或后续进展。\n")
+	builder.WriteString("- 当多个来源报道同一事件时，用“共同事实 + 来源差异”的方式组织；只有确实没有新信息的纯转载才可以忽略。\n")
 	builder.WriteString("- 先判断内容类型：新闻写背景/影响/后续关注；长文写论点/证据/漏洞；论坛写观点阵营/共识/分歧/经验；工具资源写用途/适用人群/限制。\n")
 	builder.WriteString("- 优先写真正新增、多源确认、讨论升温、论证质量高、经验密度高或影响较大的信息；信息不足或重复度高的条目可以忽略。\n")
 	builder.WriteString("- 不要把所有主题写成同等重要；真正重要的主题放在前面，次要信息可以压缩。\n")
 	builder.WriteString("- 内容类型只作为内部判断：news_event / essay_argument / forum_discussion / resource_tool / mixed；不要机械输出成分类清单。\n")
 	builder.WriteString("- 正文中可以少量使用 [Axx] 作为原文引用；这些编号会在阅读器里变成可点击文章链接。\n")
 	builder.WriteString("- 不要每一句都塞入 [Axx] 编号；只有关键判断、争议点、深读推荐需要定位原文时才引用编号。\n")
-	builder.WriteString("- 保持中等信息密度：不要一句话带过重点；重要条目要补充关键数字、因果关系、市场/技术/用户影响或后续观察点。\n")
+	builder.WriteString("- 保持中高信息密度：不要一句话带过重点；重要条目要补充关键数字、参与者、因果关系、市场/技术/用户影响或后续观察点。\n")
+	builder.WriteString("- 输入达到 10 条以上时，通常应覆盖 4-8 个真正有独立价值的事件或论点；不要因为追求简短而漏掉明显重要的信息。\n")
 	builder.WriteString("- 段落必须短。一个自然段最多 4 行；优先使用 bullet；避免 5 句以上的大段文字。\n")
 	builder.WriteString("- 每个 bullet 只表达一个主判断，但可以补充 1-2 个支撑细节。不要把多个不相关事件塞进同一句。\n")
 	builder.WriteString("- 同一核心事实只能完整表述一次；“优先阅读”只给推荐理由，“主要判断”才展开事实与推理。\n")
 	builder.WriteString("- “继续关注”只能写前文没有解释过的独立不确定性，不得重复主题背景。\n")
-	builder.WriteString("- 宁可少写，也不要为了凑满 section 数量而重复已有信息。\n")
+	builder.WriteString("- 信息不足时可以少写，但不能用过度压缩代替判断；删除的是重复和噪音，不是关键细节。\n")
 	builder.WriteString("- 只有需要读者定位原文的具体事实、关键判断或“优先阅读”条目才使用 [Axx] 引用。每个 bullet 最多一个引用；多源佐证时选择最直接的一篇，不要堆叠引用。\n")
 	builder.WriteString("- 不要输出裸 URL、Markdown 外链或“原文”链接；阅读器会把 [Axx] 自动变成可点击的原文章入口。\n\n")
 	builder.WriteString("信息条目：\n")
@@ -1046,12 +1034,17 @@ func briefingSnippet(item feedItem) string {
 	if item.Summary != nil {
 		raw = *item.Summary
 	}
+	if strings.TrimSpace(raw) == "" && item.Content != nil {
+		raw = *item.Content
+	}
 	text := textclean.NormalizeFromHTML(raw)
 	if text == "" {
 		return "无摘要"
 	}
-	if len(text) > 220 {
-		return text[:220] + "..."
+	const maxSnippetRunes = 320
+	runes := []rune(text)
+	if len(runes) > maxSnippetRunes {
+		return string(runes[:maxSnippetRunes]) + "..."
 	}
 	return text
 }
