@@ -169,6 +169,9 @@ EnvironmentFile=/opt/quick/.env
 ExecStart=/opt/quick/bin/quick-server
 Restart=always
 RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -188,6 +191,7 @@ sudo systemctl status quick-api --no-pager
 
 ```bash
 curl -sS http://127.0.0.1:8080/healthz
+curl -sS http://127.0.0.1:8080/readyz
 ```
 
 ---
@@ -222,6 +226,10 @@ urwhaturead.com {
     }
 
     handle /healthz {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+    handle /readyz {
         reverse_proxy 127.0.0.1:8080
     }
 
@@ -280,12 +288,13 @@ sudo ufw status
 按顺序检查：
 
 1. `curl http://127.0.0.1:8080/healthz` 返回 `{"status":"ok"}`
-2. `docker compose ps` 里 `postgres` 是 `healthy`
-3. 打开 `https://你的域名` 能看到前端页面
+2. `curl http://127.0.0.1:8080/readyz` 返回 `{"status":"ready"}`
+3. `docker compose ps` 里 `postgres` 是 `healthy`
+4. 打开 `https://你的域名` 能看到前端页面
    （你的应为 `https://urwhaturead.com`）
-4. 前端可正常加载来源与 feed
-5. 管理写操作在未带 token 时被拒绝，带 token 时成功
-6. 页面右上角可用“管理员登录”按钮登录（使用 `ADMIN_USERNAME/ADMIN_PASSWORD`）
+5. 前端可正常加载来源与 feed
+6. 管理写操作在未带 token 时被拒绝，带 token 时成功
+7. 页面右上角可用“管理员登录”按钮登录（使用 `ADMIN_USERNAME/ADMIN_PASSWORD`）
 
 ---
 

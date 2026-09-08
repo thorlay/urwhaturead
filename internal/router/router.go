@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -32,6 +33,16 @@ func New(
 
 	engine.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	engine.GET("/readyz", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
+		defer cancel()
+		sqlDB, err := db.DB()
+		if err != nil || sqlDB.PingContext(ctx) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	})
 
 	api := engine.Group("/api/v1")

@@ -11,7 +11,9 @@ EnvironmentFile=/opt/quick/.env
 ExecStart=/opt/quick/bin/quick-server
 Restart=always
 RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
-

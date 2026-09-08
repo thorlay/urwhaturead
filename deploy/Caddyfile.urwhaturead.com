@@ -9,10 +9,13 @@ urwhaturead.com {
         reverse_proxy 127.0.0.1:8080
     }
 
+    handle /readyz {
+        reverse_proxy 127.0.0.1:8080
+    }
+
     handle {
         root * /opt/quick/frontend/dist
         try_files {path} /index.html
         file_server
     }
 }
-
