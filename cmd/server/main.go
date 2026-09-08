@@ -101,6 +101,7 @@ func main() {
 	go briefingScheduler.Start(ctx)
 
 	articleOptions := handlers.ArticleHandlerOptions{
+		RSSHubBaseURL:             cfg.RSSHubBaseURL,
 		ExternalFetchEnabled:      cfg.ExternalFetchEnabled,
 		ExternalFetchEnabledSet:   true,
 		ExternalFetchAllowedHosts: cfg.ExternalFetchAllowedHosts,

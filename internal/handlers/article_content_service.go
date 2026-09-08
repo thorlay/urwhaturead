@@ -77,6 +77,8 @@ type forumThreadTarget struct {
 }
 
 type ArticleContentService struct {
+	rssHubBaseURL    string
+	threadFailures   map[string]time.Time
 	httpClient       *http.Client
 	redditHTTPClient *http.Client
 	parser           *gofeed.Parser
@@ -129,6 +131,8 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 	}
 
 	return &ArticleContentService{
+		rssHubBaseURL:        strings.TrimRight(strings.TrimSpace(options.RSSHubBaseURL), "/"),
+		threadFailures:       make(map[string]time.Time),
 		httpClient:           newHandlerHTTPClient(12*time.Second, false),
 		redditHTTPClient:     newHandlerHTTPClient(12*time.Second, true),
 		parser:               gofeed.NewParser(),
@@ -155,13 +159,30 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 		return nil, false
 	}
 
+	if _, topicURL, isV2EX := v2exTopicRSSURLs(topicLink); isV2EX && s.rssHubBaseURL != "" {
+		target.FeedURLs = []string{s.rssHubBaseURL + "/v2ex/post/" + strings.TrimPrefix(topicURL, "https://www.v2ex.com/t/")}
+	}
 	for _, feedURL := range target.FeedURLs {
 		if cached, ok := s.getCachedThread(feedURL, time.Now().UTC()); ok {
 			return &cached, true
 		}
 
+		s.cacheMu.Lock()
+		retryAt := s.threadFailures[feedURL]
+		if !time.Now().Before(retryAt) {
+			delete(s.threadFailures, feedURL)
+		}
+		s.cacheMu.Unlock()
+		if time.Now().Before(retryAt) {
+			continue
+		}
 		thread, err := s.fetchThreadFromFeedURL(ctx, target, feedURL)
 		if err != nil {
+			if ctx.Err() == nil {
+				s.cacheMu.Lock()
+				s.threadFailures[feedURL] = time.Now().Add(time.Minute)
+				s.cacheMu.Unlock()
+			}
 			continue
 		}
 

@@ -182,8 +182,16 @@ export async function listFeed(params: {
   return request<FeedResponse>(`/api/v1/feed?${query.toString()}`)
 }
 
-export async function getArticle(articleID: number): Promise<ArticleDetail> {
-  return request<ArticleDetail>(`/api/v1/articles/${articleID}`)
+export async function getArticle(articleID: number, onInitial?: (article: ArticleDetail) => void): Promise<ArticleDetail> {
+  if (!onInitial) return request<ArticleDetail>(`/api/v1/articles/${articleID}`)
+  const article = await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=0`)
+  onInitial(article)
+  try {
+    return await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=1`)
+  } catch {
+    // Optional enrichment must not hide an already readable article.
+    return article
+  }
 }
 
 export async function summarizeArticle(

@@ -37,6 +37,7 @@ export function useAILibrarySection({
   const [readerArticleLoading, setReaderArticleLoading] = useState(false)
   const [readerArticleError, setReaderArticleError] = useState<string | null>(null)
   const aiTabActiveRef = useRef(false)
+  const articleRequestSeq = useRef(0)
 
   const describeAILibraryLoadError = useCallback((scope: 'article' | 'briefing', error: unknown) => {
     const message = toErrorMessage(error)
@@ -111,24 +112,32 @@ export function useAILibrarySection({
 
   const openArticleSummary = useCallback(
     async (articleID: number) => {
+      const requestID = ++articleRequestSeq.current
       try {
         setReaderArticleLoading(true)
         setReaderArticleError(null)
         setReaderArticle(null)
-        const article = await getArticle(articleID)
+        const article = await getArticle(articleID, (initial) => {
+          if (requestID !== articleRequestSeq.current) return
+          setReaderArticle(initial)
+          setReaderArticleLoading(false)
+        })
+        if (requestID !== articleRequestSeq.current) return
         setReaderArticle(article)
       } catch (err) {
+        if (requestID !== articleRequestSeq.current) return
         const message = toErrorMessage(err)
         setReaderArticleError(`文章加载失败: ${message}`)
         setNotice({ kind: 'error', text: `文章加载失败: ${message}` })
       } finally {
-        setReaderArticleLoading(false)
+        if (requestID === articleRequestSeq.current) setReaderArticleLoading(false)
       }
     },
     [setNotice],
   )
 
   const closeArticleReader = useCallback(() => {
+    articleRequestSeq.current++
     setReaderArticle(null)
     setReaderArticleError(null)
     setReaderArticleLoading(false)

@@ -115,15 +115,19 @@ export function useReaderArticleActions({
           floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
         }
 
-        const detail = await getArticle(articleID)
+        const detail = await getArticle(articleID, (initial) => {
+          if (articleRequestID !== articleRequestSeqRef.current) return
+          setSelectedArticle(initial)
+          setLoadingArticle(false)
+          startReaderSession(articleID, resolveReadDwellThresholdMs(initial))
+          void loadCachedSummary(articleID, aiModel, summaryRequestID)
+        })
         if (articleRequestID !== articleRequestSeqRef.current) {
           return
         }
         setSelectedArticle(detail)
         setExpandedThreadComments(isTrackableForumLink(detail.link))
         setThreadCommentsNewestFirst(normalizeSourceKind(sourceByID.get(detail.source_id)?.kind) === 'thread')
-        startReaderSession(articleID, resolveReadDwellThresholdMs(detail))
-        void loadCachedSummary(articleID, aiModel, summaryRequestID)
       } catch (error) {
         if (articleRequestID !== articleRequestSeqRef.current) {
           return

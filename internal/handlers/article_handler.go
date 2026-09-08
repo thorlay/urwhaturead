@@ -31,6 +31,7 @@ type ArticleHandler struct {
 }
 
 type ArticleHandlerOptions struct {
+	RSSHubBaseURL             string
 	ExternalFetchEnabled      bool
 	ExternalFetchEnabledSet   bool
 	ExternalFetchAllowedHosts []string
@@ -166,13 +167,15 @@ func (h *ArticleHandler) Get(c *gin.Context) {
 		return
 	}
 
-	article, err := h.loadArticleDetail(c.Request.Context(), id)
+	article, err := h.loadArticleDetailMode(c.Request.Context(), id, c.Query("enrich") != "0")
 	if err != nil {
 		h.handleLoadArticleError(c, err)
 		return
 	}
-	if bumpErr := h.bumpSourceClick(c.Request.Context(), article.SourceID); bumpErr != nil {
-		log.Printf("bump source click failed source_id=%d err=%v", article.SourceID, bumpErr)
+	if c.Query("enrich") != "1" {
+		if bumpErr := h.bumpSourceClick(c.Request.Context(), article.SourceID); bumpErr != nil {
+			log.Printf("bump source click failed source_id=%d err=%v", article.SourceID, bumpErr)
+		}
 	}
 
 	c.JSON(http.StatusOK, article)
@@ -474,6 +477,10 @@ func (h *ArticleHandler) GetSummaryStatus(c *gin.Context) {
 }
 
 func (h *ArticleHandler) loadArticleDetail(ctx context.Context, id uint64) (articleDetail, error) {
+	return h.loadArticleDetailMode(ctx, id, true)
+}
+
+func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, enrich bool) (articleDetail, error) {
 	var article articleDetail
 	err := h.db.
 		WithContext(ctx).
@@ -512,6 +519,10 @@ func (h *ArticleHandler) loadArticleDetail(ctx context.Context, id uint64) (arti
 		}
 	}
 
+	if !enrich {
+		sanitizeArticleForOutput(&article)
+		return article, nil
+	}
 	if thread, ok := h.contentSvc.fetchThreadForTopic(ctx, article.Link); ok {
 		article.Thread = thread
 	}
