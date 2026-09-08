@@ -185,6 +185,19 @@ function sourceFailureSummary(source: Source, status?: SourceStatus): string {
   return '近期抓取正常'
 }
 
+function sourceNextFetchLabel(source: Source, status?: SourceStatus): string | null {
+  if (!source.enabled || !status?.next_due_at) return null
+
+  const remainingMS = Date.parse(status.next_due_at) - Date.now()
+  if (!Number.isFinite(remainingMS) || remainingMS <= 0) return '等待调度'
+
+  const remainingMinutes = Math.ceil(remainingMS / 60_000)
+  const action = status.consecutive_failures > 0 ? '重试' : '抓取'
+  if (remainingMinutes < 60) return `约 ${remainingMinutes} 分钟后${action}`
+
+  return `约 ${Math.ceil(remainingMinutes / 60)} 小时后${action}`
+}
+
 function SourceHealthState({
   source,
   status,
@@ -1090,6 +1103,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     (typeof status?.latest_http_status === 'number' && status.latest_http_status >= 400) ||
                     Boolean(status?.last_error)
                   const hasFetchWarning = !hasFetchError && (health === 'warn' || health === 'stale')
+                  const nextFetchLabel = sourceNextFetchLabel(source, status)
                   return (
                     <tr
                       key={source.id}
@@ -1158,6 +1172,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                             <span>{status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '尚未抓取'}</span>
                             <small>每 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</small>
                             {hasFetchError && <small className="is-failure">失败 {status?.consecutive_failures ?? 0} 次</small>}
+                            {hasFetchError && nextFetchLabel && <small>{nextFetchLabel}</small>}
                           </div>
                         )}
                       </td>
@@ -1204,6 +1219,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
             const isEditing = editingSourceID === source.id
             const hasFetchError = health === 'error' || (status?.latest_http_status ?? 0) >= 400 || Boolean(status?.last_error)
             const hasFetchWarning = !hasFetchError && (health === 'warn' || health === 'stale')
+            const nextFetchLabel = sourceNextFetchLabel(source, status)
             return (
               <article key={source.id} className={cn('source-mobile-card', hasFetchError && 'source-row-error', hasFetchWarning && 'source-row-warning')}>
                 <div className="source-mobile-card-head">
@@ -1232,6 +1248,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     <span><strong>{source.new_articles_24h ?? 0}</strong> 24h 新增</span>
                     <span>最近抓取 {status?.latest_fetched_at ? formatTimeAgo(status.latest_fetched_at) : '未开始'}</span>
                     <span>每 {status?.effective_poll_interval_sec ?? source.poll_interval_sec}s</span>
+                    {hasFetchError && nextFetchLabel && <span>{nextFetchLabel}</span>}
                   </div>
                   <div className="source-mobile-meta-row">
                     <div className="source-tag-list">
