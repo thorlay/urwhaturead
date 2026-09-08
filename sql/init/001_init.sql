@@ -108,6 +108,9 @@ ON articles(source_id, raw_guid) WHERE raw_guid IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_articles_source_link
 ON articles(source_id, link);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_articles_source_content_hash
+ON articles(source_id, content_hash);
+
 CREATE INDEX IF NOT EXISTS ix_articles_published_at
 ON articles(published_at DESC);
 

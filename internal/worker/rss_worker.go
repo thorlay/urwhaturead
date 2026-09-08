@@ -26,6 +26,7 @@ import (
 	"github.com/mmcdole/gofeed"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -961,62 +962,15 @@ func firstNonEmpty(values ...string) string {
 
 func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article) (bool, error) {
 	tx := w.db.WithContext(ctx)
-
-	if article.RawGUID != nil {
-		var count int64
-		if err := tx.Model(&models.Article{}).
-			Where("source_id = ? AND raw_guid = ?", article.SourceID, *article.RawGUID).
-			Count(&count).Error; err != nil {
+	result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&article)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		if err := w.updateExistingArticleReplyCount(ctx, article); err != nil {
 			return false, err
 		}
-		if count > 0 {
-			if err := w.updateExistingArticleReplyCount(ctx, article); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-	}
-
-	{
-		var count int64
-		if err := tx.Model(&models.Article{}).
-			Where("source_id = ? AND link = ?", article.SourceID, article.Link).
-			Count(&count).Error; err != nil {
-			return false, err
-		}
-		if count > 0 {
-			if err := w.updateExistingArticleReplyCount(ctx, article); err != nil {
-				return false, err
-			}
-			return false, nil
-		}
-	}
-
-	{
-		var count int64
-		if err := tx.Model(&models.Article{}).
-			Where("source_id = ? AND content_hash = ?", article.SourceID, article.ContentHash).
-			Count(&count).Error; err != nil {
-			return false, err
-		}
-		if count > 0 {
-			return false, nil
-		}
-	}
-
-	if err := tx.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&article).Error; err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "duplicate key value violates unique constraint") {
-				return gorm.ErrDuplicatedKey
-			}
-			return err
-		}
-		return nil
-	}); err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return false, nil
-		}
-		return false, err
+		return false, nil
 	}
 	if !w.enqueueArticleClustering(article.ID) {
 		log.Printf("article relation queue deferred article_id=%d", article.ID)
@@ -1029,9 +983,15 @@ func (w *RSSWorker) updateExistingArticleReplyCount(ctx context.Context, article
 	if article.ReplyCount == nil {
 		return nil
 	}
-	return w.db.WithContext(ctx).
+	query := w.db.WithContext(ctx).
 		Model(&models.Article{}).
-		Where("source_id = ? AND link = ?", article.SourceID, article.Link).
+		Where("source_id = ?", article.SourceID)
+	if article.RawGUID != nil {
+		query = query.Where("raw_guid = ? OR link = ? OR content_hash = ?", *article.RawGUID, article.Link, article.ContentHash)
+	} else {
+		query = query.Where("link = ? OR content_hash = ?", article.Link, article.ContentHash)
+	}
+	return query.
 		Where("reply_count IS NULL OR reply_count <> ?", *article.ReplyCount).
 		Update("reply_count", *article.ReplyCount).Error
 }

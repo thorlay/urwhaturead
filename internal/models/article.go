@@ -8,7 +8,7 @@ import (
 
 type Article struct {
 	ID              uint64         `json:"id" gorm:"primaryKey;column:id"`
-	SourceID        uint64         `json:"source_id" gorm:"column:source_id;not null"`
+	SourceID        uint64         `json:"source_id" gorm:"column:source_id;not null;uniqueIndex:ux_articles_source_content_hash"`
 	ClusterID       *uint64        `json:"cluster_id,omitempty" gorm:"column:cluster_id;index"`
 	RawGUID         *string        `json:"raw_guid,omitempty" gorm:"column:raw_guid"`
 	Link            string         `json:"link" gorm:"column:link;not null"`
@@ -22,7 +22,7 @@ type Article struct {
 	ImageURL        *string        `json:"image_url,omitempty" gorm:"column:image_url"`
 	ReplyCount      *int           `json:"reply_count,omitempty" gorm:"column:reply_count"`
 	Tags            StringArray    `json:"tags,omitempty" gorm:"column:tags;type:text[]"`
-	ContentHash     string         `json:"content_hash" gorm:"column:content_hash;not null"`
+	ContentHash     string         `json:"content_hash" gorm:"column:content_hash;not null;uniqueIndex:ux_articles_source_content_hash"`
 	Raw             datatypes.JSON `json:"raw,omitempty" gorm:"column:raw;type:jsonb"`
 	CreatedAt       time.Time      `json:"created_at" gorm:"column:created_at;not null"`
 }
