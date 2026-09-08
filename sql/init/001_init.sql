@@ -71,6 +71,31 @@ CREATE TABLE IF NOT EXISTS article_enrichments (
 CREATE INDEX IF NOT EXISTS ix_article_enrichments_fetched_at
 ON article_enrichments(fetched_at DESC);
 
+CREATE TABLE IF NOT EXISTS ai_tasks (
+  id BIGSERIAL PRIMARY KEY,
+  task_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  resource_id BIGINT NOT NULL,
+  model TEXT NOT NULL DEFAULT '',
+  refresh BOOLEAN NOT NULL DEFAULT FALSE,
+  status TEXT NOT NULL,
+  error TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ai_tasks_task_key
+ON ai_tasks(task_key);
+
+CREATE INDEX IF NOT EXISTS ix_ai_tasks_kind_status
+ON ai_tasks(kind, status);
+
+CREATE INDEX IF NOT EXISTS ix_ai_tasks_resource_id
+ON ai_tasks(resource_id);
+
+CREATE INDEX IF NOT EXISTS ix_ai_tasks_updated_at
+ON ai_tasks(updated_at);
+
 CREATE TABLE IF NOT EXISTS event_clusters (
   id BIGSERIAL PRIMARY KEY,
   canonical_link TEXT NOT NULL DEFAULT '',

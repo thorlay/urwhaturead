@@ -13,12 +13,16 @@ import (
 	"quick/internal/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
 	asyncConcurrency = 2
 	asyncTimeout     = 2 * time.Minute
 	taskStateTTL     = 15 * time.Minute
+	taskRecoveryAge  = 7 * 24 * time.Hour
+	taskRecoveryMax  = 100
+	articleTaskKind  = "article_summary"
 )
 
 const (
@@ -75,7 +79,7 @@ type Service struct {
 }
 
 func NewService(db *gorm.DB, summarizer *aisummary.Client, loadInput Loader) *Service {
-	return &Service{
+	service := &Service{
 		db:         db,
 		summarizer: summarizer,
 		loadInput:  loadInput,
@@ -83,6 +87,10 @@ func NewService(db *gorm.DB, summarizer *aisummary.Client, loadInput Loader) *Se
 		inFlight:   make(map[string]struct{}),
 		sem:        make(chan struct{}, asyncConcurrency),
 	}
+	if service.IsConfigured() {
+		go service.resumePendingTasks()
+	}
+	return service
 }
 
 func (s *Service) IsConfigured() bool {
@@ -116,6 +124,16 @@ func (s *Service) EnqueueTask(articleID uint64, requestedModel string, refresh b
 	s.inFlight[key] = struct{}{}
 	s.tasks[key] = state
 	s.taskMu.Unlock()
+	if err := s.persistTask(key, articleID, requestedModel, refresh, state); err != nil {
+		s.taskMu.Lock()
+		delete(s.inFlight, key)
+		state.Status = StatusFailed
+		state.Error = "save task state failed: " + err.Error()
+		state.UpdatedAt = time.Now().UTC()
+		s.tasks[key] = state
+		s.taskMu.Unlock()
+		return toTaskPayload(articleID, requestedModel, state)
+	}
 
 	go s.runTask(key, articleID, requestedModel, refresh)
 	return toTaskPayload(articleID, requestedModel, state)
@@ -216,21 +234,29 @@ func (s *Service) GenerateAndSave(
 	}, "", nil
 }
 
-func (s *Service) GetTaskState(articleID uint64, requestedModel string) TaskState {
+func (s *Service) GetTaskState(ctx context.Context, articleID uint64, requestedModel string) TaskState {
 	now := time.Now().UTC()
 	key := taskKey(articleID, requestedModel)
 	s.taskMu.Lock()
-	defer s.taskMu.Unlock()
-
 	s.pruneTaskStateLocked(now)
 	state, ok := s.tasks[key]
-	if !ok {
-		return TaskState{
-			Status:    StatusIdle,
-			UpdatedAt: now,
+	s.taskMu.Unlock()
+	if ok {
+		return state
+	}
+
+	if s.db != nil {
+		var task models.AITask
+		result := s.db.WithContext(ctx).Where("task_key = ?", key).Limit(1).Find(&task)
+		if result.Error == nil && result.RowsAffected > 0 {
+			return TaskState{
+				Status:    task.Status,
+				Error:     task.Error,
+				UpdatedAt: task.UpdatedAt,
+			}
 		}
 	}
-	return state
+	return TaskState{Status: StatusIdle, UpdatedAt: now}
 }
 
 func (s *Service) GetCachedPayload(ctx context.Context, articleID uint64, requestedModel string) (SummaryPayload, bool, error) {
@@ -267,14 +293,74 @@ func (s *Service) GetCachedPayload(ctx context.Context, articleID uint64, reques
 
 func (s *Service) setTaskState(key string, status string, taskError string) {
 	now := time.Now().UTC()
+	taskError = strings.TrimSpace(taskError)
 	s.taskMu.Lock()
 	s.pruneTaskStateLocked(now)
 	s.tasks[key] = TaskState{
 		Status:    status,
-		Error:     strings.TrimSpace(taskError),
+		Error:     taskError,
 		UpdatedAt: now,
 	}
 	s.taskMu.Unlock()
+
+	if s.db != nil {
+		if err := s.db.Model(&models.AITask{}).
+			Where("task_key = ?", key).
+			Updates(map[string]any{
+				"status":     status,
+				"error":      taskError,
+				"updated_at": now,
+			}).Error; err != nil {
+			log.Printf("persist summary task state key=%s status=%s: %v", key, status, err)
+		}
+	}
+}
+
+func (s *Service) persistTask(key string, articleID uint64, requestedModel string, refresh bool, state TaskState) error {
+	task := models.AITask{
+		TaskKey:    key,
+		Kind:       articleTaskKind,
+		ResourceID: articleID,
+		Model:      strings.TrimSpace(requestedModel),
+		Refresh:    refresh,
+		Status:     state.Status,
+		Error:      state.Error,
+		CreatedAt:  state.UpdatedAt,
+		UpdatedAt:  state.UpdatedAt,
+	}
+	return s.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "task_key"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"kind", "resource_id", "model", "refresh", "status", "error", "updated_at",
+		}),
+	}).Create(&task).Error
+}
+
+func (s *Service) resumePendingTasks() {
+	var tasks []models.AITask
+	if err := s.db.
+		Where("kind = ? AND status IN ? AND updated_at >= ?", articleTaskKind, []string{StatusQueued, StatusRunning}, time.Now().UTC().Add(-taskRecoveryAge)).
+		Order("updated_at ASC").
+		Limit(taskRecoveryMax).
+		Find(&tasks).Error; err != nil {
+		log.Printf("load pending summary tasks: %v", err)
+		return
+	}
+
+	for _, task := range tasks {
+		s.taskMu.Lock()
+		if _, running := s.inFlight[task.TaskKey]; running {
+			s.taskMu.Unlock()
+			continue
+		}
+		s.inFlight[task.TaskKey] = struct{}{}
+		s.tasks[task.TaskKey] = TaskState{
+			Status:    StatusQueued,
+			UpdatedAt: time.Now().UTC(),
+		}
+		s.taskMu.Unlock()
+		go s.runTask(task.TaskKey, task.ResourceID, task.Model, task.Refresh)
+	}
 }
 
 func (s *Service) pruneTaskStateLocked(now time.Time) {

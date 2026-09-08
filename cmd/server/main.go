@@ -42,6 +42,7 @@ func main() {
 		&models.Article{},
 		&models.ArticleEnrichment{},
 		&models.ArticleSummary{},
+		&models.AITask{},
 		&models.FeedBriefing{},
 		&models.FeedBriefingArticle{},
 		&models.SourceFetchLog{},

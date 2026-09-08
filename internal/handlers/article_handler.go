@@ -497,8 +497,21 @@ func (h *ArticleHandler) GetSummaryStatus(c *gin.Context) {
 		return
 	}
 	requestedModel := strings.TrimSpace(c.Query("model"))
+	state := h.getSummaryTaskState(c.Request.Context(), id, requestedModel)
+	if state.Status == articlesummary.StatusQueued || state.Status == articlesummary.StatusRunning {
+		c.JSON(http.StatusOK, gin.H{
+			"data": articleSummaryTaskPayload{
+				ArticleID: id,
+				Model:     requestedModel,
+				Status:    state.Status,
+				Error:     state.Error,
+				UpdatedAt: state.UpdatedAt,
+			},
+		})
+		return
+	}
 
-	if payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id, requestedModel); err == nil && found {
+	if payload, found, err := h.getCachedSummaryPayload(c.Request.Context(), id, requestedModel); err == nil && found && (state.Status != articlesummary.StatusFailed || !payload.GeneratedAt.Before(state.UpdatedAt)) {
 		c.JSON(http.StatusOK, gin.H{
 			"data": articleSummaryTaskPayload{
 				ArticleID: payload.ArticleID,
@@ -512,8 +525,19 @@ func (h *ArticleHandler) GetSummaryStatus(c *gin.Context) {
 		internalServerError(c, "query summary cache failed", err)
 		return
 	}
+	if state.Status == articlesummary.StatusFailed {
+		c.JSON(http.StatusOK, gin.H{
+			"data": articleSummaryTaskPayload{
+				ArticleID: id,
+				Model:     requestedModel,
+				Status:    state.Status,
+				Error:     state.Error,
+				UpdatedAt: state.UpdatedAt,
+			},
+		})
+		return
+	}
 
-	state := h.getSummaryTaskState(id, requestedModel)
 	c.JSON(http.StatusOK, gin.H{
 		"data": articleSummaryTaskPayload{
 			ArticleID: id,
@@ -851,7 +875,7 @@ func (h *ArticleHandler) generateAndSaveSummary(
 	return toArticleSummaryPayload(payload), "", nil
 }
 
-func (h *ArticleHandler) getSummaryTaskState(articleID uint64, requestedModel string) articlesummary.TaskState {
+func (h *ArticleHandler) getSummaryTaskState(ctx context.Context, articleID uint64, requestedModel string) articlesummary.TaskState {
 	if h.summarySvc == nil {
 		return articlesummary.TaskState{
 			Status:    articlesummary.StatusFailed,
@@ -859,7 +883,7 @@ func (h *ArticleHandler) getSummaryTaskState(articleID uint64, requestedModel st
 			UpdatedAt: time.Now().UTC(),
 		}
 	}
-	return h.summarySvc.GetTaskState(articleID, requestedModel)
+	return h.summarySvc.GetTaskState(ctx, articleID, requestedModel)
 }
 
 func (h *ArticleHandler) getCachedSummaryPayload(ctx context.Context, articleID uint64, requestedModel string) (articleSummaryPayload, bool, error) {
