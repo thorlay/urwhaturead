@@ -271,7 +271,9 @@ func (w *RSSWorker) runOnce(ctx context.Context) {
 	if err := w.db.WithContext(ctx).
 		Where("enabled = ?", true).
 		Find(&sources).Error; err != nil {
-		log.Printf("worker query sources failed: %v", err)
+		if ctx.Err() == nil {
+			log.Printf("worker query sources failed: %v", err)
+		}
 		return
 	}
 
@@ -324,6 +326,9 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 		ItemCount: 0,
 	}
 	defer func() {
+		if ctx.Err() != nil {
+			return
+		}
 		duration := int(time.Since(startedAt).Milliseconds())
 		fetchLog.DurationMS = &duration
 		if err := w.db.WithContext(ctx).Create(fetchLog).Error; err != nil {
@@ -333,6 +338,9 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 
 	result, err := w.fetchWithRetry(ctx, source)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		message := err.Error()
 		fetchLog.ErrorMessage = &message
 
@@ -342,11 +350,11 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 				statusCode := ferr.StatusCode
 				fetchLog.HTTPStatus = &statusCode
 			}
-			if markErr := w.markSourceFailure(ctx, source.ID, time.Now(), ferr.ETag, ferr.LastModified, message); markErr != nil {
+			if markErr := w.markSourceFailure(ctx, source.ID, time.Now(), ferr.ETag, ferr.LastModified, message); markErr != nil && ctx.Err() == nil {
 				log.Printf("mark source failure failed for source=%d: %v", source.ID, markErr)
 			}
 		} else {
-			if markErr := w.markSourceFailure(ctx, source.ID, time.Now(), nil, nil, message); markErr != nil {
+			if markErr := w.markSourceFailure(ctx, source.ID, time.Now(), nil, nil, message); markErr != nil && ctx.Err() == nil {
 				log.Printf("mark source failure failed for source=%d: %v", source.ID, markErr)
 			}
 		}
