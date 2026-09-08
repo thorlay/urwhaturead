@@ -41,6 +41,8 @@
 
 路由组装：`internal/router/router.go`
 
+所有响应都会附带 `Server-Timing: app;dur=...`，表示后端写出首字节前的应用处理耗时。可用浏览器 Network 面板区分后端耗时与 DNS、TLS、CDN/代理耗时。
+
 - 健康检查：`GET /healthz`
 - 公共读接口（默认无需 token）
   - `GET /api/v1/feed`
