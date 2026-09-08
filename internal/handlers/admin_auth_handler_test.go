@@ -12,7 +12,6 @@ import (
 )
 
 func TestAdminAuthLoginAndSession(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -72,7 +71,6 @@ func TestAdminAuthLoginAndSession(t *testing.T) {
 }
 
 func TestAdminAuthLoginInvalidCredentials(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -96,7 +94,6 @@ func TestAdminAuthLoginInvalidCredentials(t *testing.T) {
 }
 
 func TestAdminAuthLoginNotConfigured(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -120,7 +117,6 @@ func TestAdminAuthLoginNotConfigured(t *testing.T) {
 }
 
 func TestAdminAuthLogoutClearsCookie(t *testing.T) {
-	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
