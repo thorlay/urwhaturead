@@ -100,6 +100,9 @@ ON articles(source_id, link);
 CREATE INDEX IF NOT EXISTS ix_articles_published_at
 ON articles(published_at DESC);
 
+CREATE INDEX IF NOT EXISTS ix_articles_created_at
+ON articles(created_at DESC);
+
 CREATE INDEX IF NOT EXISTS ix_articles_feed_sort
 ON articles((COALESCE(published_at, created_at)) DESC, id DESC);
 

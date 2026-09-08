@@ -2406,6 +2406,55 @@
   min-width: 0;
 }
 
+.feed-catch-up {
+  min-height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 1rem;
+  padding: 0.34rem 0;
+  border-top: 1px solid var(--border-faint);
+  border-bottom: 1px solid var(--border-faint);
+  color: var(--muted);
+}
+
+.feed-catch-up.is-error {
+  color: var(--accent-ink);
+}
+
+.feed-catch-up-status,
+.feed-catch-up-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.feed-catch-up-status {
+  font-size: var(--meta-size);
+}
+
+.feed-catch-up-status > svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+}
+
+.feed-catch-up-status small {
+  padding-left: 0.42rem;
+  border-left: 1px solid var(--line);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.feed-catch-up-actions {
+  flex: 0 0 auto;
+}
+
+.feed-catch-up-actions [data-slot='button'] {
+  height: 1.8rem;
+}
+
 .feed-ai-actions {
   display: flex;
   gap: 0.38rem;
@@ -4695,6 +4744,24 @@ button[data-slot='button'] svg,
 }
 
 @media (max-width: 700px) {
+  .feed-catch-up {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding-block: 0.42rem;
+  }
+
+  .feed-catch-up-status {
+    min-height: 1.8rem;
+  }
+
+  .feed-catch-up-actions {
+    width: 100%;
+  }
+
+  .feed-catch-up-actions [data-slot='button']:not([aria-label='重新检查补课内容']) {
+    flex: 1 1 auto;
+  }
+
   .app-shell {
     padding: 0.54rem;
     padding-top: max(0.54rem, env(safe-area-inset-top));

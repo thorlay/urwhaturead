@@ -169,6 +169,7 @@ export async function listFeed(params: {
   tag?: string
   sourceID?: string
   keyword?: string
+  since?: string
   includeHidden?: boolean
 }): Promise<FeedResponse> {
   const query = new URLSearchParams()
@@ -177,6 +178,7 @@ export async function listFeed(params: {
   if (params.tag) query.set('tag', params.tag)
   if (params.sourceID) query.set('source_ids', params.sourceID)
   if (params.keyword) query.set('q', params.keyword)
+  if (params.since) query.set('since', params.since)
   if (params.includeHidden) query.set('include_hidden', '1')
 
   return request<FeedResponse>(`/api/v1/feed?${query.toString()}`)

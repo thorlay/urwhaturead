@@ -167,6 +167,7 @@
 - 显式传入 `dedupe=1` 时才按 cluster 折叠为代表文章。
 - 支持 cursor 分页（`sort_time + id` 编码）。
 - 支持 `tag/source_ids/q/include_hidden` 过滤。
+- 可传 `since=<RFC3339>` 按文章入库时间查询检查点后的内容，并返回 `meta.total_count`；该计数只在补课请求中执行，不增加普通首屏查询成本。
 - 返回前会做文本清洗、图片/回复数补全。
 
 ### 5.4 文章详情增强
@@ -211,6 +212,8 @@
 
 定时来源速览由 `FeedBriefingScheduler` 执行。可通过 `AUTO_AI_BRIEFING_TIMEZONE` 和
 `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` 禁止后台任务在高价时段运行；到期任务不会丢失，而是在下一个允许时段继续执行。该限制不影响用户手动触发的文章摘要或聚合速览。
+
+阅读流的补课模式在浏览器本地保存最近处理检查点。首次使用默认回看 24 小时，检查新增时调用 `GET /api/v1/feed?since=...`，生成补课速览时复用现有 briefing API 和 AI 任务队列，并选取最新 30 篇作为输入。
 
 ## 6. 数据模型速查
 

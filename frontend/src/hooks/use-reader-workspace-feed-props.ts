@@ -45,7 +45,14 @@ type UseReaderWorkspaceFeedPropsParams = {
   feedBriefingNewArticleCount: FeedProps['feedBriefingNewArticleCount']
   feedBriefingArticleCount: FeedProps['feedBriefingArticleCount']
   feedBriefingItems: FeedProps['feedBriefingItems']
+  catchUpCheckpoint: FeedProps['catchUpCheckpoint']
+  catchUpCount: FeedProps['catchUpCount']
+  catchUpLoading: FeedProps['catchUpLoading']
+  catchUpError: FeedProps['catchUpError']
   onGenerateFeedBriefing: FeedProps['onGenerateFeedBriefing']
+  onRefreshCatchUp: FeedProps['onRefreshCatchUp']
+  onGenerateCatchUpBriefing: FeedProps['onGenerateCatchUpBriefing']
+  onMarkCaughtUp: FeedProps['onMarkCaughtUp']
   onSetUnreadOnly: FeedProps['onSetUnreadOnly']
   onSetFavoriteOnly: FeedProps['onSetFavoriteOnly']
   onApplyFilters: FeedProps['onApplyFilters']
@@ -121,7 +128,14 @@ export function useReaderWorkspaceFeedProps(
     feedBriefingNewArticleCount: params.feedBriefingNewArticleCount,
     feedBriefingArticleCount: params.feedBriefingArticleCount,
     feedBriefingItems: params.feedBriefingItems,
+    catchUpCheckpoint: params.catchUpCheckpoint,
+    catchUpCount: params.catchUpCount,
+    catchUpLoading: params.catchUpLoading,
+    catchUpError: params.catchUpError,
     onGenerateFeedBriefing: params.onGenerateFeedBriefing,
+    onRefreshCatchUp: params.onRefreshCatchUp,
+    onGenerateCatchUpBriefing: params.onGenerateCatchUpBriefing,
+    onMarkCaughtUp: params.onMarkCaughtUp,
     onCloseFeedAIMoreMenu: () => params.setShowFeedAIMoreMenu(false),
     onToggleFeedAIMoreMenu: () => params.setShowFeedAIMoreMenu((value) => !value),
     onSetUnreadOnly: params.onSetUnreadOnly,

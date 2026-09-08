@@ -29,6 +29,18 @@ type UseFeedBriefingActionsParams = {
   toErrorMessage: (error: unknown) => string
 }
 
+export type FeedBriefingGenerationRequest = {
+  articleIDs: number[]
+  sourceIDs?: number[]
+  scopeLabel: string
+  taskKey: string
+  title?: string
+  tag?: string
+  keyword?: string
+  refresh?: boolean
+  selectOnSuccess?: boolean
+}
+
 export function useFeedBriefingActions({
   activeFeedBriefingAnchorArticleIDs,
   activeFeedBriefingSourceIDs,
@@ -113,16 +125,17 @@ export function useFeedBriefingActions({
     setSelectedFeedBriefing,
   ])
 
-  const onGenerateFeedBriefing = useCallback(
-    async (refresh = false) => {
-      const articleIDs = activeFeedBriefingAnchorArticleIDs
+  const generateFeedBriefing = useCallback(
+    async (request: FeedBriefingGenerationRequest) => {
+      const articleIDs = request.articleIDs
       if (articleIDs.length === 0) {
         setNotice({ kind: 'error', text: '当前没有可用文章，无法生成 AI 速览。' })
-        return
+        return false
       }
-      const sourceIDs = activeFeedBriefingSourceIDs
-      const taskScopeLabel = activeFeedBriefingScopeLabel
-      const taskKey = activeFeedBriefingTaskKey
+      const sourceIDs = request.sourceIDs ?? []
+      const taskScopeLabel = request.scopeLabel
+      const taskKey = request.taskKey
+      const taskTitle = request.title || 'AI 聚合速览'
       setFeedBriefingTaskKey(taskKey)
       setFeedBriefingScopeLabel(taskScopeLabel)
       setFeedBriefingAnchorArticleIDs(articleIDs)
@@ -131,7 +144,7 @@ export function useFeedBriefingActions({
         key: taskKey,
         sourceIDs,
         sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-        title: 'AI 聚合速览',
+        title: taskTitle,
         sourceName: taskScopeLabel,
         model: aiModel,
         status: 'running',
@@ -144,12 +157,12 @@ export function useFeedBriefingActions({
         setFeedBriefingError(null)
         const response = await createFeedBriefing({
           limit: Math.min(articleIDs.length, 30),
-          tag: tagFilter || undefined,
-          keyword: activeFeedBriefingKeyword || undefined,
+          tag: request.tag || undefined,
+          keyword: request.keyword || undefined,
           model: aiModel,
           source_ids: sourceIDs.length > 0 ? sourceIDs : undefined,
           article_ids: articleIDs,
-          refresh,
+          refresh: request.refresh ?? false,
         })
         setFeedBriefing(response.data.summary)
         setFeedBriefingItems(response.data.input_items ?? [])
@@ -172,7 +185,7 @@ export function useFeedBriefingActions({
           key: taskKey,
           sourceIDs,
           sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-          title: 'AI 聚合速览',
+          title: taskTitle,
           sourceName: taskScopeLabel,
           model: response.data.model || aiModel,
           status: 'succeeded',
@@ -184,8 +197,12 @@ export function useFeedBriefingActions({
         )
         setNotice({
           kind: 'info',
-          text: response.data.cache_hit ? '已加载缓存速览。' : 'AI 聚合速览已生成。',
+          text: response.data.cache_hit ? `已加载缓存${taskTitle}。` : `${taskTitle}已生成。`,
         })
+        if (request.selectOnSuccess) {
+          setSelectedFeedBriefing(true)
+        }
+        return true
       } catch (error) {
         const message = toErrorMessage(error)
         setFeedBriefingTaskKey(taskKey)
@@ -206,7 +223,7 @@ export function useFeedBriefingActions({
           key: taskKey,
           sourceIDs,
           sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
-          title: 'AI 聚合速览',
+          title: taskTitle,
           sourceName: taskScopeLabel,
           model: aiModel,
           status: 'failed',
@@ -215,18 +232,14 @@ export function useFeedBriefingActions({
         })
         setNotice({
           kind: 'error',
-          text: `AI 聚合速览失败: ${message}`,
+          text: `${taskTitle}失败: ${message}`,
         })
+        return false
       } finally {
         setLoadingFeedBriefing(false)
       }
     },
     [
-      activeFeedBriefingAnchorArticleIDs,
-      activeFeedBriefingKeyword,
-      activeFeedBriefingScopeLabel,
-      activeFeedBriefingSourceIDs,
-      activeFeedBriefingTaskKey,
       aiModel,
       saveFeedBriefingSnapshot,
       setFeedBriefing,
@@ -240,9 +253,32 @@ export function useFeedBriefingActions({
       setFeedBriefingTaskKey,
       setLoadingFeedBriefing,
       setNotice,
-      tagFilter,
+      setSelectedFeedBriefing,
       toErrorMessage,
       upsertSummaryTask,
+    ],
+  )
+
+  const onGenerateFeedBriefing = useCallback(
+    async (refresh = false) => {
+      await generateFeedBriefing({
+        articleIDs: activeFeedBriefingAnchorArticleIDs,
+        sourceIDs: activeFeedBriefingSourceIDs,
+        scopeLabel: activeFeedBriefingScopeLabel,
+        taskKey: activeFeedBriefingTaskKey,
+        tag: tagFilter,
+        keyword: activeFeedBriefingKeyword,
+        refresh,
+      })
+    },
+    [
+      activeFeedBriefingAnchorArticleIDs,
+      activeFeedBriefingKeyword,
+      activeFeedBriefingScopeLabel,
+      activeFeedBriefingSourceIDs,
+      activeFeedBriefingTaskKey,
+      generateFeedBriefing,
+      tagFilter,
     ],
   )
 
@@ -250,6 +286,7 @@ export function useFeedBriefingActions({
     applyFeedBriefingSnapshot,
     saveFeedBriefingSnapshot,
     resetFeedBriefingState,
+    generateFeedBriefing,
     onGenerateFeedBriefing,
   }
 }

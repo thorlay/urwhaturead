@@ -70,6 +70,7 @@ export const trackedSidebarPreviewLimit = 10
 export const aiModelStorageKey = 'quick.ai.model'
 export const readArticleStorageKey = 'quick.reader.read_article_ids'
 export const favoriteArticleStorageKey = 'quick.reader.favorite_article_ids'
+export const catchUpCheckpointStorageKey = 'quick.reader.catch_up_checkpoint.v1'
 export const readMarkMinScrollProgress = 0.3
 export const sidebarTagCollapseCount = 8
 

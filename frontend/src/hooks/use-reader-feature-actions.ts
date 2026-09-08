@@ -9,6 +9,7 @@ import type { SourcesIndex } from './use-sources-index'
 import type { useReaderFeatureDerived } from './use-reader-feature-derived'
 import { useFeedBriefingActions } from './use-feed-briefing-actions'
 import { useReaderArticleActions } from './use-reader-article-actions'
+import { useReaderCatchUp } from './use-reader-catch-up'
 import { useReaderDataController } from './use-reader-data-controller'
 import { useReaderFilterControls } from './use-reader-filter-controls'
 import { useReaderSessionActions } from './use-reader-session-actions'
@@ -226,6 +227,7 @@ export function useReaderFeatureActions({
     applyFeedBriefingSnapshot,
     saveFeedBriefingSnapshot,
     resetFeedBriefingState,
+    generateFeedBriefing,
     onGenerateFeedBriefing,
   } = useFeedBriefingActions({
     activeFeedBriefingAnchorArticleIDs,
@@ -249,6 +251,15 @@ export function useReaderFeatureActions({
     setFeedBriefingSnapshots,
     setNotice,
     upsertSummaryTask,
+    toErrorMessage,
+  })
+
+  const catchUp = useReaderCatchUp({
+    active: ui.activeTab === 'reader',
+    aiModel,
+    generateFeedBriefing,
+    openFeedBriefing,
+    setNotice,
     toErrorMessage,
   })
 
@@ -409,5 +420,6 @@ export function useReaderFeatureActions({
     closeFloatingReader,
     openFeedBriefing,
     finalizeReaderSession,
+    ...catchUp,
   }
 }

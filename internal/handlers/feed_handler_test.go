@@ -183,6 +183,24 @@ func TestParseFeedDedupeQuery_DefaultsToCompleteStream(t *testing.T) {
 	}
 }
 
+func TestParseFeedSince(t *testing.T) {
+	if got, err := parseFeedSince(""); err != nil || got != nil {
+		t.Fatalf("parseFeedSince(empty)=(%v, %v), want (nil, nil)", got, err)
+	}
+
+	got, err := parseFeedSince("2026-09-07T10:30:00+08:00")
+	if err != nil {
+		t.Fatalf("parseFeedSince(valid) error=%v", err)
+	}
+	if want := "2026-09-07T02:30:00Z"; got == nil || got.Format(time.RFC3339) != want {
+		t.Fatalf("parseFeedSince(valid)=%v, want %s", got, want)
+	}
+
+	if _, err := parseFeedSince("yesterday"); err == nil {
+		t.Fatal("parseFeedSince(invalid) expected an error")
+	}
+}
+
 func TestFeedDedupeCandidateLimit(t *testing.T) {
 	tests := []struct {
 		limit int

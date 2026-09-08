@@ -179,6 +179,7 @@ curl http://localhost:8080/healthz
 Feed API:
 
 - `GET /api/v1/feed`
+- `GET /api/v1/feed?since=<RFC3339>` returns items ingested after a reading checkpoint and includes `meta.total_count`.
 - `POST /api/v1/feed/briefing`
 - `GET /api/v1/articles/:id`
 - `GET /api/v1/articles/:id/cluster-diagnosis`
@@ -297,7 +298,6 @@ Event clustering and dedupe:
   - `CLUSTER_VECTOR_MAX_DISTANCE` (smaller = stricter, default `0.2`)
   - `CLUSTER_VECTOR_MIN_TOKENS` (minimum token count before building vector, default `3`)
   - `CLUSTER_VECTOR_IVFFLAT_LISTS` (index list count for new DB/index creation, default `100`)
-- `GET /api/v1/feed` defaults to representative-per-event output with `duplicate_count`.
 - The default feed is the complete multi-source stream. Use `dedupe=1` only when a folded event-level view is desired.
 - Run `./scripts/cluster-backfill.sh` once to backfill clusters for existing historical rows.
 

@@ -248,6 +248,11 @@ func (h *FeedHandler) List(c *gin.Context) {
 
 	dedupe := parseFeedDedupeQuery(c.Query("dedupe"))
 	includeHidden := parseBoolQuery(strings.TrimSpace(c.Query("include_hidden")))
+	since, err := parseFeedSince(c.Query("since"))
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
 
 	query := h.db.
 		Table("articles AS a").
@@ -293,6 +298,19 @@ func (h *FeedHandler) List(c *gin.Context) {
 			"(a.title ILIKE ? OR a.summary ILIKE ? OR a.content ILIKE ?)",
 			like, like, like,
 		)
+	}
+	if since != nil {
+		query = query.Where("a.created_at > ?", *since)
+	}
+
+	var totalCount int64
+	if since != nil {
+		if err := query.Session(&gorm.Session{}).
+			Select("COUNT(DISTINCT a.id)").
+			Scan(&totalCount).Error; err != nil {
+			internalServerError(c, "count feed items since checkpoint failed", err)
+			return
+		}
 	}
 
 	if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
@@ -394,19 +412,22 @@ func (h *FeedHandler) List(c *gin.Context) {
 	sanitizeElapsed := time.Since(sanitizeStartedAt)
 	totalElapsed := time.Since(startedAt)
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": rows,
-		"meta": gin.H{
-			"limit":                  limit,
-			"count":                  len(rows),
-			"next_cursor":            nextCursor,
-			"elapsed_ms":             totalElapsed.Milliseconds(),
-			"query_ms":               queryElapsed.Milliseconds(),
-			"sanitize_ms":            sanitizeElapsed.Milliseconds(),
-			"dedupe":                 dedupe,
-			"dedupe_candidate_limit": dedupeCandidateLimit,
-		},
-	})
+	meta := gin.H{
+		"limit":                  limit,
+		"count":                  len(rows),
+		"next_cursor":            nextCursor,
+		"elapsed_ms":             totalElapsed.Milliseconds(),
+		"query_ms":               queryElapsed.Milliseconds(),
+		"sanitize_ms":            sanitizeElapsed.Milliseconds(),
+		"dedupe":                 dedupe,
+		"dedupe_candidate_limit": dedupeCandidateLimit,
+	}
+	if since != nil {
+		meta["since"] = since.Format(time.RFC3339)
+		meta["total_count"] = totalCount
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": rows, "meta": meta})
 }
 
 func feedDedupeCandidateLimit(limit int) int {
@@ -806,6 +827,19 @@ func buildFeedBriefingDigest(
 func parseFeedDedupeQuery(raw string) bool {
 	raw = strings.TrimSpace(raw)
 	return raw != "" && parseBoolQuery(raw)
+}
+
+func parseFeedSince(raw string) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, errors.New("since must be an RFC3339 timestamp")
+	}
+	parsed = parsed.UTC()
+	return &parsed, nil
 }
 
 func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {

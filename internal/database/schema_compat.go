@@ -83,6 +83,8 @@ func ensureFeedBriefingTagSchema(db *gorm.DB) error {
 
 func ensureArticleFeedIndexes(db *gorm.DB) error {
 	statements := []string{
+		`CREATE INDEX IF NOT EXISTS ix_articles_created_at
+		 ON articles(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS ix_articles_feed_sort
 		 ON articles((COALESCE(published_at, created_at)) DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS ix_articles_source_feed_sort

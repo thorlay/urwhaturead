@@ -85,6 +85,8 @@ export type FeedResponse = {
     elapsed_ms?: number
     dedupe?: boolean
     dedupe_candidate_limit?: number
+    since?: string
+    total_count?: number
   }
 }
 

@@ -10,7 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from 'react'
-import { MoreHorizontal, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
+import { Check, Clock3, MoreHorizontal, RefreshCw, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -83,7 +83,14 @@ export type ReaderFeedPanelProps = {
   feedBriefingNewArticleCount: number
   feedBriefingArticleCount: number
   feedBriefingItems: FeedBriefingInputItem[]
+  catchUpCheckpoint: string
+  catchUpCount: number
+  catchUpLoading: boolean
+  catchUpError: string | null
   onGenerateFeedBriefing: (refresh: boolean) => Promise<void>
+  onRefreshCatchUp: () => Promise<void>
+  onGenerateCatchUpBriefing: () => Promise<void>
+  onMarkCaughtUp: () => void
   onCloseFeedAIMoreMenu: () => void
   onToggleFeedAIMoreMenu: () => void
   onSetUnreadOnly: (next: boolean) => void
@@ -474,7 +481,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     feedBriefingNewArticleCount,
     feedBriefingArticleCount,
     feedBriefingItems,
+    catchUpCheckpoint,
+    catchUpCount,
+    catchUpLoading,
+    catchUpError,
     onGenerateFeedBriefing,
+    onRefreshCatchUp,
+    onGenerateCatchUpBriefing,
+    onMarkCaughtUp,
     onCloseFeedAIMoreMenu,
     onToggleFeedAIMoreMenu,
     onSetUnreadOnly,
@@ -737,6 +751,53 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               </Button>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
+        <div className="feed-catch-up-status">
+          <Clock3 aria-hidden="true" />
+          <span>
+            {catchUpLoading
+              ? '正在检查新增内容...'
+              : catchUpError
+                ? '补课状态暂不可用'
+                : catchUpCount > 0
+                  ? `上次处理后新增 ${catchUpCount} 篇`
+                  : `已处理至 ${formatTimeAgo(catchUpCheckpoint)}`}
+          </span>
+          {!catchUpLoading && catchUpCount > 30 && <small>速览选取最新 30 篇</small>}
+        </div>
+        <div className="feed-catch-up-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="重新检查补课内容"
+            title="重新检查"
+            disabled={catchUpLoading}
+            onClick={() => void onRefreshCatchUp()}
+          >
+            <RefreshCw aria-hidden="true" />
+          </Button>
+          {catchUpCount > 0 && !catchUpError && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={catchUpLoading || loadingFeedBriefing}
+                onClick={() => void onGenerateCatchUpBriefing()}
+              >
+                <Sparkles aria-hidden="true" />
+                生成补课速览
+              </Button>
+              <Button type="button" variant="ghost" size="sm" disabled={catchUpLoading} onClick={onMarkCaughtUp}>
+                <Check aria-hidden="true" />
+                处理完成
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
