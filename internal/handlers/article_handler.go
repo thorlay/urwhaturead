@@ -66,6 +66,8 @@ func (h *ArticleHandler) RegisterRoutes(group *gin.RouterGroup) {
 func (h *ArticleHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("/summaries", h.ListSummaries)
 	group.GET("/:id", h.Get)
+	group.GET("/:id/enrichment", h.GetEnrichment)
+	group.POST("/:id/view", h.RecordView)
 	group.GET("/:id/cluster-diagnosis", h.GetClusterDiagnosis)
 	group.GET("/:id/summary", h.GetSummary)
 	group.GET("/:id/summary/status", h.GetSummaryStatus)
@@ -167,18 +169,54 @@ func (h *ArticleHandler) Get(c *gin.Context) {
 		return
 	}
 
-	article, err := h.loadArticleDetailMode(c.Request.Context(), id, c.Query("enrich") != "0")
+	article, err := h.loadArticleDetailMode(c.Request.Context(), id, false)
 	if err != nil {
 		h.handleLoadArticleError(c, err)
 		return
 	}
-	if c.Query("enrich") != "1" {
-		if bumpErr := h.bumpSourceClick(c.Request.Context(), article.SourceID); bumpErr != nil {
-			log.Printf("bump source click failed source_id=%d err=%v", article.SourceID, bumpErr)
-		}
+	c.Header("Cache-Control", "public, max-age=30, stale-while-revalidate=120")
+	c.JSON(http.StatusOK, article)
+}
+
+func (h *ArticleHandler) GetEnrichment(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		badRequest(c, err.Error())
+		return
 	}
 
+	article, err := h.loadArticleDetailMode(c.Request.Context(), id, true)
+	if err != nil {
+		h.handleLoadArticleError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
 	c.JSON(http.StatusOK, article)
+}
+
+func (h *ArticleHandler) RecordView(c *gin.Context) {
+	id, err := parseUintParam(c, "id")
+	if err != nil {
+		badRequest(c, err.Error())
+		return
+	}
+
+	var article struct {
+		SourceID uint64
+	}
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("articles").
+		Select("source_id").
+		Where("id = ?", id).
+		Take(&article).Error; err != nil {
+		h.handleLoadArticleError(c, err)
+		return
+	}
+	if err := h.bumpSourceClick(c.Request.Context(), article.SourceID); err != nil {
+		internalServerError(c, "record article view failed", err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *ArticleHandler) ListSummaries(c *gin.Context) {

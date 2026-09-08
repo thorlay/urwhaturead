@@ -266,6 +266,7 @@ export function useReaderFeatureActions({
   const { openArticle, onSummarizeArticle, onTrackThread } = useReaderArticleActions({
     aiModel,
     selectedArticleID,
+    feed,
     sourceByID,
     readerSessionRef,
     articleRequestSeqRef,

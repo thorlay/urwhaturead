@@ -172,6 +172,8 @@
 
 ### 5.4 文章详情增强
 
+文章打开采用渐进式加载：阅读流先用列表数据立即渲染，`GET /api/v1/articles/:id` 补充数据库正文，`GET /api/v1/articles/:id/enrichment` 并行抓取外部全文与论坛评论。浏览计数由独立的 `POST /api/v1/articles/:id/view` 异步记录，避免只读接口产生写入和阻塞。
+
 入口：`GET /api/v1/articles/:id`（`internal/handlers/article_handler.go`）
 
 增强内容：

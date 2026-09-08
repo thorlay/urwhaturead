@@ -182,6 +182,8 @@ Feed API:
 - `GET /api/v1/feed?since=<RFC3339>` returns items ingested after a reading checkpoint and includes `meta.total_count`.
 - `POST /api/v1/feed/briefing`
 - `GET /api/v1/articles/:id`
+- `GET /api/v1/articles/:id/enrichment` returns fetched full text and forum comments.
+- `POST /api/v1/articles/:id/view` records a source view without making article reads stateful.
 - `GET /api/v1/articles/:id/cluster-diagnosis`
 - `GET /api/v1/articles/:id/summary`
 - `POST /api/v1/articles/:id/summary`

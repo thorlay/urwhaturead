@@ -185,16 +185,21 @@ export async function listFeed(params: {
 }
 
 export async function getArticle(articleID: number, onInitial?: (article: ArticleDetail) => void): Promise<ArticleDetail> {
-  if (!onInitial) return request<ArticleDetail>(`/api/v1/articles/${articleID}`)
-  const article = await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=0`)
-  onInitial({ ...article, enrichment_status: 'loading' })
+  const articlePromise = request<ArticleDetail>(`/api/v1/articles/${articleID}`)
+  const enrichmentPromise = request<ArticleDetail>(`/api/v1/articles/${articleID}/enrichment`).catch(() => null)
+  const article = await articlePromise
+  onInitial?.({ ...article, enrichment_status: 'loading' })
   try {
-    const enriched = await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=1`)
-    return { ...enriched, enrichment_status: 'complete' }
+    const enriched = await enrichmentPromise
+    return enriched ? { ...enriched, enrichment_status: 'complete' } : { ...article, enrichment_status: 'failed' }
   } catch {
     // Optional enrichment must not hide an already readable article.
     return { ...article, enrichment_status: 'failed' }
   }
+}
+
+export async function recordArticleView(articleID: number): Promise<void> {
+  return request<void>(`/api/v1/articles/${articleID}/view`, { method: 'POST', keepalive: true })
 }
 
 export async function summarizeArticle(

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
-import { getArticle, summarizeArticle, trackArticleThread } from '../api'
+import { getArticle, recordArticleView, summarizeArticle, trackArticleThread } from '../api'
 import type { Notice, ReaderSession, SummaryTask } from '../lib/app-domain'
 import {
   formatAIStopReason,
@@ -14,7 +14,7 @@ import {
   isArticleSummaryReadyResponse,
   normalizeSummaryTaskStatus,
 } from '../lib/summary-task-utils'
-import type { ArticleDetail, Source } from '../types'
+import type { ArticleDetail, FeedItem, Source } from '../types'
 
 type SummaryTaskIdentity = {
   title: string
@@ -25,6 +25,7 @@ type SummaryTaskIdentity = {
 type UseReaderArticleActionsParams = {
   aiModel: string
   selectedArticleID: number | null
+  feed: FeedItem[]
   sourceByID: Map<number, Source>
   readerSessionRef: MutableRefObject<ReaderSession | null>
   articleRequestSeqRef: MutableRefObject<number>
@@ -58,6 +59,7 @@ type UseReaderArticleActionsParams = {
 export function useReaderArticleActions({
   aiModel,
   selectedArticleID,
+  feed,
   sourceByID,
   readerSessionRef,
   articleRequestSeqRef,
@@ -115,12 +117,28 @@ export function useReaderArticleActions({
           floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
         }
 
-        const detail = await getArticle(articleID, (initial) => {
+        let initialApplied = false
+        const applyInitial = (initial: ArticleDetail) => {
           if (articleRequestID !== articleRequestSeqRef.current) return
+          initialApplied = true
           setSelectedArticle(initial)
           setLoadingArticle(false)
           startReaderSession(articleID, resolveReadDwellThresholdMs(initial))
           void loadCachedSummary(articleID, aiModel, summaryRequestID)
+        }
+
+        const preview = feed.find((item) => item.id === articleID)
+        if (preview) {
+          applyInitial({ ...preview, enrichment_status: 'loading' })
+        }
+
+        void recordArticleView(articleID).catch(() => undefined)
+        const detail = await getArticle(articleID, (initial) => {
+          if (initialApplied) {
+            if (articleRequestID === articleRequestSeqRef.current) setSelectedArticle(initial)
+            return
+          }
+          applyInitial(initial)
         })
         if (articleRequestID !== articleRequestSeqRef.current) {
           return
@@ -149,6 +167,7 @@ export function useReaderArticleActions({
       articleRequestSeqRef,
       closeDetailMoreMenu,
       finalizeReaderSession,
+      feed,
       floatingDetailRef,
       loadCachedSummary,
       readerSessionRef,
