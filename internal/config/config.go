@@ -14,6 +14,7 @@ type Config struct {
 	AdminUsername                   string
 	AdminPassword                   string
 	WorkerTickSec                   int
+	WorkerFetchConcurrency          int
 	WorkerRequestRetries            int
 	WorkerRetryBaseSec              int
 	WorkerBackoffMaxFactor          int
@@ -72,6 +73,7 @@ func Load() Config {
 		AdminUsername:                   envOrDefault("ADMIN_USERNAME", "admin"),
 		AdminPassword:                   envOrDefault("ADMIN_PASSWORD", ""),
 		WorkerTickSec:                   envOrDefaultInt("WORKER_TICK_SEC", 30),
+		WorkerFetchConcurrency:          envOrDefaultInt("WORKER_FETCH_CONCURRENCY", 6),
 		WorkerRequestRetries:            envOrDefaultInt("WORKER_REQUEST_RETRIES", 2),
 		WorkerRetryBaseSec:              envOrDefaultInt("WORKER_RETRY_BASE_SEC", 2),
 		WorkerBackoffMaxFactor:          envOrDefaultInt("WORKER_BACKOFF_MAX_FACTOR", 16),

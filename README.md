@@ -93,6 +93,7 @@ Main vars:
 - `ADMIN_USERNAME`
 - `ADMIN_PASSWORD`
 - `WORKER_TICK_SEC`
+- `WORKER_FETCH_CONCURRENCY` (default `6`; maximum simultaneous source fetches)
 - `WORKER_REQUEST_RETRIES`
 - `WORKER_RETRY_BASE_SEC`
 - `WORKER_BACKOFF_MAX_FACTOR`
@@ -282,7 +283,7 @@ After login succeeds, browser receives `HttpOnly` cookie `quick_admin_token`; wr
 
 Background worker:
 
-- Polls enabled sources on `WORKER_TICK_SEC` interval.
+- Polls enabled sources on `WORKER_TICK_SEC` interval with bounded concurrency (`WORKER_FETCH_CONCURRENCY`).
 - Respects per-source `poll_interval_sec`.
 - Retries transient request failures with exponential backoff (`WORKER_REQUEST_RETRIES`, `WORKER_RETRY_BASE_SEC`).
 - Increases effective source poll interval after consecutive failures (capped by `WORKER_BACKOFF_MAX_FACTOR`).

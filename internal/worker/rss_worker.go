@@ -40,6 +40,7 @@ type Refresher interface {
 
 type RSSWorkerOptions struct {
 	TickSec          int
+	FetchConcurrency int
 	RequestRetries   int
 	RetryBaseSec     int
 	BackoffMaxFactor int
@@ -53,8 +54,8 @@ type RSSWorker struct {
 	tick             time.Duration
 	httpClient       *http.Client
 	redditHTTPClient *http.Client
-	parser           *gofeed.Parser
 	inflight         sync.Map
+	fetchConcurrency int
 	requestRetries   int
 	retryBaseDelay   time.Duration
 	backoffMaxFactor int
@@ -96,6 +97,11 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 	if options.TickSec <= 0 {
 		options.TickSec = 30
 	}
+	if options.FetchConcurrency <= 0 {
+		options.FetchConcurrency = 6
+	} else if options.FetchConcurrency > 32 {
+		options.FetchConcurrency = 32
+	}
 	if options.RequestRetries < 0 {
 		options.RequestRetries = 0
 	}
@@ -112,6 +118,7 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 	return &RSSWorker{
 		db:               db,
 		tick:             time.Duration(options.TickSec) * time.Second,
+		fetchConcurrency: options.FetchConcurrency,
 		requestRetries:   options.RequestRetries,
 		retryBaseDelay:   time.Duration(options.RetryBaseSec) * time.Second,
 		backoffMaxFactor: options.BackoffMaxFactor,
@@ -120,7 +127,6 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 		debugHosts:       normalizeDebugHosts(options.DebugHosts),
 		httpClient:       newHTTPClient(false),
 		redditHTTPClient: newHTTPClient(true),
-		parser:           gofeed.NewParser(),
 		clusterQueue:     make(chan uint64, clusterQueueSize),
 	}
 }
@@ -154,7 +160,7 @@ func (w *RSSWorker) clientForURL(rawURL string) *http.Client {
 }
 
 func (w *RSSWorker) Start(ctx context.Context) {
-	log.Printf("rss worker started; tick=%s", w.tick)
+	log.Printf("rss worker started; tick=%s concurrency=%d", w.tick, w.fetchConcurrency)
 	go w.runClusterQueue(ctx)
 	go w.scanClusterBacklog(ctx)
 	w.runOnce(ctx)
@@ -269,14 +275,27 @@ func (w *RSSWorker) runOnce(ctx context.Context) {
 		return
 	}
 
+	semaphore := make(chan struct{}, w.fetchConcurrency)
+	var waitGroup sync.WaitGroup
 	for _, source := range sources {
 		if !w.isDue(source, now) {
 			continue
 		}
-		if err := w.fetchSource(ctx, source); err != nil && !errors.Is(err, ErrSourceBusy) {
-			log.Printf("worker fetch source=%d failed: %v", source.ID, err)
-		}
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				return
+			}
+			if err := w.fetchSource(ctx, source); err != nil && !errors.Is(err, ErrSourceBusy) && !errors.Is(err, context.Canceled) {
+				log.Printf("worker fetch source=%d failed: %v", source.ID, err)
+			}
+		}()
 	}
+	waitGroup.Wait()
 }
 
 func (w *RSSWorker) RefreshSource(ctx context.Context, sourceID uint64) error {
@@ -349,7 +368,7 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 		return nil
 	}
 
-	feed, err := w.parser.Parse(bytes.NewReader(feedextract.SanitizeXML10(result.Body)))
+	feed, err := gofeed.NewParser().Parse(bytes.NewReader(feedextract.SanitizeXML10(result.Body)))
 	if err != nil {
 		message := fmt.Sprintf("parse feed failed: %v", err)
 		fetchLog.ErrorMessage = &message

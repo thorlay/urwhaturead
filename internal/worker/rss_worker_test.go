@@ -155,6 +155,23 @@ func TestNewRSSWorker_DefaultUserAgent(t *testing.T) {
 	}
 }
 
+func TestNewRSSWorker_FetchConcurrency(t *testing.T) {
+	defaultWorker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{})
+	if defaultWorker.fetchConcurrency != 6 {
+		t.Fatalf("default fetchConcurrency=%d, want 6", defaultWorker.fetchConcurrency)
+	}
+
+	configuredWorker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{FetchConcurrency: 3})
+	if configuredWorker.fetchConcurrency != 3 {
+		t.Fatalf("configured fetchConcurrency=%d, want 3", configuredWorker.fetchConcurrency)
+	}
+
+	cappedWorker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{FetchConcurrency: 100})
+	if cappedWorker.fetchConcurrency != 32 {
+		t.Fatalf("capped fetchConcurrency=%d, want 32", cappedWorker.fetchConcurrency)
+	}
+}
+
 func TestNewRSSWorker_CustomUserAgent(t *testing.T) {
 	worker := NewRSSWorker(&gorm.DB{}, RSSWorkerOptions{
 		TickSec:   30,

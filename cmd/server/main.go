@@ -61,6 +61,7 @@ func main() {
 
 	rssWorker := worker.NewRSSWorker(db, worker.RSSWorkerOptions{
 		TickSec:          cfg.WorkerTickSec,
+		FetchConcurrency: cfg.WorkerFetchConcurrency,
 		RequestRetries:   cfg.WorkerRequestRetries,
 		RetryBaseSec:     cfg.WorkerRetryBaseSec,
 		BackoffMaxFactor: cfg.WorkerBackoffMaxFactor,
