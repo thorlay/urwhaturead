@@ -187,12 +187,13 @@ export async function listFeed(params: {
 export async function getArticle(articleID: number, onInitial?: (article: ArticleDetail) => void): Promise<ArticleDetail> {
   if (!onInitial) return request<ArticleDetail>(`/api/v1/articles/${articleID}`)
   const article = await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=0`)
-  onInitial(article)
+  onInitial({ ...article, enrichment_status: 'loading' })
   try {
-    return await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=1`)
+    const enriched = await request<ArticleDetail>(`/api/v1/articles/${articleID}?enrich=1`)
+    return { ...enriched, enrichment_status: 'complete' }
   } catch {
     // Optional enrichment must not hide an already readable article.
-    return article
+    return { ...article, enrichment_status: 'failed' }
   }
 }
 

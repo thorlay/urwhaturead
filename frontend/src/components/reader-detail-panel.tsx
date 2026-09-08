@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
-import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, CircleAlert, ExternalLink, LoaderCircle, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
@@ -457,6 +457,18 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               {isThreadArticle && <span className="detail-signal">论坛主题</span>}
             </div>
           </header>
+          {selectedArticle.enrichment_status === 'loading' && (
+            <p className="article-enrichment-status" aria-live="polite">
+              <LoaderCircle className="is-spinning" aria-hidden="true" />
+              正在补充原文与评论…
+            </p>
+          )}
+          {selectedArticle.enrichment_status === 'failed' && (
+            <p className="article-enrichment-status is-warning" role="status">
+              <CircleAlert aria-hidden="true" />
+              附加内容暂时无法加载，当前正文仍可阅读。
+            </p>
+          )}
           {selectedArticleImageURL && (
             <figure className="detail-hero-image">
               <img

@@ -710,6 +710,32 @@
   padding: 1.3rem 0;
 }
 
+.article-enrichment-status {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin: 0;
+  padding: 0.42rem 0;
+  border-block: 1px solid var(--border-faint);
+  color: var(--foreground-tertiary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.article-enrichment-status.is-warning {
+  color: var(--accent-ink);
+}
+
+.article-enrichment-status svg {
+  width: 0.88rem;
+  height: 0.88rem;
+  flex: 0 0 auto;
+}
+
+.article-enrichment-status .is-spinning {
+  animation: topbar-spin 0.8s linear infinite;
+}
+
 .ai-article-reader-content {
   display: grid;
   gap: 1.18rem;

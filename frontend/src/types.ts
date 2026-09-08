@@ -115,6 +115,7 @@ export type ArticleDetail = {
   published_at?: string
   image_url?: string
   reply_count?: number
+  enrichment_status?: 'loading' | 'complete' | 'failed'
   external?: {
     url: string
     title: string

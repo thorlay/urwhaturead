@@ -1,4 +1,4 @@
-import { ExternalLink, Star, X } from 'lucide-react'
+import { CircleAlert, ExternalLink, LoaderCircle, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import { normalizeImageURL } from '../../lib/app-utils'
@@ -76,6 +76,19 @@ export function AIArticleReader(props: AIArticleReaderProps) {
               <h2>{article.title}</h2>
               {article.author && <p className="hint">作者：{article.author}</p>}
             </header>
+
+            {article.enrichment_status === 'loading' && (
+              <p className="article-enrichment-status" aria-live="polite">
+                <LoaderCircle className="is-spinning" aria-hidden="true" />
+                正在补充原文与评论…
+              </p>
+            )}
+            {article.enrichment_status === 'failed' && (
+              <p className="article-enrichment-status is-warning" role="status">
+                <CircleAlert aria-hidden="true" />
+                附加内容暂时无法加载，当前正文仍可阅读。
+              </p>
+            )}
 
             {imageURL && (
               <figure className="ai-article-reader-image">
