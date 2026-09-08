@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,18 +18,22 @@ import (
 	"quick/internal/textclean"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 const (
-	maxSummaryCommentCount = 30
+	maxSummaryCommentCount        = 30
+	articleEnrichmentCacheTTL     = 15 * time.Minute
+	articleEnrichmentFetchTimeout = 30 * time.Second
 )
 
 type ArticleHandler struct {
 	db         *gorm.DB
 	summarySvc *articlesummary.Service
 	contentSvc *ArticleContentService
+	enrichment singleflight.Group
 }
 
 type ArticleHandlerOptions struct {
@@ -102,6 +108,11 @@ type articleExternalContent struct {
 	Title     string `json:"title"`
 	Content   string `json:"content"`
 	Truncated bool   `json:"truncated"`
+}
+
+type articleEnrichmentResult struct {
+	Thread   *articleThread
+	External *articleExternalContent
 }
 
 type articleDetail struct {
@@ -561,6 +572,32 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 		sanitizeArticleForOutput(&article)
 		return article, nil
 	}
+
+	cached, fetchedAt, found, err := h.loadPersistedEnrichment(ctx, article.ID)
+	if err != nil {
+		log.Printf("load article enrichment cache article_id=%d: %v", article.ID, err)
+	} else if found {
+		article.Thread = cached.Thread
+		article.External = cached.External
+		if time.Since(fetchedAt) >= articleEnrichmentCacheTTL {
+			h.refreshArticleEnrichmentInBackground(article)
+		}
+		sanitizeArticleForOutput(&article)
+		return article, nil
+	}
+
+	result, err := h.refreshArticleEnrichment(ctx, article)
+	if err != nil {
+		return articleDetail{}, err
+	}
+	article.Thread = result.Thread
+	article.External = result.External
+	sanitizeArticleForOutput(&article)
+
+	return article, nil
+}
+
+func (h *ArticleHandler) enrichArticle(ctx context.Context, article articleDetail) articleEnrichmentResult {
 	if thread, ok := h.contentSvc.fetchThreadForTopic(ctx, article.Link); ok {
 		article.Thread = thread
 	}
@@ -574,9 +611,88 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 			article.External = external
 		}
 	}
-	sanitizeArticleForOutput(&article)
+	return articleEnrichmentResult{Thread: article.Thread, External: article.External}
+}
 
-	return article, nil
+func (h *ArticleHandler) loadPersistedEnrichment(ctx context.Context, articleID uint64) (articleEnrichmentResult, time.Time, bool, error) {
+	var cached models.ArticleEnrichment
+	result := h.db.WithContext(ctx).
+		Where("article_id = ?", articleID).
+		Limit(1).
+		Find(&cached)
+	if result.Error != nil {
+		return articleEnrichmentResult{}, time.Time{}, false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return articleEnrichmentResult{}, time.Time{}, false, nil
+	}
+
+	decoded := articleEnrichmentResult{}
+	if len(cached.Thread) > 0 && string(cached.Thread) != "null" {
+		if err := json.Unmarshal(cached.Thread, &decoded.Thread); err != nil {
+			return articleEnrichmentResult{}, time.Time{}, false, err
+		}
+	}
+	if len(cached.External) > 0 && string(cached.External) != "null" {
+		if err := json.Unmarshal(cached.External, &decoded.External); err != nil {
+			return articleEnrichmentResult{}, time.Time{}, false, err
+		}
+	}
+	return decoded, cached.FetchedAt, true, nil
+}
+
+func (h *ArticleHandler) savePersistedEnrichment(ctx context.Context, articleID uint64, result articleEnrichmentResult) error {
+	threadJSON, err := json.Marshal(result.Thread)
+	if err != nil {
+		return err
+	}
+	externalJSON, err := json.Marshal(result.External)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	return h.db.WithContext(ctx).Save(&models.ArticleEnrichment{
+		ArticleID: articleID,
+		Thread:    datatypes.JSON(threadJSON),
+		External:  datatypes.JSON(externalJSON),
+		FetchedAt: now,
+		UpdatedAt: now,
+	}).Error
+}
+
+func (h *ArticleHandler) refreshArticleEnrichment(ctx context.Context, article articleDetail) (articleEnrichmentResult, error) {
+	key := strconv.FormatUint(article.ID, 10)
+	resultCh := h.enrichment.DoChan(key, func() (any, error) {
+		fetchCtx, cancel := context.WithTimeout(context.Background(), articleEnrichmentFetchTimeout)
+		defer cancel()
+
+		result := h.enrichArticle(fetchCtx, article)
+		saveCtx, cancelSave := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancelSave()
+		if err := h.savePersistedEnrichment(saveCtx, article.ID, result); err != nil {
+			return articleEnrichmentResult{}, err
+		}
+		return result, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return articleEnrichmentResult{}, ctx.Err()
+	case call := <-resultCh:
+		if call.Err != nil {
+			return articleEnrichmentResult{}, call.Err
+		}
+		return call.Val.(articleEnrichmentResult), nil
+	}
+}
+
+func (h *ArticleHandler) refreshArticleEnrichmentInBackground(article articleDetail) {
+	go func() {
+		if _, err := h.refreshArticleEnrichment(context.Background(), article); err != nil {
+			log.Printf("refresh article enrichment article_id=%d: %v", article.ID, err)
+		}
+	}()
 }
 
 func (h *ArticleHandler) loadSummaryInput(ctx context.Context, id uint64) (articlesummary.ArticleInput, error) {

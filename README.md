@@ -52,6 +52,7 @@ On first startup, SQL files in `sql/init/` run automatically:
 - `sources`
 - `user_source_subscriptions`
 - `articles`
+- `article_enrichments`
 - `source_fetch_logs`
 - indexes for dedup and feed queries
 

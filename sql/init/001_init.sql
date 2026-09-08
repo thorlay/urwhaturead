@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS articles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS article_enrichments (
+  article_id BIGINT PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+  thread JSONB,
+  external JSONB,
+  fetched_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_article_enrichments_fetched_at
+ON article_enrichments(fetched_at DESC);
+
 CREATE TABLE IF NOT EXISTS event_clusters (
   id BIGSERIAL PRIMARY KEY,
   canonical_link TEXT NOT NULL DEFAULT '',

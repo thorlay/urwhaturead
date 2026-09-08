@@ -40,6 +40,7 @@ func main() {
 		&models.Source{},
 		&models.EventCluster{},
 		&models.Article{},
+		&models.ArticleEnrichment{},
 		&models.ArticleSummary{},
 		&models.FeedBriefing{},
 		&models.FeedBriefingArticle{},

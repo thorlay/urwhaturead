@@ -29,7 +29,7 @@
 1. 读取配置：`internal/config/config.go`
 2. 配置向量聚类开关：`internal/clustering/vector.go`
 3. 连接数据库：`internal/database/db.go`
-4. `AutoMigrate` 核心模型：`Source/EventCluster/Article/ArticleSummary/FeedBriefing/SourceFetchLog`
+4. `AutoMigrate` 核心模型：`Source/EventCluster/Article/ArticleEnrichment/ArticleSummary/FeedBriefing/SourceFetchLog`
 5. 执行兼容性 schema 调整：`internal/database/schema_compat.go`
 6. 初始化（可选）pgvector schema：`clustering.EnsureVectorSchema`
 7. 启动 RSS Worker goroutine：`internal/worker/rss_worker.go`
@@ -45,6 +45,8 @@
 - 公共读接口（默认无需 token）
   - `GET /api/v1/feed`
   - `GET /api/v1/articles/:id`
+  - `GET /api/v1/articles/:id/enrichment`
+  - `POST /api/v1/articles/:id/view`
   - `GET /api/v1/articles/:id/cluster-diagnosis`
   - `GET /api/v1/articles/:id/summary`
   - `GET /api/v1/articles/:id/summary/status`
@@ -172,7 +174,9 @@
 
 ### 5.4 文章详情增强
 
-文章打开采用渐进式加载：阅读流先用列表数据立即渲染，`GET /api/v1/articles/:id` 补充数据库正文，`GET /api/v1/articles/:id/enrichment` 并行抓取外部全文与论坛评论。浏览计数由独立的 `POST /api/v1/articles/:id/view` 异步记录，避免只读接口产生写入和阻塞。
+文章打开采用渐进式加载：阅读流先用列表数据立即渲染，`GET /api/v1/articles/:id` 补充数据库正文，`GET /api/v1/articles/:id/enrichment` 并行加载外部全文与论坛评论。浏览计数由独立的 `POST /api/v1/articles/:id/view` 异步记录，避免只读接口产生写入和阻塞。
+
+增强结果持久化在 `article_enrichments`。新鲜缓存直接返回；过期缓存先返回旧值，再由后台单航班刷新；冷缓存才等待首次抓取。这样后端重启不会丢失全文/评论缓存，同一文章的并发请求也不会重复访问上游。
 
 入口：`GET /api/v1/articles/:id`（`internal/handlers/article_handler.go`）
 
