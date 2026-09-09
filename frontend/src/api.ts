@@ -7,6 +7,7 @@ import type {
   DiscoverSourcesResponse,
   ArticleDetail,
   FeedBriefingResponse,
+  FeedBriefingTaskResponse,
   FeedBriefingLibraryResponse,
   FeedResponse,
   FeedTestResult,
@@ -331,11 +332,31 @@ export async function createFeedBriefing(payload: {
   article_ids?: number[]
   refresh?: boolean
   cache_only?: boolean
-}): Promise<FeedBriefingResponse> {
-  return request<FeedBriefingResponse>('/api/v1/feed/briefing', {
+  async?: boolean
+}): Promise<FeedBriefingResponse | FeedBriefingTaskResponse> {
+  return request<FeedBriefingResponse | FeedBriefingTaskResponse>('/api/v1/feed/briefing', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export async function getFeedBriefingStatus(digestKey: string): Promise<FeedBriefingTaskResponse> {
+  const query = new URLSearchParams({ digest_key: digestKey })
+  return request<FeedBriefingTaskResponse>(`/api/v1/feed/briefing/status?${query.toString()}`)
+}
+
+export async function getFeedBriefingResult(digestKey: string): Promise<FeedBriefingResponse | null> {
+  const query = new URLSearchParams({ digest_key: digestKey })
+  const response = await fetch(`/api/v1/feed/briefing/result?${query.toString()}`, {
+    headers: buildHeaders(),
+  })
+  if (response.status === 404) {
+    return null
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response))
+  }
+  return (await response.json()) as FeedBriefingResponse
 }
 
 export async function getFeedBriefingCache(payload: {

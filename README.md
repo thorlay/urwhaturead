@@ -185,6 +185,8 @@ Feed API:
 - `GET /api/v1/feed`
 - `GET /api/v1/feed?since=<RFC3339>` returns items ingested after a reading checkpoint and includes `meta.total_count`.
 - `POST /api/v1/feed/briefing`
+- `GET /api/v1/feed/briefing/status?digest_key=<sha1>`
+- `GET /api/v1/feed/briefing/result?digest_key=<sha1>`
 - `GET /api/v1/articles/:id`
 - `GET /api/v1/articles/:id/enrichment` returns fetched full text and forum comments.
 - `POST /api/v1/articles/:id/view` records a source view without making article reads stateful.
@@ -216,6 +218,8 @@ Feed AI briefing endpoint:
 - `POST /api/v1/feed/briefing`
 - Uses the same configured AI API (`AI_SUMMARY_*`) to generate a stream-level briefing.
 - Caches by content digest in DB table `feed_briefings`.
+- Send `async: true` to persist the job in `ai_tasks` and receive `202` immediately.
+- Poll `/api/v1/feed/briefing/status`, then read `/api/v1/feed/briefing/result`; unfinished jobs resume after an API restart.
 - Supports `refresh: true` to force regeneration.
 
 Gemini OAuth messages style example:

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -275,6 +276,38 @@ func TestBuildFeedBriefingDigest_KeywordCaseInsensitive(t *testing.T) {
 	keyB, _ := buildFeedBriefingDigest(20, "tech", "ai", "gemini-2.5-flash", []uint64{1, 2}, rows)
 	if keyA != keyB {
 		t.Fatalf("digest should be case-insensitive for keyword: %s != %s", keyA, keyB)
+	}
+}
+
+func TestFeedBriefingTaskKey_TrimsDigest(t *testing.T) {
+	const digest = "0123456789abcdef0123456789abcdef01234567"
+	if got, want := feedBriefingTaskKey("  "+digest+"  "), feedBriefingTaskKeyPrefix+digest; got != want {
+		t.Fatalf("feedBriefingTaskKey()=%q, want %q", got, want)
+	}
+}
+
+func TestParseFeedBriefingDigest(t *testing.T) {
+	const uppercaseDigest = "0123456789ABCDEF0123456789ABCDEF01234567"
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/feed/briefing/status?digest_key="+uppercaseDigest, nil)
+	digest, ok := parseFeedBriefingDigest(c)
+	if !ok {
+		t.Fatalf("parseFeedBriefingDigest() rejected a valid digest: status=%d body=%s", w.Code, w.Body.String())
+	}
+	if want := strings.ToLower(uppercaseDigest); digest != want {
+		t.Fatalf("parseFeedBriefingDigest()=%q, want %q", digest, want)
+	}
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/feed/briefing/status?digest_key=not-a-digest", nil)
+	if _, ok := parseFeedBriefingDigest(c); ok {
+		t.Fatal("parseFeedBriefingDigest() accepted an invalid digest")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid digest status=%d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
 

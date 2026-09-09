@@ -361,6 +361,16 @@ export type FeedBriefingResponse = {
   }
 }
 
+export type FeedBriefingTaskResponse = {
+  data: {
+    digest_key: string
+    model: string
+    status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
+    error?: string
+    updated_at: string
+  }
+}
+
 export type FeedBriefingInputItem = {
   id: number
   source_id: number

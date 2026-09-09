@@ -19,7 +19,7 @@
 2. 来源变更、刷新、AI 生成等写操作走后端 `POST/PATCH/DELETE`。
 3. RSS Worker 常驻运行，持续抓取并写入 `articles`。
 4. AI 相关请求由后端转发至外部/本地 AI 代理，再写入缓存表。
-5. 异步文章摘要任务写入 `ai_tasks`；服务重启后会恢复最近七天内未完成的任务，并继续受进程内并发上限约束。
+5. 异步文章摘要和聚合速览任务写入 `ai_tasks`；服务重启后会恢复最近七天内未完成的任务，并继续受进程内并发上限约束。
 
 ## 2. 后端启动与进程模型
 
@@ -48,6 +48,8 @@
 - 数据库就绪检查：`GET /readyz`
 - 公共读接口（默认无需 token）
   - `GET /api/v1/feed`
+  - `GET /api/v1/feed/briefing/status`
+  - `GET /api/v1/feed/briefing/result`
   - `GET /api/v1/articles/:id`
   - `GET /api/v1/articles/:id/enrichment`
   - `POST /api/v1/articles/:id/view`
@@ -112,6 +114,9 @@
   - 文章摘要异步队列（并发=2）
   - 任务状态机（queued/running/succeeded/failed）
   - DB 缓存读写（`article_summaries`）
+- `internal/handlers/feed_briefing_tasks.go`
+  - 聚合速览持久任务队列（并发=2）
+  - 保存完整输入快照，并在服务重启后恢复未完成任务
 - `internal/handlers/article_content_service.go`
   - 论坛线程抓取与解析（USCard/V2EX/Reddit）
   - 外链正文抓取、缓存、失败熔断、日预算限流
@@ -218,7 +223,9 @@
 1. 选取当前视图文章集（可按来源/tag/关键词），保留多源原始输入。
 2. 生成 digest key（包含 model + filter + article_ids）。
 3. 命中 `feed_briefings` 则返回缓存。
-4. 未命中则调用 AI 生成并持久化；共同事实合并表述，但保留各来源的新增信息、角度和分歧。
+4. `async=true` 时把输入快照写入 `ai_tasks` 并立即返回 `202`；前端轮询 `briefing/status`，完成后读取 `briefing/result`。
+5. 未命中则由后台任务调用 AI 并持久化；共同事实合并表述，但保留各来源的新增信息、角度和分歧。
+6. 后端重启会恢复最近七天内的 queued/running 任务；digest 校验确保恢复时不会用变化后的文章集合生成旧结果。
 
 定时来源速览由 `FeedBriefingScheduler` 执行。可通过 `AUTO_AI_BRIEFING_TIMEZONE` 和
 `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` 禁止后台任务在高价时段运行；到期任务不会丢失，而是在下一个允许时段继续执行。该限制不影响用户手动触发的文章摘要或聚合速览。
@@ -243,6 +250,8 @@
   - 文章摘要缓存（唯一键 `article_id`）
 - `feed_briefings`
   - 聚合速览缓存（唯一键 `digest_key`）
+- `ai_tasks`
+  - 文章摘要和聚合速览的持久任务状态；聚合速览输入保存在 `payload`
 - `source_fetch_logs`
   - 每次抓取的日志、耗时、状态、错误
 - `article_vectors`（可选）

@@ -1,8 +1,21 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { createFeedBriefing } from '../api'
+import { createFeedBriefing, getFeedBriefingResult, getFeedBriefingStatus } from '../api'
 import type { FeedBriefingSnapshot, Notice, SummaryTask } from '../lib/app-domain'
-import type { FeedBriefingInputItem } from '../types'
+import type { FeedBriefingInputItem, FeedBriefingResponse, FeedBriefingTaskResponse } from '../types'
+
+const feedBriefingPollIntervalMs = 2500
+const feedBriefingPollAttempts = 120
+
+function isFeedBriefingResult(
+  response: FeedBriefingResponse | FeedBriefingTaskResponse,
+): response is FeedBriefingResponse {
+  return 'summary' in response.data
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
 
 type UseFeedBriefingActionsParams = {
   activeFeedBriefingAnchorArticleIDs: number[]
@@ -147,7 +160,7 @@ export function useFeedBriefingActions({
         title: taskTitle,
         sourceName: taskScopeLabel,
         model: aiModel,
-        status: 'running',
+        status: 'queued',
         updatedAt: new Date().toISOString(),
         error: '',
       })
@@ -155,7 +168,7 @@ export function useFeedBriefingActions({
       try {
         setLoadingFeedBriefing(true)
         setFeedBriefingError(null)
-        const response = await createFeedBriefing({
+        const payload = {
           limit: Math.min(articleIDs.length, 30),
           tag: request.tag || undefined,
           keyword: request.keyword || undefined,
@@ -163,7 +176,61 @@ export function useFeedBriefingActions({
           source_ids: sourceIDs.length > 0 ? sourceIDs : undefined,
           article_ids: articleIDs,
           refresh: request.refresh ?? false,
-        })
+          async: true,
+        }
+        const accepted = await createFeedBriefing(payload)
+        let response: FeedBriefingResponse
+        if (isFeedBriefingResult(accepted)) {
+          response = accepted
+        } else {
+          const digestKey = accepted.data.digest_key
+          upsertSummaryTask({
+            kind: 'feed_briefing',
+            key: taskKey,
+            sourceIDs,
+            sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
+            title: taskTitle,
+            sourceName: taskScopeLabel,
+            model: accepted.data.model || aiModel,
+            status: accepted.data.status,
+            updatedAt: accepted.data.updated_at || new Date().toISOString(),
+            error: accepted.data.error || '',
+          })
+
+          let completed: FeedBriefingResponse | null = null
+          for (let attempt = 0; attempt < feedBriefingPollAttempts; attempt += 1) {
+            if (attempt > 0) {
+              await wait(feedBriefingPollIntervalMs)
+            }
+            const statusResponse = await getFeedBriefingStatus(digestKey)
+            const status = statusResponse.data.status
+            upsertSummaryTask({
+              kind: 'feed_briefing',
+              key: taskKey,
+              sourceIDs,
+              sourceID: sourceIDs.length === 1 ? sourceIDs[0] : undefined,
+              title: taskTitle,
+              sourceName: taskScopeLabel,
+              model: statusResponse.data.model || aiModel,
+              status,
+              updatedAt: statusResponse.data.updated_at || new Date().toISOString(),
+              error: statusResponse.data.error || '',
+            })
+            if (status === 'failed') {
+              throw new Error(statusResponse.data.error || 'AI 速览生成失败')
+            }
+            if (status === 'succeeded') {
+              completed = await getFeedBriefingResult(digestKey)
+              if (completed) {
+                break
+              }
+            }
+          }
+          if (!completed) {
+            throw new Error('AI 速览生成超时，任务仍可能在后台继续执行')
+          }
+          response = completed
+        }
         setFeedBriefing(response.data.summary)
         setFeedBriefingItems(response.data.input_items ?? [])
         setFeedBriefingArticleCount(response.data.article_count ?? 0)

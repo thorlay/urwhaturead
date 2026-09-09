@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"quick/internal/aisummary"
+	"quick/internal/articlesummary"
 	"quick/internal/feedextract"
 	"quick/internal/models"
 	"quick/internal/textclean"
@@ -33,6 +34,7 @@ type FeedHandler struct {
 	adminToken       string
 	briefingLimiter  *briefingRateLimiter
 	briefingCooldown *briefingCooldownStore
+	briefingTasks    *feedBriefingTaskService
 }
 
 const (
@@ -57,7 +59,7 @@ func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandl
 		cooldown = 10 * time.Minute
 	}
 
-	return &FeedHandler{
+	handler := &FeedHandler{
 		db:               db,
 		summarizer:       summarizer,
 		adminAuthEnabled: options.AdminAuthEnabled,
@@ -65,6 +67,8 @@ func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandl
 		briefingLimiter:  newBriefingRateLimiter(rateLimit, time.Hour),
 		briefingCooldown: newBriefingCooldownStore(cooldown),
 	}
+	handler.briefingTasks = newFeedBriefingTaskService(db, handler.runFeedBriefingTask)
+	return handler
 }
 
 func (h *FeedHandler) RegisterRoutes(group *gin.RouterGroup) {
@@ -75,6 +79,8 @@ func (h *FeedHandler) RegisterRoutes(group *gin.RouterGroup) {
 func (h *FeedHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("", h.List)
 	group.GET("/briefings", h.ListBriefings)
+	group.GET("/briefing/status", h.BriefingStatus)
+	group.GET("/briefing/result", h.BriefingResult)
 	group.POST("/briefing", h.Briefing)
 }
 
@@ -115,6 +121,7 @@ type feedBriefingRequest struct {
 	ArticleIDs []uint64 `json:"article_ids"`
 	Refresh    bool     `json:"refresh"`
 	CacheOnly  bool     `json:"cache_only"`
+	Async      bool     `json:"async"`
 }
 
 type feedBriefingPayload struct {
@@ -467,6 +474,10 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		badRequest(c, "cache_only and refresh cannot both be true")
 		return
 	}
+	if req.CacheOnly && req.Async {
+		badRequest(c, "cache_only and async cannot both be true")
+		return
+	}
 	isAdmin := h.isAdminRequest(c)
 	if req.Refresh && !isAdmin {
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -549,26 +560,158 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		}
 	}
 
-	prompt := buildFeedBriefingPrompt(promptRows)
-	result, err := h.summarizer.CompleteWithModel(
-		c.Request.Context(),
-		feedBriefingSystemPrompt,
-		prompt,
-		effectiveModel,
-	)
+	taskInput := feedBriefingTaskInput{
+		DigestKey:  digestKey,
+		Limit:      limit,
+		Tag:        tag,
+		Keyword:    keyword,
+		Model:      effectiveModel,
+		SourceIDs:  uniqueSortedUint64(req.SourceIDs),
+		ArticleIDs: articleIDs,
+		Refresh:    req.Refresh,
+	}
+	if req.Async {
+		state, err := h.briefingTasks.Enqueue(taskInput)
+		if err != nil {
+			internalServerError(c, "enqueue feed briefing failed", err)
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{"data": state})
+		return
+	}
+
+	payload, err := h.generateAndSaveFeedBriefing(c.Request.Context(), taskInput, promptRows, inputItems)
 	if err != nil {
 		badGateway(c, err.Error())
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"data": payload})
+}
 
-	uniqueSourceIDs := uniqueSortedUint64(req.SourceIDs)
+func (h *FeedHandler) BriefingStatus(c *gin.Context) {
+	digestKey, ok := parseFeedBriefingDigest(c)
+	if !ok {
+		return
+	}
+	state, err := h.briefingTasks.GetState(c.Request.Context(), digestKey)
+	if err != nil {
+		internalServerError(c, "query feed briefing task failed", err)
+		return
+	}
+	if state.Status == articlesummary.StatusIdle {
+		var cached models.FeedBriefing
+		result := h.db.WithContext(c.Request.Context()).Where("digest_key = ?", digestKey).Limit(1).Find(&cached)
+		if result.Error != nil {
+			internalServerError(c, "query feed briefing cache failed", result.Error)
+			return
+		}
+		if result.RowsAffected > 0 {
+			state.Model = cached.Model
+			state.Status = articlesummary.StatusSucceeded
+			state.UpdatedAt = cached.GeneratedAt
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": state})
+}
+
+func (h *FeedHandler) BriefingResult(c *gin.Context) {
+	digestKey, ok := parseFeedBriefingDigest(c)
+	if !ok {
+		return
+	}
+	var cached models.FeedBriefing
+	result := h.db.WithContext(c.Request.Context()).Where("digest_key = ?", digestKey).Limit(1).Find(&cached)
+	if result.Error != nil {
+		internalServerError(c, "query feed briefing cache failed", result.Error)
+		return
+	}
+	if result.RowsAffected == 0 {
+		notFound(c, "feed briefing result not found")
+		return
+	}
+	sourceNames, err := h.loadSourceNamesForBriefings(c.Request.Context(), []models.FeedBriefing{cached})
+	if err != nil {
+		internalServerError(c, "load feed briefing sources failed", err)
+		return
+	}
+	articleRefs, err := h.loadArticleRefsForBriefings(c.Request.Context(), []models.FeedBriefing{cached}, sourceNames)
+	if err != nil {
+		internalServerError(c, "load feed briefing articles failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": feedBriefingPayload{
+		DigestKey:    cached.DigestKey,
+		Summary:      cached.Summary,
+		Model:        cached.Model,
+		Provider:     cached.Provider,
+		InputChars:   cached.InputChars,
+		Truncated:    cached.Truncated,
+		StopReason:   cached.StopReason,
+		GeneratedAt:  cached.GeneratedAt,
+		CacheHit:     true,
+		ArticleCount: countCSVEntries(cached.ArticleIDs),
+		InputItems:   articleRefs[cached.DigestKey],
+	}})
+}
+
+func parseFeedBriefingDigest(c *gin.Context) (string, bool) {
+	digestKey := strings.TrimSpace(c.Query("digest_key"))
+	if len(digestKey) != sha1.Size*2 {
+		badRequest(c, "digest_key must be a SHA-1 hex digest")
+		return "", false
+	}
+	if _, err := hex.DecodeString(digestKey); err != nil {
+		badRequest(c, "digest_key must be a SHA-1 hex digest")
+		return "", false
+	}
+	return strings.ToLower(digestKey), true
+}
+
+func (h *FeedHandler) runFeedBriefingTask(ctx context.Context, input feedBriefingTaskInput) error {
+	rows, err := h.queryBriefingFeedRows(ctx, input.Limit, input.Tag, input.Keyword, input.SourceIDs, input.ArticleIDs)
+	if err != nil {
+		return fmt.Errorf("query feed briefing data: %w", err)
+	}
+	if len(rows) == 0 {
+		return errors.New("no feed items available for briefing")
+	}
+	digestKey, _ := buildFeedBriefingDigest(input.Limit, input.Tag, input.Keyword, input.Model, input.SourceIDs, rows)
+	if digestKey != input.DigestKey {
+		return errors.New("feed briefing input changed before generation")
+	}
+	if !input.Refresh {
+		var cached models.FeedBriefing
+		result := h.db.WithContext(ctx).Where("digest_key = ?", input.DigestKey).Limit(1).Find(&cached)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			return nil
+		}
+	}
+	_, err = h.generateAndSaveFeedBriefing(ctx, input, rows, nil)
+	return err
+}
+
+func (h *FeedHandler) generateAndSaveFeedBriefing(
+	ctx context.Context,
+	input feedBriefingTaskInput,
+	rows []feedItem,
+	inputItems []feedBriefingInputItem,
+) (feedBriefingPayload, error) {
+	prompt := buildFeedBriefingPrompt(rows)
+	result, err := h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, prompt, input.Model)
+	if err != nil {
+		return feedBriefingPayload{}, err
+	}
+
 	record := models.FeedBriefing{
-		DigestKey:   digestKey,
-		Tag:         tag,
-		Keyword:     keyword,
-		SourceIDs:   joinUint64(uniqueSourceIDs),
-		ArticleIDs:  joinUint64(articleIDs),
-		Limit:       limit,
+		DigestKey:   input.DigestKey,
+		Tag:         input.Tag,
+		Keyword:     input.Keyword,
+		SourceIDs:   joinUint64(input.SourceIDs),
+		ArticleIDs:  joinUint64(input.ArticleIDs),
+		Limit:       input.Limit,
 		Summary:     result.Summary,
 		Model:       result.Model,
 		Provider:    result.ProviderName,
@@ -577,30 +720,29 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 		StopReason:  result.StopReason,
 		GeneratedAt: result.GeneratedAt,
 	}
-	if err := h.db.WithContext(c.Request.Context()).
-		Where("digest_key = ?", digestKey).
+	if err := h.db.WithContext(ctx).
+		Where("digest_key = ?", input.DigestKey).
 		Assign(record).
 		FirstOrCreate(&record).Error; err != nil {
-		internalServerError(c, "save feed briefing cache failed", err)
-		return
+		return feedBriefingPayload{}, fmt.Errorf("save feed briefing cache: %w", err)
 	}
-	h.briefingCooldown.Touch(digestKey, result.GeneratedAt)
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": feedBriefingPayload{
-			DigestKey:    digestKey,
-			Summary:      result.Summary,
-			Model:        result.Model,
-			Provider:     result.ProviderName,
-			InputChars:   result.InputChars,
-			Truncated:    result.Truncated,
-			StopReason:   result.StopReason,
-			GeneratedAt:  result.GeneratedAt,
-			CacheHit:     false,
-			ArticleCount: len(promptRows),
-			InputItems:   inputItems,
-		},
-	})
+	h.briefingCooldown.Touch(input.DigestKey, result.GeneratedAt)
+	if inputItems == nil {
+		inputItems = buildFeedBriefingInputItems(rows, maxBriefingInputItems)
+	}
+	return feedBriefingPayload{
+		DigestKey:    input.DigestKey,
+		Summary:      result.Summary,
+		Model:        result.Model,
+		Provider:     result.ProviderName,
+		InputChars:   result.InputChars,
+		Truncated:    result.Truncated,
+		StopReason:   result.StopReason,
+		GeneratedAt:  result.GeneratedAt,
+		CacheHit:     false,
+		ArticleCount: len(rows),
+		InputItems:   inputItems,
+	}, nil
 }
 
 func (h *FeedHandler) isAdminRequest(c *gin.Context) bool {

@@ -79,7 +79,7 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 	return &FeedBriefingScheduler{
 		db:                db,
 		summarizer:        summarizer,
-		helper:            NewFeedHandler(db, summarizer, FeedHandlerOptions{}),
+		helper:            &FeedHandler{db: db, summarizer: summarizer},
 		tick:              tick,
 		limit:             limit,
 		maxSourcesPerTick: maxSources,
