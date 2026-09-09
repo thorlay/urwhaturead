@@ -66,7 +66,7 @@ On first startup, SQL files in `sql/init/` run automatically:
 ./scripts/dev-up.sh --detach  # start DB + API in background
 ./scripts/dev-down.sh  # stop API + DB
 ./scripts/cluster-backfill.sh  # backfill event clusters for historical articles
-./scripts/auto-update.sh  # pull/build/restart when origin has new commits
+./scripts/auto-update.sh  # verify/build/activate when origin has new commits
 ```
 
 ## Environment Variables

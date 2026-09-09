@@ -413,8 +413,12 @@ sudo journalctl -u quick-auto-update.service -n 120 --no-pager
 - `AUTO_UPDATE_BRANCH`：默认 `main`
 - `AUTO_UPDATE_MIN_COMMITS`：默认 `1`（即“最小更新”）
 - `API_SERVICE_NAME`：默认 `quick-api`
+- `AUTO_UPDATE_READY_URL`：默认 `http://127.0.0.1:${PORT:-8080}/readyz`
 
 说明：
 
 - 脚本会在工作区有本地未提交改动时自动跳过，避免覆盖人工修改。
-- 有更新时会执行：`git pull --ff-only` -> 后端 build -> 重启 API -> 前端 build -> reload Caddy。
+- 有更新时会先拉取代码，在临时目录运行后端测试与构建、前端 lint/type-check/build；全部通过后才切换产物并重启 API。
+- API 重启后必须通过 `/readyz` 检查；失败会恢复上一版后端和前端产物。
+- `.run/deployed-sha` 记录最后成功部署的提交。构建或健康检查失败时不会推进记录，下一次 timer 会自动重试。
+- 完整验证在低配 VPS 上通常需要几十秒到数分钟，因此 service 的启动超时设置为 10 分钟。

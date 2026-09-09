@@ -1,10 +1,11 @@
 [Unit]
-Description=Quick Auto Update (pull/build/restart if new commits)
+Description=Quick Auto Update (verify/build/activate new commits)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
+TimeoutStartSec=10min
 # Default to root for minimal friction on restarting system services.
 # You can change this to a non-root deploy user if sudoers/systemd policy is configured.
 User=root
