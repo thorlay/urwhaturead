@@ -89,10 +89,12 @@
 
 目录：`internal/handlers/`
 
+- `feed_list_handler.go`
+  - 聚合流参数解析、分页响应和有界摘要预览，完整内容在文章详情打开时按需读取
+- `feed_repository.go`
+  - 聚合流数据库查询，支持去重、游标分页、关键词、标签、来源和增量过滤
 - `feed_handler.go`
-  - 列表查询（支持去重、分页、关键词、标签、来源过滤）
-  - 聚合流只返回有界摘要预览，完整内容在文章详情打开时按需读取
-  - AI 聚合速览（briefing）生成与缓存
+  - AI 聚合速览（briefing）读取、生成与缓存
 - `article_handler.go`
   - 文章详情
   - 文章摘要接口

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -18,17 +17,16 @@ import (
 
 	"quick/internal/aisummary"
 	"quick/internal/articlesummary"
-	"quick/internal/feedextract"
 	"quick/internal/models"
 	"quick/internal/textclean"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 type FeedHandler struct {
 	db               *gorm.DB
+	feedRepository   *feedRepository
 	summarizer       *aisummary.Client
 	adminAuthEnabled bool
 	adminToken       string
@@ -61,6 +59,7 @@ func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandl
 
 	handler := &FeedHandler{
 		db:               db,
+		feedRepository:   newFeedRepository(db),
 		summarizer:       summarizer,
 		adminAuthEnabled: options.AdminAuthEnabled,
 		adminToken:       strings.TrimSpace(options.AdminToken),
@@ -85,32 +84,6 @@ func (h *FeedHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 }
 
 func (h *FeedHandler) RegisterWriteRoutes(group *gin.RouterGroup) {}
-
-type feedItem struct {
-	ID             uint64         `json:"id"`
-	SourceID       uint64         `json:"source_id"`
-	ClusterID      *uint64        `json:"cluster_id,omitempty"`
-	SourceName     string         `json:"source_name"`
-	SourceTag      string         `json:"source_tag"`
-	Title          string         `json:"title"`
-	Link           string         `json:"link"`
-	Summary        *string        `json:"summary,omitempty"`
-	Content        *string        `json:"content,omitempty"`
-	Author         *string        `json:"author,omitempty"`
-	PublishedAt    *time.Time     `json:"published_at,omitempty"`
-	ImageURL       *string        `json:"image_url,omitempty"`
-	ReplyCount     *int           `json:"reply_count,omitempty"`
-	ContentHash    string         `json:"-" gorm:"column:content_hash"`
-	DuplicateCount int            `json:"duplicate_count"`
-	CreatedAt      time.Time      `json:"created_at"`
-	SortTime       time.Time      `json:"-"`
-	Raw            datatypes.JSON `json:"-" gorm:"column:raw"`
-}
-
-type feedCursor struct {
-	SortTime time.Time
-	ID       uint64
-}
 
 type feedBriefingRequest struct {
 	Limit      *int     `json:"limit"`
@@ -170,8 +143,6 @@ const (
 	defaultBriefingLimit  = 20
 	maxBriefingLimit      = 50
 	maxBriefingInputItems = 12
-	maxFeedSummaryRunes   = 400
-	maxFeedContentRunes   = 320
 )
 
 func (h *FeedHandler) ListBriefings(c *gin.Context) {
@@ -241,213 +212,6 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 			"count":  len(items),
 		},
 	})
-}
-
-func (h *FeedHandler) List(c *gin.Context) {
-	startedAt := time.Now()
-	limit := 20
-	if limitRaw := c.Query("limit"); limitRaw != "" {
-		value, err := strconv.Atoi(limitRaw)
-		if err != nil || value <= 0 || value > 100 {
-			badRequest(c, "limit must be an integer between 1 and 100")
-			return
-		}
-		limit = value
-	}
-
-	dedupe := parseFeedDedupeQuery(c.Query("dedupe"))
-	includeHidden := parseBoolQuery(strings.TrimSpace(c.Query("include_hidden")))
-	since, err := parseFeedSince(c.Query("since"))
-	if err != nil {
-		badRequest(c, err.Error())
-		return
-	}
-
-	query := h.db.
-		Table("articles AS a").
-		Select(`
-			a.id,
-			a.source_id,
-			a.cluster_id,
-			s.name AS source_name,
-			COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
-			a.title,
-			a.link,
-			a.summary,
-			a.author,
-			a.published_at,
-			a.image_url,
-			a.reply_count,
-			COALESCE(ec.article_count, 1) AS duplicate_count,
-			a.created_at,
-			COALESCE(a.published_at, a.created_at) AS sort_time
-		`).
-		Joins("JOIN sources AS s ON s.id = a.source_id").
-		Joins("LEFT JOIN event_clusters AS ec ON ec.id = a.cluster_id")
-	if !includeHidden {
-		query = query.Where("s.hidden_in_sidebar = ? AND s.kind <> ?", false, "thread")
-	}
-
-	if tag := normalizeSourceTag(c.Query("tag")); tag != "" {
-		query = query.Where("s.tags @> ?::text[]", models.StringArray{tag})
-	}
-
-	if sourceIDsRaw := strings.TrimSpace(c.Query("source_ids")); sourceIDsRaw != "" {
-		sourceIDs, err := parseCSVUint64(sourceIDsRaw)
-		if err != nil {
-			badRequest(c, err.Error())
-			return
-		}
-		query = query.Where("a.source_id IN ?", sourceIDs)
-	}
-
-	if keyword := strings.TrimSpace(c.Query("q")); keyword != "" {
-		like := "%" + keyword + "%"
-		query = query.Where(
-			"(a.title ILIKE ? OR a.summary ILIKE ? OR a.content ILIKE ?)",
-			like, like, like,
-		)
-	}
-	if since != nil {
-		query = query.Where("a.created_at > ?", *since)
-	}
-
-	var totalCount int64
-	if since != nil {
-		if err := query.Session(&gorm.Session{}).
-			Select("COUNT(DISTINCT a.id)").
-			Scan(&totalCount).Error; err != nil {
-			internalServerError(c, "count feed items since checkpoint failed", err)
-			return
-		}
-	}
-
-	if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
-		cursor, err := decodeFeedCursor(cursorRaw)
-		if err != nil {
-			badRequest(c, "invalid cursor")
-			return
-		}
-		query = query.Where(
-			"(COALESCE(a.published_at, a.created_at), a.id) < (?, ?)",
-			cursor.SortTime, cursor.ID,
-		)
-	}
-
-	var rows []feedItem
-	queryStartedAt := time.Now()
-	dedupeCandidateLimit := 0
-	if dedupe {
-		dedupeCandidateLimit = feedDedupeCandidateLimit(limit)
-		candidates := query.
-			Order("COALESCE(a.published_at, a.created_at) DESC").
-			Order("a.id DESC").
-			Limit(dedupeCandidateLimit)
-
-		ranked := h.db.Table("(?) AS candidates", candidates).
-			Select(`
-				candidates.id,
-				candidates.source_id,
-				candidates.cluster_id,
-				candidates.source_name,
-				candidates.source_tag,
-				candidates.title,
-				candidates.link,
-				candidates.summary,
-				candidates.author,
-				candidates.published_at,
-				candidates.image_url,
-				candidates.reply_count,
-				candidates.created_at,
-				candidates.sort_time,
-				MAX(candidates.duplicate_count) OVER (PARTITION BY COALESCE(candidates.cluster_id, candidates.id)) AS duplicate_count,
-				ROW_NUMBER() OVER (
-					PARTITION BY COALESCE(candidates.cluster_id, candidates.id)
-					ORDER BY candidates.sort_time DESC, candidates.id DESC
-				) AS rn
-			`)
-
-		outer := h.db.Table("(?) AS ranked", ranked).
-			Select(`
-				ranked.id,
-				ranked.source_id,
-				ranked.cluster_id,
-				ranked.source_name,
-				ranked.source_tag,
-				ranked.title,
-				ranked.link,
-				ranked.summary,
-				ranked.author,
-				ranked.published_at,
-				ranked.image_url,
-				ranked.reply_count,
-				ranked.duplicate_count,
-				ranked.created_at,
-				ranked.sort_time
-			`).
-			Where("ranked.rn = 1")
-
-		if err := outer.
-			Order("ranked.sort_time DESC").
-			Order("ranked.id DESC").
-			Limit(limit + 1).
-			Scan(&rows).Error; err != nil {
-			internalServerError(c, "query deduped feed failed", err)
-			return
-		}
-	} else {
-		if err := query.
-			Order("COALESCE(a.published_at, a.created_at) DESC").
-			Order("a.id DESC").
-			Limit(limit + 1).
-			Scan(&rows).Error; err != nil {
-			internalServerError(c, "query feed failed", err)
-			return
-		}
-	}
-	queryElapsed := time.Since(queryStartedAt)
-
-	nextCursor := ""
-	if len(rows) > limit {
-		last := rows[limit-1]
-		nextCursor = encodeFeedCursor(feedCursor{
-			SortTime: last.SortTime,
-			ID:       last.ID,
-		})
-		rows = rows[:limit]
-	}
-	sanitizeStartedAt := time.Now()
-	sanitizeFeedItems(rows)
-	sanitizeElapsed := time.Since(sanitizeStartedAt)
-	totalElapsed := time.Since(startedAt)
-
-	meta := gin.H{
-		"limit":                  limit,
-		"count":                  len(rows),
-		"next_cursor":            nextCursor,
-		"elapsed_ms":             totalElapsed.Milliseconds(),
-		"query_ms":               queryElapsed.Milliseconds(),
-		"sanitize_ms":            sanitizeElapsed.Milliseconds(),
-		"dedupe":                 dedupe,
-		"dedupe_candidate_limit": dedupeCandidateLimit,
-	}
-	if since != nil {
-		meta["since"] = since.Format(time.RFC3339)
-		meta["total_count"] = totalCount
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": rows, "meta": meta})
-}
-
-func feedDedupeCandidateLimit(limit int) int {
-	candidateLimit := limit * 15
-	if candidateLimit < limit+80 {
-		return limit + 80
-	}
-	if candidateLimit > 800 {
-		return 800
-	}
-	return candidateLimit
 }
 
 func (h *FeedHandler) Briefing(c *gin.Context) {
@@ -968,24 +732,6 @@ func buildFeedBriefingDigest(
 	return hex.EncodeToString(sum[:]), articleIDs
 }
 
-func parseFeedDedupeQuery(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	return raw != "" && parseBoolQuery(raw)
-}
-
-func parseFeedSince(raw string) (*time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	parsed, err := time.Parse(time.RFC3339, raw)
-	if err != nil {
-		return nil, errors.New("since must be an RFC3339 timestamp")
-	}
-	parsed = parsed.UTC()
-	return &parsed, nil
-}
-
 func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Client, isAdmin bool) string {
 	if !isAdmin {
 		if summarizer == nil {
@@ -1250,60 +996,6 @@ func buildFeedBriefingInputItems(rows []feedItem, maxItems int) []feedBriefingIn
 	return items
 }
 
-func sanitizeFeedItems(items []feedItem) {
-	for i := range items {
-		item := &items[i]
-		item.SourceName = textclean.NormalizeInline(item.SourceName)
-		item.SourceTag = textclean.NormalizeInline(item.SourceTag)
-		item.Title = textclean.NormalizeInline(item.Title)
-		if item.Summary != nil {
-			value := textclean.NormalizeFromHTML(*item.Summary)
-			if value == "" {
-				item.Summary = nil
-			} else {
-				value = truncateFeedText(value, maxFeedSummaryRunes)
-				item.Summary = &value
-			}
-		}
-		if item.Content != nil {
-			value := textclean.NormalizeFromHTML(*item.Content)
-			if value == "" {
-				item.Content = nil
-			} else {
-				value = truncateFeedText(value, maxFeedContentRunes)
-				item.Content = &value
-			}
-		}
-		if item.Author != nil {
-			value := textclean.NormalizeInline(*item.Author)
-			if value == "" {
-				item.Author = nil
-			} else {
-				item.Author = &value
-			}
-		}
-		if item.ImageURL == nil {
-			if fallback := feedextract.ImageFromRaw(item.Raw, item.Link); fallback != "" {
-				item.ImageURL = &fallback
-			}
-		}
-		if item.ReplyCount == nil {
-			item.ReplyCount = feedextract.ReplyCountFromRaw(item.Raw)
-		}
-	}
-}
-
-func truncateFeedText(value string, maxRunes int) string {
-	if maxRunes <= 0 {
-		return ""
-	}
-	runes := []rune(value)
-	if len(runes) <= maxRunes {
-		return value
-	}
-	return string(runes[:maxRunes]) + "..."
-}
-
 func uniqueSortedUint64(input []uint64) []uint64 {
 	if len(input) == 0 {
 		return nil
@@ -1354,35 +1046,4 @@ func parseCSVUint64(raw string) ([]uint64, error) {
 		return nil, fmt.Errorf("source_ids must contain at least one id")
 	}
 	return result, nil
-}
-
-func encodeFeedCursor(cursor feedCursor) string {
-	payload := fmt.Sprintf("%d:%d", cursor.SortTime.UTC().UnixNano(), cursor.ID)
-	return base64.RawURLEncoding.EncodeToString([]byte(payload))
-}
-
-func decodeFeedCursor(raw string) (feedCursor, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(raw)
-	if err != nil {
-		return feedCursor{}, err
-	}
-
-	parts := strings.Split(string(decoded), ":")
-	if len(parts) != 2 {
-		return feedCursor{}, fmt.Errorf("invalid format")
-	}
-
-	unixNano, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return feedCursor{}, err
-	}
-	id, err := strconv.ParseUint(parts[1], 10, 64)
-	if err != nil {
-		return feedCursor{}, err
-	}
-
-	return feedCursor{
-		SortTime: time.Unix(0, unixNano).UTC(),
-		ID:       id,
-	}, nil
 }
