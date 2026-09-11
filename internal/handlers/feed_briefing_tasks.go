@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"strings"
-	"sync"
 	"time"
 
-	"quick/internal/articlesummary"
-	"quick/internal/models"
+	"quick/internal/aitask"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
@@ -47,29 +43,27 @@ type feedBriefingTaskState struct {
 type feedBriefingTaskRunner func(context.Context, feedBriefingTaskInput) error
 
 type feedBriefingTaskService struct {
-	db     *gorm.DB
 	runner feedBriefingTaskRunner
-	sem    chan struct{}
-
-	mu       sync.Mutex
-	inFlight map[string]struct{}
+	tasks  *aitask.Service
 }
 
 func newFeedBriefingTaskService(db *gorm.DB, runner feedBriefingTaskRunner) *feedBriefingTaskService {
-	service := &feedBriefingTaskService{
-		db:       db,
-		runner:   runner,
-		sem:      make(chan struct{}, feedBriefingConcurrency),
-		inFlight: make(map[string]struct{}),
-	}
+	service := &feedBriefingTaskService{runner: runner}
 	if db != nil && runner != nil {
-		go service.resumePending()
+		service.tasks = aitask.NewService(db, aitask.Options{
+			Kind:          feedBriefingTaskKind,
+			Concurrency:   feedBriefingConcurrency,
+			Timeout:       feedBriefingTaskTimeout,
+			RecoveryAge:   feedBriefingRecoveryAge,
+			RecoveryLimit: feedBriefingRecoveryMax,
+			Runner:        service.runTask,
+		})
 	}
 	return service
 }
 
 func (s *feedBriefingTaskService) Enqueue(input feedBriefingTaskInput) (feedBriefingTaskState, error) {
-	if s == nil || s.db == nil || s.runner == nil {
+	if s == nil || s.tasks == nil || s.runner == nil {
 		return feedBriefingTaskState{}, errors.New("feed briefing task service is not configured")
 	}
 	input.DigestKey = strings.TrimSpace(input.DigestKey)
@@ -77,142 +71,61 @@ func (s *feedBriefingTaskService) Enqueue(input feedBriefingTaskInput) (feedBrie
 		return feedBriefingTaskState{}, errors.New("feed briefing digest key is empty")
 	}
 
-	key := feedBriefingTaskKey(input.DigestKey)
-	s.mu.Lock()
-	if _, running := s.inFlight[key]; running {
-		s.mu.Unlock()
-		return s.GetState(context.Background(), input.DigestKey)
-	}
-	s.inFlight[key] = struct{}{}
-	s.mu.Unlock()
-
-	now := time.Now().UTC()
-	state := feedBriefingTaskState{
-		DigestKey: input.DigestKey,
-		Model:     strings.TrimSpace(input.Model),
-		Status:    articlesummary.StatusQueued,
-		UpdatedAt: now,
-	}
 	payload, err := json.Marshal(input)
 	if err != nil {
-		s.release(key)
 		return feedBriefingTaskState{}, err
 	}
-	task := models.AITask{
-		TaskKey:   key,
-		Kind:      feedBriefingTaskKind,
-		Model:     state.Model,
-		Refresh:   input.Refresh,
-		Payload:   string(payload),
-		Status:    state.Status,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := s.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "task_key"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"kind", "model", "refresh", "payload", "status", "error", "updated_at",
-		}),
-	}).Create(&task).Error; err != nil {
-		s.release(key)
+	state, err := s.tasks.Enqueue(aitask.Task{
+		Key:     feedBriefingTaskKey(input.DigestKey),
+		Model:   input.Model,
+		Refresh: input.Refresh,
+		Payload: string(payload),
+	})
+	if err != nil {
 		return feedBriefingTaskState{}, err
 	}
-
-	go s.run(key, input)
-	return state, nil
+	return toFeedBriefingTaskState(input.DigestKey, input.Model, state), nil
 }
 
 func (s *feedBriefingTaskService) GetState(ctx context.Context, digestKey string) (feedBriefingTaskState, error) {
 	digestKey = strings.TrimSpace(digestKey)
 	state := feedBriefingTaskState{
 		DigestKey: digestKey,
-		Status:    articlesummary.StatusIdle,
+		Status:    aitask.StatusIdle,
 		UpdatedAt: time.Now().UTC(),
 	}
-	if s == nil || s.db == nil || digestKey == "" {
+	if s == nil || s.tasks == nil || digestKey == "" {
 		return state, nil
 	}
 
-	var task models.AITask
-	result := s.db.WithContext(ctx).
-		Where("task_key = ? AND kind = ?", feedBriefingTaskKey(digestKey), feedBriefingTaskKind).
-		Limit(1).
-		Find(&task)
-	if result.Error != nil {
-		return state, result.Error
+	taskState, err := s.tasks.GetState(ctx, feedBriefingTaskKey(digestKey))
+	if err != nil {
+		return state, err
 	}
-	if result.RowsAffected == 0 {
-		return state, nil
-	}
-	state.Model = task.Model
-	state.Status = task.Status
-	state.Error = task.Error
-	state.UpdatedAt = task.UpdatedAt
-	return state, nil
+	return toFeedBriefingTaskState(digestKey, "", taskState), nil
 }
 
-func (s *feedBriefingTaskService) run(key string, input feedBriefingTaskInput) {
-	defer s.release(key)
-	s.sem <- struct{}{}
-	defer func() { <-s.sem }()
-
-	s.updateState(key, articlesummary.StatusRunning, "")
-	ctx, cancel := context.WithTimeout(context.Background(), feedBriefingTaskTimeout)
-	defer cancel()
-	if err := s.runner(ctx, input); err != nil {
-		log.Printf("feed briefing async failed digest=%s model=%s err=%v", input.DigestKey, input.Model, err)
-		s.updateState(key, articlesummary.StatusFailed, err.Error())
-		return
+func (s *feedBriefingTaskService) runTask(ctx context.Context, task aitask.Task) error {
+	var input feedBriefingTaskInput
+	if err := json.Unmarshal([]byte(task.Payload), &input); err != nil || strings.TrimSpace(input.DigestKey) == "" {
+		return errors.New("invalid persisted task payload")
 	}
-	s.updateState(key, articlesummary.StatusSucceeded, "")
-}
-
-func (s *feedBriefingTaskService) updateState(key string, status string, taskError string) {
-	if err := s.db.Model(&models.AITask{}).
-		Where("task_key = ? AND kind = ?", key, feedBriefingTaskKind).
-		Updates(map[string]any{
-			"status":     status,
-			"error":      strings.TrimSpace(taskError),
-			"updated_at": time.Now().UTC(),
-		}).Error; err != nil {
-		log.Printf("persist feed briefing task state key=%s status=%s: %v", key, status, err)
-	}
-}
-
-func (s *feedBriefingTaskService) resumePending() {
-	var tasks []models.AITask
-	if err := s.db.
-		Where("kind = ? AND status IN ? AND updated_at >= ?", feedBriefingTaskKind, []string{articlesummary.StatusQueued, articlesummary.StatusRunning}, time.Now().UTC().Add(-feedBriefingRecoveryAge)).
-		Order("updated_at ASC").
-		Limit(feedBriefingRecoveryMax).
-		Find(&tasks).Error; err != nil {
-		log.Printf("load pending feed briefing tasks: %v", err)
-		return
-	}
-
-	for _, task := range tasks {
-		var input feedBriefingTaskInput
-		if err := json.Unmarshal([]byte(task.Payload), &input); err != nil || strings.TrimSpace(input.DigestKey) == "" {
-			s.updateState(task.TaskKey, articlesummary.StatusFailed, "invalid persisted task payload")
-			continue
-		}
-		s.mu.Lock()
-		if _, running := s.inFlight[task.TaskKey]; running {
-			s.mu.Unlock()
-			continue
-		}
-		s.inFlight[task.TaskKey] = struct{}{}
-		s.mu.Unlock()
-		go s.run(task.TaskKey, input)
-	}
-}
-
-func (s *feedBriefingTaskService) release(key string) {
-	s.mu.Lock()
-	delete(s.inFlight, key)
-	s.mu.Unlock()
+	return s.runner(ctx, input)
 }
 
 func feedBriefingTaskKey(digestKey string) string {
 	return feedBriefingTaskKeyPrefix + strings.TrimSpace(digestKey)
+}
+
+func toFeedBriefingTaskState(digestKey, model string, state aitask.State) feedBriefingTaskState {
+	if strings.TrimSpace(model) == "" {
+		model = state.Model
+	}
+	return feedBriefingTaskState{
+		DigestKey: strings.TrimSpace(digestKey),
+		Model:     strings.TrimSpace(model),
+		Status:    state.Status,
+		Error:     state.Error,
+		UpdatedAt: state.UpdatedAt,
+	}
 }

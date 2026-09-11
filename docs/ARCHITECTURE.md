@@ -113,13 +113,15 @@
 
 ### 4.2 Service 层（业务能力）
 
+- `internal/aitask/service.go`
+  - 文章摘要与聚合速览共用的持久任务执行器
+  - 统一处理任务去重、并发限制、超时、状态持久化、panic 隔离和重启恢复
 - `internal/articlesummary/service.go`
-  - 文章摘要异步队列（并发=2）
-  - 任务状态机（queued/running/succeeded/failed）
+  - 文章摘要输入加载与生成流程
   - DB 缓存读写（`article_summaries`）
 - `internal/handlers/feed_briefing_tasks.go`
-  - 聚合速览持久任务队列（并发=2）
-  - 保存完整输入快照，并在服务重启后恢复未完成任务
+  - 聚合速览任务 payload 编解码与业务 runner 适配
+  - 保存完整输入快照，交由通用任务执行器运行
 - `internal/handlers/article_content_service.go`
   - 论坛线程抓取与解析（USCard/V2EX/Reddit）
   - 外链正文抓取、缓存、失败熔断、日预算限流

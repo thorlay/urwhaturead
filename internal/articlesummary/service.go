@@ -3,17 +3,15 @@ package articlesummary
 import (
 	"context"
 	"errors"
-	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"quick/internal/aisummary"
+	"quick/internal/aitask"
 	"quick/internal/models"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const (
@@ -26,11 +24,11 @@ const (
 )
 
 const (
-	StatusIdle      = "idle"
-	StatusQueued    = "queued"
-	StatusRunning   = "running"
-	StatusSucceeded = "succeeded"
-	StatusFailed    = "failed"
+	StatusIdle      = aitask.StatusIdle
+	StatusQueued    = aitask.StatusQueued
+	StatusRunning   = aitask.StatusRunning
+	StatusSucceeded = aitask.StatusSucceeded
+	StatusFailed    = aitask.StatusFailed
 )
 
 type ArticleInput struct {
@@ -72,10 +70,7 @@ type Service struct {
 	summarizer *aisummary.Client
 	loadInput  Loader
 
-	taskMu   sync.Mutex
-	tasks    map[string]TaskState
-	inFlight map[string]struct{}
-	sem      chan struct{}
+	tasks *aitask.Service
 }
 
 func NewService(db *gorm.DB, summarizer *aisummary.Client, loadInput Loader) *Service {
@@ -83,98 +78,52 @@ func NewService(db *gorm.DB, summarizer *aisummary.Client, loadInput Loader) *Se
 		db:         db,
 		summarizer: summarizer,
 		loadInput:  loadInput,
-		tasks:      make(map[string]TaskState),
-		inFlight:   make(map[string]struct{}),
-		sem:        make(chan struct{}, asyncConcurrency),
 	}
-	if service.IsConfigured() {
-		go service.resumePendingTasks()
+	if service.db != nil && service.summarizer != nil && service.loadInput != nil {
+		service.tasks = aitask.NewService(db, aitask.Options{
+			Kind:          articleTaskKind,
+			Concurrency:   asyncConcurrency,
+			Timeout:       asyncTimeout,
+			RecoveryAge:   taskRecoveryAge,
+			RecoveryLimit: taskRecoveryMax,
+			StateTTL:      taskStateTTL,
+			Runner:        service.runTask,
+		})
 	}
 	return service
 }
 
 func (s *Service) IsConfigured() bool {
-	return s != nil && s.db != nil && s.summarizer != nil && s.loadInput != nil
+	return s != nil && s.db != nil && s.summarizer != nil && s.loadInput != nil && s.tasks != nil
 }
 
 func (s *Service) EnqueueTask(articleID uint64, requestedModel string, refresh bool) TaskPayload {
-	key := taskKey(articleID, requestedModel)
-	now := time.Now().UTC()
-
-	s.taskMu.Lock()
-	s.pruneTaskStateLocked(now)
-
-	if _, running := s.inFlight[key]; running {
-		state, ok := s.tasks[key]
-		if !ok {
-			state = TaskState{
-				Status:    StatusRunning,
-				UpdatedAt: now,
-			}
-			s.tasks[key] = state
-		}
-		s.taskMu.Unlock()
-		return toTaskPayload(articleID, requestedModel, state)
+	if !s.IsConfigured() {
+		return toTaskPayload(articleID, requestedModel, TaskState{
+			Status: StatusFailed, Error: "summary service is not configured", UpdatedAt: time.Now().UTC(),
+		})
 	}
-
-	state := TaskState{
-		Status:    StatusQueued,
-		UpdatedAt: now,
-	}
-	s.inFlight[key] = struct{}{}
-	s.tasks[key] = state
-	s.taskMu.Unlock()
-	if err := s.persistTask(key, articleID, requestedModel, refresh, state); err != nil {
-		s.taskMu.Lock()
-		delete(s.inFlight, key)
-		state.Status = StatusFailed
-		state.Error = "save task state failed: " + err.Error()
-		state.UpdatedAt = time.Now().UTC()
-		s.tasks[key] = state
-		s.taskMu.Unlock()
-		return toTaskPayload(articleID, requestedModel, state)
-	}
-
-	go s.runTask(key, articleID, requestedModel, refresh)
-	return toTaskPayload(articleID, requestedModel, state)
+	state, _ := s.tasks.Enqueue(aitask.Task{
+		Key:        taskKey(articleID, requestedModel),
+		ResourceID: articleID,
+		Model:      requestedModel,
+		Refresh:    refresh,
+	})
+	return toTaskPayload(articleID, requestedModel, fromAITaskState(state))
 }
 
-func (s *Service) runTask(key string, articleID uint64, requestedModel string, refresh bool) {
-	defer func() {
-		s.taskMu.Lock()
-		delete(s.inFlight, key)
-		s.taskMu.Unlock()
-	}()
-
-	s.sem <- struct{}{}
-	defer func() { <-s.sem }()
-
-	s.setTaskState(key, StatusRunning, "")
-
-	ctx, cancel := context.WithTimeout(context.Background(), asyncTimeout)
-	defer cancel()
-
-	if !refresh {
-		if _, found, err := s.GetCachedPayload(ctx, articleID, requestedModel); err == nil && found {
-			s.setTaskState(key, StatusSucceeded, "")
-			return
+func (s *Service) runTask(ctx context.Context, task aitask.Task) error {
+	if !task.Refresh {
+		if _, found, err := s.GetCachedPayload(ctx, task.ResourceID, task.Model); err == nil && found {
+			return nil
 		}
 	}
 
-	_, stage, err := s.GenerateAndSave(ctx, articleID, requestedModel)
+	_, stage, err := s.GenerateAndSave(ctx, task.ResourceID, task.Model)
 	if err != nil {
-		log.Printf(
-			"summary async failed article_id=%d stage=%s model=%s err=%v",
-			articleID,
-			stage,
-			firstNonEmpty(requestedModel, "<default>"),
-			err,
-		)
-		s.setTaskState(key, StatusFailed, summarizeTaskError(stage, err))
-		return
+		return errors.New(summarizeTaskError(stage, err))
 	}
-
-	s.setTaskState(key, StatusSucceeded, "")
+	return nil
 }
 
 func (s *Service) GenerateAndSave(
@@ -235,28 +184,14 @@ func (s *Service) GenerateAndSave(
 }
 
 func (s *Service) GetTaskState(ctx context.Context, articleID uint64, requestedModel string) TaskState {
-	now := time.Now().UTC()
-	key := taskKey(articleID, requestedModel)
-	s.taskMu.Lock()
-	s.pruneTaskStateLocked(now)
-	state, ok := s.tasks[key]
-	s.taskMu.Unlock()
-	if ok {
-		return state
+	if s == nil || s.tasks == nil {
+		return TaskState{Status: StatusIdle, UpdatedAt: time.Now().UTC()}
 	}
-
-	if s.db != nil {
-		var task models.AITask
-		result := s.db.WithContext(ctx).Where("task_key = ?", key).Limit(1).Find(&task)
-		if result.Error == nil && result.RowsAffected > 0 {
-			return TaskState{
-				Status:    task.Status,
-				Error:     task.Error,
-				UpdatedAt: task.UpdatedAt,
-			}
-		}
+	state, err := s.tasks.GetState(ctx, taskKey(articleID, requestedModel))
+	if err != nil {
+		return TaskState{Status: StatusFailed, Error: err.Error(), UpdatedAt: time.Now().UTC()}
 	}
-	return TaskState{Status: StatusIdle, UpdatedAt: now}
+	return fromAITaskState(state)
 }
 
 func (s *Service) GetCachedPayload(ctx context.Context, articleID uint64, requestedModel string) (SummaryPayload, bool, error) {
@@ -291,95 +226,12 @@ func (s *Service) GetCachedPayload(ctx context.Context, articleID uint64, reques
 	}, true, nil
 }
 
-func (s *Service) setTaskState(key string, status string, taskError string) {
-	now := time.Now().UTC()
-	taskError = strings.TrimSpace(taskError)
-	s.taskMu.Lock()
-	s.pruneTaskStateLocked(now)
-	s.tasks[key] = TaskState{
-		Status:    status,
-		Error:     taskError,
-		UpdatedAt: now,
-	}
-	s.taskMu.Unlock()
-
-	if s.db != nil {
-		if err := s.db.Model(&models.AITask{}).
-			Where("task_key = ?", key).
-			Updates(map[string]any{
-				"status":     status,
-				"error":      taskError,
-				"updated_at": now,
-			}).Error; err != nil {
-			log.Printf("persist summary task state key=%s status=%s: %v", key, status, err)
-		}
-	}
-}
-
-func (s *Service) persistTask(key string, articleID uint64, requestedModel string, refresh bool, state TaskState) error {
-	task := models.AITask{
-		TaskKey:    key,
-		Kind:       articleTaskKind,
-		ResourceID: articleID,
-		Model:      strings.TrimSpace(requestedModel),
-		Refresh:    refresh,
-		Status:     state.Status,
-		Error:      state.Error,
-		CreatedAt:  state.UpdatedAt,
-		UpdatedAt:  state.UpdatedAt,
-	}
-	return s.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "task_key"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"kind", "resource_id", "model", "refresh", "status", "error", "updated_at",
-		}),
-	}).Create(&task).Error
-}
-
-func (s *Service) resumePendingTasks() {
-	var tasks []models.AITask
-	if err := s.db.
-		Where("kind = ? AND status IN ? AND updated_at >= ?", articleTaskKind, []string{StatusQueued, StatusRunning}, time.Now().UTC().Add(-taskRecoveryAge)).
-		Order("updated_at ASC").
-		Limit(taskRecoveryMax).
-		Find(&tasks).Error; err != nil {
-		log.Printf("load pending summary tasks: %v", err)
-		return
-	}
-
-	for _, task := range tasks {
-		s.taskMu.Lock()
-		if _, running := s.inFlight[task.TaskKey]; running {
-			s.taskMu.Unlock()
-			continue
-		}
-		s.inFlight[task.TaskKey] = struct{}{}
-		s.tasks[task.TaskKey] = TaskState{
-			Status:    StatusQueued,
-			UpdatedAt: time.Now().UTC(),
-		}
-		s.taskMu.Unlock()
-		go s.runTask(task.TaskKey, task.ResourceID, task.Model, task.Refresh)
-	}
-}
-
-func (s *Service) pruneTaskStateLocked(now time.Time) {
-	if len(s.tasks) == 0 {
-		return
-	}
-	for key, state := range s.tasks {
-		if now.Sub(state.UpdatedAt) <= taskStateTTL {
-			continue
-		}
-		if _, running := s.inFlight[key]; running {
-			continue
-		}
-		delete(s.tasks, key)
-	}
-}
-
 func taskKey(articleID uint64, requestedModel string) string {
 	return strconv.FormatUint(articleID, 10) + "|" + strings.ToLower(strings.TrimSpace(requestedModel))
+}
+
+func fromAITaskState(state aitask.State) TaskState {
+	return TaskState{Status: state.Status, Error: state.Error, UpdatedAt: state.UpdatedAt}
 }
 
 func toTaskPayload(articleID uint64, requestedModel string, state TaskState) TaskPayload {
@@ -408,14 +260,4 @@ func summarizeTaskError(stage string, err error) string {
 	default:
 		return err.Error()
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
