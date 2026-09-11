@@ -125,6 +125,9 @@
 - `internal/handlers/article_content_service.go`
   - 论坛线程抓取与解析（USCard/V2EX/Reddit）
   - 外链正文抓取、缓存、失败熔断、日预算限流
+- `internal/handlers/public_http_client.go`
+  - 图片代理和外链正文共用的公网 HTTP client
+  - 在拨号时固定并校验 DNS 结果，拦截内网、回环、链路本地、CGNAT、重定向绕过和 DNS rebinding
 - `internal/aisummary/client.go`
   - 统一 AI 接口适配（OpenAI Chat / Messages）
   - 提示词封装 + 返回内容提取 + 空摘要保护

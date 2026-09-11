@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,12 +15,7 @@ import (
 
 const maxProxyImageBytes = 8 << 20
 
-var imageProxyHTTPClient = &http.Client{
-	Timeout: 8 * time.Second,
-	CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-		return validateProxyImageURL(req.URL)
-	},
-}
+var imageProxyHTTPClient = newPublicHTTPClient(8*time.Second, false)
 
 type ImageProxyHandler struct{}
 
@@ -99,44 +93,8 @@ func (h *ImageProxyHandler) Proxy(c *gin.Context) {
 }
 
 func validateProxyImageURL(parsed *url.URL) error {
-	if parsed == nil {
-		return fmt.Errorf("invalid image url")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("image url must use http or https")
-	}
-	host := strings.TrimSpace(parsed.Hostname())
-	if host == "" {
-		return fmt.Errorf("image url host is required")
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		if isBlockedProxyIP(ip) {
-			return fmt.Errorf("image url host is not allowed")
-		}
-		return nil
-	}
-	return validateProxyImageHost(context.Background(), host)
-}
-
-func validateProxyImageHost(ctx context.Context, host string) error {
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return fmt.Errorf("image url host cannot be resolved")
-	}
-	if len(ips) == 0 {
-		return fmt.Errorf("image url host cannot be resolved")
-	}
-	for _, item := range ips {
-		if isBlockedProxyIP(item.IP) {
-			return fmt.Errorf("image url host is not allowed")
-		}
+	if err := validatePublicURLSyntax(parsed); err != nil {
+		return fmt.Errorf("image %w", err)
 	}
 	return nil
-}
-
-func isBlockedProxyIP(ip net.IP) bool {
-	if ip == nil {
-		return true
-	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }

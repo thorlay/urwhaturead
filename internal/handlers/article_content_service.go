@@ -81,6 +81,8 @@ type ArticleContentService struct {
 	threadFailures   map[string]time.Time
 	httpClient       *http.Client
 	redditHTTPClient *http.Client
+	externalClient   *http.Client
+	externalReddit   *http.Client
 	parser           *gofeed.Parser
 
 	cacheMu sync.RWMutex
@@ -135,6 +137,8 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 		threadFailures:       make(map[string]time.Time),
 		httpClient:           newHandlerHTTPClient(12*time.Second, false),
 		redditHTTPClient:     newHandlerHTTPClient(12*time.Second, true),
+		externalClient:       newPublicHTTPClient(12*time.Second, false),
+		externalReddit:       newPublicHTTPClient(12*time.Second, true),
 		parser:               gofeed.NewParser(),
 		cache:                make(map[string]cachedThread),
 		externalCache:        make(map[string]cachedExternalArticle),
@@ -151,6 +155,10 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 
 func (s *ArticleContentService) clientForURL(rawURL string) *http.Client {
 	return pickHTTPClientForURL(rawURL, s.httpClient, s.redditHTTPClient)
+}
+
+func (s *ArticleContentService) externalClientForURL(rawURL string) *http.Client {
+	return pickHTTPClientForURL(rawURL, s.externalClient, s.externalReddit)
 }
 
 func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLink string) (*articleThread, bool) {
@@ -649,6 +657,9 @@ func (s *ArticleContentService) fetchExternalArticle(ctx context.Context, articl
 	if err != nil {
 		return nil, false
 	}
+	if err := validatePublicURLSyntax(parsed); err != nil {
+		return nil, false
+	}
 	host := normalizeHost(parsed.Hostname())
 	if host == "" || !s.isExternalHostAllowed(host) {
 		return nil, false
@@ -671,7 +682,7 @@ func (s *ArticleContentService) fetchExternalArticle(ctx context.Context, articl
 	}
 	req.Header.Set("User-Agent", "quick-external-fetcher/0.1")
 
-	resp, err := s.clientForURL(normalizedURL).Do(req)
+	resp, err := s.externalClientForURL(normalizedURL).Do(req)
 	logRedditHTTPResult("article.fetchExternal", normalizedURL, resp, err)
 	if err != nil {
 		s.setExternalFailure(normalizedURL, time.Now().UTC())
