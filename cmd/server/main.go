@@ -14,7 +14,6 @@ import (
 	"quick/internal/config"
 	"quick/internal/database"
 	"quick/internal/handlers"
-	"quick/internal/models"
 	"quick/internal/router"
 	"quick/internal/worker"
 )
@@ -36,21 +35,12 @@ func main() {
 		log.Fatalf("connect database: %v", err)
 	}
 
-	if err := db.AutoMigrate(
-		&models.Source{},
-		&models.EventCluster{},
-		&models.Article{},
-		&models.ArticleEnrichment{},
-		&models.ArticleSummary{},
-		&models.AITask{},
-		&models.FeedBriefing{},
-		&models.FeedBriefingArticle{},
-		&models.SourceFetchLog{},
-	); err != nil {
-		log.Fatalf("auto-migrate models: %v", err)
+	appliedMigrations, err := database.Migrate(db)
+	if err != nil {
+		log.Fatalf("migrate database: %v", err)
 	}
-	if err := database.EnsureRuntimeCompatibilitySchema(db); err != nil {
-		log.Printf("ensure runtime compatibility schema warning: %v", err)
+	if len(appliedMigrations) > 0 {
+		log.Printf("database migrations applied: %v", appliedMigrations)
 	}
 	if cfg.ClusterVectorEnabled {
 		if err := clustering.EnsureVectorSchema(db); err != nil {

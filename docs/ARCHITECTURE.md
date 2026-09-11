@@ -30,13 +30,16 @@
 1. 读取配置：`internal/config/config.go`
 2. 配置向量聚类开关：`internal/clustering/vector.go`
 3. 连接数据库：`internal/database/db.go`
-4. `AutoMigrate` 核心模型：`Source/EventCluster/Article/ArticleEnrichment/ArticleSummary/FeedBriefing/SourceFetchLog`
-5. 执行兼容性 schema 调整：`internal/database/schema_compat.go`
+4. 执行版本化迁移：`internal/database/migrations.go`；首次基线迁移包含已有 GORM schema 和兼容性调整
+5. 将已执行版本记录到 `schema_migrations`；PostgreSQL advisory lock 避免多个进程同时迁移
 6. 初始化（可选）pgvector schema：`clustering.EnsureVectorSchema`
 7. 启动 RSS Worker goroutine：`internal/worker/rss_worker.go`
 8. 构建 AI 客户端（可选）：`internal/aisummary/client.go`
 9. 组装 Gin Router：`internal/router/router.go`
 10. 启动 HTTP Server 并监听优雅退出信号
+
+只执行数据库迁移可运行 `go run ./cmd/migrate`。所有迁移在同一事务中执行，失败时不会记录部分版本。
+新增字段或索引时必须在 `registeredSchemaMigrations` 末尾追加更高版本，不能修改已发布版本的名称，也不能重新把 `AutoMigrate` 放回启动流程。迁移应保持向后兼容，使自动部署的旧二进制在健康检查失败回滚后仍能启动。
 
 ## 3. 路由与权限边界
 
@@ -236,6 +239,8 @@
 
 模型目录：`internal/models/`
 
+- `schema_migrations`
+  - 已执行数据库版本；启动和 `cmd/migrate` 通过 advisory lock 串行更新
 - `sources`
   - 来源主表：`name/rss_url/site_key/kind/topic_url/tags/enabled/poll_interval_sec`
   - 健康相关：`consecutive_failures/last_error/last_fetched_at`

@@ -6,9 +6,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// EnsureRuntimeCompatibilitySchema applies non-destructive compatibility adjustments
-// so older local databases keep working after model/schema evolutions.
-func EnsureRuntimeCompatibilitySchema(db *gorm.DB) error {
+// applyLegacyCompatibilitySchema upgrades databases created before versioned
+// migrations were introduced. It is only called by the baseline migration.
+func applyLegacyCompatibilitySchema(db *gorm.DB) error {
 	if err := ensureSourceTagSchema(db); err != nil {
 		return err
 	}

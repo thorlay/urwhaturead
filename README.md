@@ -57,6 +57,13 @@ On first startup, SQL files in `sql/init/` run automatically:
 - `source_fetch_logs`
 - indexes for dedup and feed queries
 
+The API then applies versioned application migrations recorded in `schema_migrations`.
+Run the same migration step without starting workers or the HTTP server with:
+
+```bash
+go run ./cmd/migrate
+```
+
 ## Common Commands
 
 ```bash

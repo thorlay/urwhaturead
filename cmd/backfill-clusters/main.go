@@ -45,8 +45,8 @@ func main() {
 		log.Fatalf("connect database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&models.EventCluster{}, &models.Article{}); err != nil {
-		log.Fatalf("auto-migrate models: %v", err)
+	if _, err := database.Migrate(db); err != nil {
+		log.Fatalf("migrate database: %v", err)
 	}
 	vectorReady := cfg.ClusterVectorEnabled
 	if vectorReady {
