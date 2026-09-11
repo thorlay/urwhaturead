@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -30,8 +31,11 @@ func badGateway(c *gin.Context, message string) {
 }
 
 func internalServerError(c *gin.Context, message string, err error) {
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error":   message,
-		"details": err.Error(),
-	})
+	requestID, _ := c.Get("request_id")
+	log.Printf("request failed request_id=%q message=%q err=%v", requestID, message, err)
+	payload := gin.H{"error": message}
+	if value, ok := requestID.(string); ok && value != "" {
+		payload["request_id"] = value
+	}
+	c.JSON(http.StatusInternalServerError, payload)
 }

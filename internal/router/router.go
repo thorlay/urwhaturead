@@ -29,7 +29,7 @@ func New(
 ) *gin.Engine {
 	startedAt := time.Now().UTC()
 	engine := gin.New()
-	engine.Use(RequestTiming(), gin.Logger(), gin.Recovery())
+	engine.Use(RequestID(), RequestTiming(), RequestLogger(gin.DefaultWriter), gin.Recovery())
 
 	engine.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

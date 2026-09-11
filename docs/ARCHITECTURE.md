@@ -45,7 +45,7 @@
 
 路由组装：`internal/router/router.go`
 
-所有响应都会附带 `Server-Timing: app;dur=...`，表示后端写出首字节前的应用处理耗时。可用浏览器 Network 面板区分后端耗时与 DNS、TLS、CDN/代理耗时。
+所有响应都会附带 `Server-Timing: app;dur=...` 和 `X-Request-ID`。前者表示后端写出首字节前的应用处理耗时，可用浏览器 Network 面板区分后端耗时与 DNS、TLS、CDN/代理耗时；后者可关联 JSON access log。500 响应不会向客户端暴露底层数据库或系统错误，只返回安全消息和请求 ID，完整错误保留在服务端日志中。
 
 - 存活检查：`GET /healthz`
 - 数据库就绪检查：`GET /readyz`
