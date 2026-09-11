@@ -119,6 +119,30 @@ func TestSanitizeFeedItems_FillsReplyCountFromRaw(t *testing.T) {
 	}
 }
 
+func TestSanitizeFeedItemsTruncatesPreviewByRunes(t *testing.T) {
+	items := []feedItem{
+		{
+			Title:   "Long summary",
+			Summary: stringPtr(strings.Repeat("资", maxFeedSummaryRunes+25)),
+			Content: stringPtr(strings.Repeat("料", maxFeedContentRunes+25)),
+		},
+	}
+
+	sanitizeFeedItems(items)
+	if items[0].Summary == nil {
+		t.Fatal("summary should remain available")
+	}
+	if got := len([]rune(strings.TrimSuffix(*items[0].Summary, "..."))); got != maxFeedSummaryRunes {
+		t.Fatalf("summary preview runes=%d, want %d", got, maxFeedSummaryRunes)
+	}
+	if items[0].Content == nil {
+		t.Fatal("content should remain available")
+	}
+	if got := len([]rune(strings.TrimSuffix(*items[0].Content, "..."))); got != maxFeedContentRunes {
+		t.Fatalf("content preview runes=%d, want %d", got, maxFeedContentRunes)
+	}
+}
+
 func TestBuildFeedBriefingInputItems(t *testing.T) {
 	now := time.Now().UTC()
 	rows := []feedItem{

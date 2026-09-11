@@ -170,6 +170,8 @@ const (
 	defaultBriefingLimit  = 20
 	maxBriefingLimit      = 50
 	maxBriefingInputItems = 12
+	maxFeedSummaryRunes   = 400
+	maxFeedContentRunes   = 320
 )
 
 func (h *FeedHandler) ListBriefings(c *gin.Context) {
@@ -1218,11 +1220,7 @@ func briefingSnippet(item feedItem) string {
 		return "无摘要"
 	}
 	const maxSnippetRunes = 320
-	runes := []rune(text)
-	if len(runes) > maxSnippetRunes {
-		return string(runes[:maxSnippetRunes]) + "..."
-	}
-	return text
+	return truncateFeedText(text, maxSnippetRunes)
 }
 
 func buildFeedBriefingInputItems(rows []feedItem, maxItems int) []feedBriefingInputItem {
@@ -1263,6 +1261,7 @@ func sanitizeFeedItems(items []feedItem) {
 			if value == "" {
 				item.Summary = nil
 			} else {
+				value = truncateFeedText(value, maxFeedSummaryRunes)
 				item.Summary = &value
 			}
 		}
@@ -1271,10 +1270,7 @@ func sanitizeFeedItems(items []feedItem) {
 			if value == "" {
 				item.Content = nil
 			} else {
-				const maxContentPreviewChars = 320
-				if len(value) > maxContentPreviewChars {
-					value = value[:maxContentPreviewChars] + "..."
-				}
+				value = truncateFeedText(value, maxFeedContentRunes)
 				item.Content = &value
 			}
 		}
@@ -1295,6 +1291,17 @@ func sanitizeFeedItems(items []feedItem) {
 			item.ReplyCount = feedextract.ReplyCountFromRaw(item.Raw)
 		}
 	}
+}
+
+func truncateFeedText(value string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 func uniqueSortedUint64(input []uint64) []uint64 {
