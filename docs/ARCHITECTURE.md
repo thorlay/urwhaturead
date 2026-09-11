@@ -269,8 +269,9 @@
 ### 7.1 总体模式
 
 - 单页应用，`App.tsx` 更接近顶层装配器而不是唯一状态中心。
-- 视图层分成两个 tab：
+- 视图层分成三个 tab：
   - `reader`：阅读流 + 详情阅读
+  - `ai`：历史聚合速览与文章摘要
   - `sources`：管理（来源列表、健康、批量操作、发现、重分类）
 
 ### 7.2 主要状态域
@@ -306,7 +307,15 @@
 - `summary-task-strip.tsx`：AI 任务队列条
 - `source-overlays.tsx`：来源弹层与上下文菜单
 
-### 7.5 API 客户端与鉴权
+### 7.5 样式边界
+
+- `frontend/src/index.css`：页面基础样式和 Tailwind 入口
+- `frontend/src/App.css`：应用壳、阅读流、详情和管理页共享样式
+- `frontend/src/styles/ai-library.css`：AI 历史页、速览文档和对应响应式规则
+
+新增 AI 历史页样式应放入 `styles/ai-library.css`，不要继续堆入全局 `App.css`。两个文件由 `App.tsx` 按上述顺序加载，以保留既有级联优先级。
+
+### 7.6 API 客户端与鉴权
 
 文件：`frontend/src/api.ts`
 

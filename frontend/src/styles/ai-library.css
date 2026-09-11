@@ -1,0 +1,1174 @@
+/* AI daily briefing reader */
+html:has(.ai-library-page),
+body:has(.ai-library-page),
+#root:has(.ai-library-page),
+.app-shell:has(.ai-library-page) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.ai-library-page {
+  width: 100%;
+  min-width: 0;
+  padding: 0.65rem 0 3rem;
+}
+
+.ai-library-panel {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ai-library-masthead,
+.ai-library-filter-drawer,
+.ai-library-error,
+.ai-library-workspace {
+  width: min(100%, 82rem);
+  margin-inline: auto;
+}
+
+.ai-library-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.8rem 0 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-library-eyebrow {
+  margin: 0 0 0.3rem;
+  color: var(--accent-ink);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.ai-library-masthead h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(1.65rem, 2.2vw, 2.4rem);
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.ai-library-masthead > div > p:last-child {
+  margin: 0.42rem 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.ai-library-masthead-actions,
+.ai-library-view-switch,
+.ai-date-navigation,
+.ai-briefing-actions,
+.ai-range-switch {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ai-library-masthead-actions {
+  gap: 0.42rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ai-library-view-switch,
+.ai-range-switch {
+  display: block;
+  padding: 0.18rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--background-secondary);
+}
+
+.ai-library-view-switch [data-slot='tabs-list'],
+.ai-range-switch [data-slot='tabs-list'] {
+  display: flex;
+  width: 100%;
+  gap: 0;
+}
+
+.ai-library-view-switch [data-slot='tabs-trigger'],
+.ai-range-switch [data-slot='tabs-trigger'] {
+  flex: 1 1 0;
+}
+
+.ai-library-view-switch button,
+.ai-range-switch button,
+.ai-toolbar-button,
+.ai-icon-button,
+.ai-filter-apply,
+.ai-filter-clear,
+.ai-date-navigation button,
+.ai-briefing-read-button,
+.ai-summary-open {
+  min-height: 2rem;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 130ms ease, border-color 130ms ease, color 130ms ease;
+}
+
+.ai-library-view-switch button,
+.ai-range-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  padding: 0 0.62rem;
+}
+
+.ai-library-view-switch button.active,
+.ai-range-switch button.active {
+  border-color: var(--control-border);
+  background: var(--background-primary);
+  color: var(--foreground-primary);
+}
+
+.ai-library-view-switch svg,
+.ai-toolbar-button svg,
+.ai-icon-button svg,
+.ai-briefing-read-button svg,
+.ai-summary-open svg,
+.ai-date-navigation svg {
+  width: 0.92rem;
+  height: 0.92rem;
+  stroke-width: 1.8;
+}
+
+.ai-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  padding: 0 0.65rem;
+  border-color: var(--control-border);
+  background: var(--background-primary);
+}
+
+.ai-toolbar-button:hover,
+.ai-toolbar-button.active,
+.ai-icon-button:hover,
+.ai-briefing-read-button:hover,
+.ai-summary-open:hover {
+  border-color: var(--line-strong);
+  color: var(--foreground-primary);
+}
+
+.ai-toolbar-button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.24rem;
+  border-radius: 999px;
+  background: var(--background-tertiary);
+  font-size: 0.62rem;
+}
+
+.ai-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border-color: var(--control-border);
+  background: var(--background-primary);
+}
+
+.ai-icon-button:disabled,
+.ai-date-navigation button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.ai-library-filter-drawer {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) minmax(8rem, 0.35fr) minmax(8rem, 0.3fr) auto auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.72rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-library-filter-drawer select,
+.ai-date-navigation select {
+  min-height: 2.18rem;
+  padding: 0 1.9rem 0 0.64rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background-color: var(--background-primary);
+  color: var(--foreground-primary);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.ai-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ai-search-field > svg {
+  position: absolute;
+  left: 0.64rem;
+  z-index: 1;
+  width: 0.9rem;
+  color: var(--muted);
+}
+
+.ai-search-field input {
+  min-height: 2.18rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  border-radius: var(--control-radius);
+}
+
+.ai-search-field button {
+  position: absolute;
+  right: 0.35rem;
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.ai-search-field button svg {
+  width: 0.8rem;
+}
+
+.ai-filter-apply {
+  padding: 0 0.72rem;
+  background: var(--foreground-primary);
+  color: var(--background-primary);
+}
+
+.ai-filter-clear {
+  padding: 0 0.4rem;
+}
+
+.ai-library-error {
+  margin-top: 0.75rem;
+}
+
+.ai-library-workspace {
+  display: grid;
+  grid-template-columns: 7.25rem minmax(0, 50rem) minmax(10rem, 12.5rem);
+  justify-content: center;
+  gap: clamp(1rem, 2vw, 1.8rem);
+  padding-top: 1rem;
+}
+
+.ai-date-rail {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  min-width: 0;
+  padding-top: 0.3rem;
+}
+
+.ai-date-rail-label,
+.ai-section-label {
+  color: var(--foreground-tertiary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.ai-date-rail nav {
+  display: grid;
+  gap: 0.12rem;
+  margin-top: 0.48rem;
+}
+
+.ai-date-rail button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-date-rail button:hover {
+  background: var(--row-hover);
+  color: var(--foreground-primary);
+}
+
+.ai-date-rail button.active {
+  border-left-color: var(--background-clay);
+  color: var(--foreground-primary);
+  font-weight: 650;
+}
+
+.ai-date-rail small {
+  color: var(--foreground-tertiary);
+  font-size: 0.66rem;
+}
+
+.ai-briefing-rail {
+  min-width: 0;
+}
+
+.ai-briefing-rail-desktop {
+  position: sticky;
+  top: max(0.75rem, env(safe-area-inset-top));
+  align-self: start;
+  max-height: calc(100dvh - 1.5rem - env(safe-area-inset-top));
+  padding-top: 0.3rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.ai-briefing-rail-mobile {
+  display: none;
+}
+
+.ai-briefing-rail-label {
+  color: var(--foreground-tertiary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.ai-briefing-rail nav {
+  display: grid;
+  gap: 0.18rem;
+  margin-top: 0.48rem;
+}
+
+.ai-briefing-rail button {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  min-height: 2.2rem;
+  padding: 0.38rem 0.48rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+}
+
+.ai-briefing-rail button:hover {
+  background: var(--row-hover);
+  color: var(--foreground-primary);
+}
+
+.ai-briefing-rail button.active {
+  border-left-color: var(--background-clay);
+  background: var(--background-secondary);
+  color: var(--foreground-primary);
+}
+
+.ai-briefing-rail button.is-read:not(.active) {
+  opacity: 0.7;
+}
+
+.ai-briefing-rail button span {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-briefing-rail button small {
+  color: var(--foreground-tertiary);
+  font-size: 0.64rem;
+}
+
+.ai-library-reading-column {
+  min-width: 0;
+  width: 100%;
+}
+
+.ai-daily-header {
+  padding: 0.1rem 0 1.05rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-daily-date-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-daily-date-row p {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem;
+  margin: 0 0 0.28rem;
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.ai-daily-date-row p svg {
+  width: 0.84rem;
+}
+
+.ai-daily-date-row h3 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: clamp(1.5rem, 2vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.ai-date-navigation {
+  gap: 0.18rem;
+}
+
+.ai-date-navigation button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  min-width: 2rem;
+  padding: 0;
+}
+
+.ai-date-navigation select {
+  max-width: 9.5rem;
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--foreground-tertiary);
+}
+
+.ai-daily-overview {
+  margin-top: 0.7rem;
+}
+
+.ai-daily-stats {
+  margin: 0;
+  color: var(--foreground-tertiary);
+  font-size: 0.76rem;
+}
+
+.ai-daily-lead {
+  max-width: 44rem;
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0.45rem 0 0;
+  color: var(--foreground-secondary);
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-size: clamp(1.02rem, 1.4vw, 1.18rem);
+  line-height: 1.68;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.ai-briefing-stream,
+.ai-summary-stream {
+  display: grid;
+}
+
+.ai-briefing-document,
+.ai-summary-document {
+  position: relative;
+  padding: 1.1rem 0 1.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-briefing-anchor {
+  min-width: 0;
+  scroll-margin-top: 4rem;
+}
+
+.ai-briefing-document::before {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  top: 1.25rem;
+  width: 2px;
+  height: 2.2rem;
+  background: var(--background-clay);
+  opacity: 0;
+}
+
+.ai-briefing-document.is-unread::before {
+  opacity: 1;
+}
+
+.ai-briefing-document.is-read {
+  --document-muted: var(--foreground-tertiary);
+}
+
+.ai-briefing-document-head,
+.ai-summary-document-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ai-briefing-title-button,
+.ai-summary-title,
+.ai-briefing-collapsed-preview,
+.ai-summary-preview {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.ai-briefing-title-button,
+.ai-summary-title {
+  display: grid;
+  gap: 0.26rem;
+}
+
+.ai-briefing-source,
+.ai-summary-title strong {
+  color: var(--foreground-primary);
+  font-family: var(--font-ui);
+  font-size: clamp(1.05rem, 1.45vw, 1.28rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.ai-briefing-meta,
+.ai-summary-title span {
+  color: var(--foreground-tertiary);
+  font-size: 0.75rem;
+}
+
+.ai-briefing-actions {
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+
+.ai-briefing-read-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.5rem;
+}
+
+.ai-briefing-read-button.active {
+  color: var(--foreground-tertiary);
+}
+
+.ai-briefing-document-body {
+  display: grid;
+  gap: 1.05rem;
+  margin-top: 0.95rem;
+}
+
+.ai-briefing-collapsed-preview,
+.ai-summary-preview {
+  display: block;
+  width: min(100%, 44rem);
+  margin-top: 0.75rem;
+  color: var(--foreground-tertiary);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.ai-priority-reading {
+  max-width: 46rem;
+  padding: 0.52rem 0 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-priority-list {
+  display: grid;
+  margin-top: 0.35rem;
+}
+
+.ai-priority-item {
+  display: grid;
+  grid-template-columns: 1.3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 0.58rem 0;
+  border: 0;
+  border-top: 1px solid var(--border-faint);
+  border-radius: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.ai-priority-item:hover strong,
+.ai-briefing-source-item:hover strong {
+  color: var(--accent-ink);
+}
+
+.ai-priority-index {
+  align-self: start;
+  padding-top: 0.08rem;
+  color: var(--foreground-tertiary);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.ai-priority-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.ai-priority-copy strong {
+  color: var(--foreground-primary);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.ai-priority-copy span {
+  color: var(--foreground-tertiary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.ai-priority-item > svg,
+.ai-briefing-source-item > svg {
+  width: 0.86rem;
+  color: var(--foreground-tertiary);
+}
+
+.ai-briefing-prose,
+.ai-summary-prose .markdown-block {
+  width: min(100%, 46rem);
+  color: var(--foreground-secondary);
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-size: 1.03rem;
+  line-height: 1.82;
+  letter-spacing: 0.005em;
+}
+
+.ai-briefing-prose > * + *,
+.ai-summary-prose .markdown-block > * + * {
+  margin-top: 0.88rem;
+}
+
+.ai-briefing-prose h1,
+.ai-briefing-prose h2,
+.ai-briefing-prose h3,
+.ai-briefing-prose h4,
+.ai-summary-prose h1,
+.ai-summary-prose h2,
+.ai-summary-prose h3,
+.ai-summary-prose h4 {
+  color: var(--foreground-primary);
+  font-family: var(--font-ui);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.018em;
+}
+
+.ai-briefing-prose h1,
+.ai-briefing-prose h2 {
+  margin-top: 1.65rem;
+  padding-top: 0.82rem;
+  border-top: 1px solid var(--border-faint);
+  font-size: 1.2rem;
+}
+
+.ai-briefing-prose h3,
+.ai-briefing-prose h4 {
+  margin-top: 1.55rem;
+  font-size: 1.02rem;
+}
+
+.ai-briefing-prose ul,
+.ai-briefing-prose ol {
+  display: grid;
+  gap: 0.52rem;
+  padding-left: 1.35rem;
+}
+
+.ai-briefing-prose a {
+  color: var(--accent-ink);
+  text-decoration-color: color-mix(in srgb, var(--background-clay), transparent 55%);
+  text-underline-offset: 0.18em;
+}
+
+.ai-citation-link,
+.ai-citation-missing {
+  display: inline;
+  margin: 0 0.06rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: super;
+  cursor: pointer;
+}
+
+.ai-citation-missing {
+  color: var(--foreground-tertiary);
+  cursor: default;
+}
+
+.ai-briefing-sources {
+  width: min(100%, 46rem);
+  margin-top: 0.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.ai-briefing-sources-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: auto;
+  min-height: 2.8rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-briefing-sources-toggle svg {
+  width: 0.86rem;
+}
+
+.ai-briefing-source-list {
+  display: grid;
+  border-top: 1px solid var(--border-faint);
+}
+
+.ai-briefing-source-item {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr) auto;
+  gap: 0.55rem;
+  align-items: center;
+  height: auto;
+  min-height: 0;
+  padding: 0.72rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-faint);
+  background: transparent;
+  color: var(--foreground-tertiary);
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.ai-briefing-source-item > span:nth-child(2) {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.ai-briefing-source-item strong {
+  color: var(--foreground-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ai-briefing-source-item small {
+  font-size: 0.7rem;
+}
+
+.ai-summary-document {
+  scroll-margin-top: 1rem;
+}
+
+.ai-summary-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  padding: 0 0.42rem;
+}
+
+.ai-summary-prose {
+  margin-top: 1.4rem;
+}
+
+.ai-summary-status {
+  margin: 0.75rem 0 0;
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+}
+
+.ai-library-loading,
+.ai-library-empty {
+  display: grid;
+  gap: 0.7rem;
+  width: min(100%, 44rem);
+  padding: 2.2rem 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-library-empty h3,
+.ai-library-empty p {
+  margin: 0;
+}
+
+.ai-library-empty h3 {
+  font-size: 1.15rem;
+}
+
+.ai-library-empty p {
+  max-width: 38rem;
+  color: var(--foreground-tertiary);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.ai-library-empty button {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.is-spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@media (max-width: 1100px) {
+  .ai-library-workspace {
+    grid-template-columns: 7.25rem minmax(0, 50rem);
+  }
+
+  .ai-briefing-rail-desktop {
+    display: none;
+  }
+
+  .ai-briefing-rail-mobile {
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0 -0.15rem;
+    padding: 0.48rem 0.15rem;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--background-primary) 95%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .ai-briefing-rail-mobile .ai-briefing-rail-label {
+    flex: 0 0 auto;
+  }
+
+  .ai-briefing-rail-mobile nav {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 0.22rem;
+    min-width: 0;
+    margin: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ai-briefing-rail-mobile nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ai-briefing-rail-mobile button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 1.9rem;
+    padding: 0 0.55rem;
+    border: 1px solid transparent;
+    border-radius: var(--control-radius);
+  }
+
+  .ai-briefing-rail-mobile button.active {
+    border-color: var(--control-border);
+  }
+}
+
+@media (max-width: 900px) {
+  .ai-library-page {
+    padding-top: 0.2rem;
+  }
+
+  .ai-library-masthead,
+  .ai-library-filter-drawer,
+  .ai-library-error,
+  .ai-library-workspace {
+    width: 100%;
+  }
+
+  .ai-library-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 1rem;
+  }
+
+  .ai-date-rail {
+    display: none;
+  }
+
+  .ai-library-reading-column {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .ai-library-masthead {
+    align-items: stretch;
+    padding: 0.8rem 0 0.9rem;
+  }
+
+  .ai-library-masthead > div:first-child > p:last-child,
+  .ai-library-eyebrow {
+    display: none;
+  }
+
+  .ai-library-masthead h2 {
+    font-size: 1.35rem;
+  }
+
+  .ai-library-masthead-actions {
+    justify-content: flex-end;
+  }
+
+  .ai-library-view-switch button,
+  .ai-toolbar-button {
+    padding-inline: 0.5rem;
+  }
+
+  .ai-library-filter-drawer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0.65rem 0;
+  }
+
+  .ai-search-field,
+  .ai-range-switch {
+    grid-column: 1 / -1;
+  }
+
+  .ai-range-switch {
+    display: grid;
+  }
+
+  .ai-range-switch [data-slot='tabs-list'] {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ai-filter-apply,
+  .ai-filter-clear {
+    width: 100%;
+  }
+
+  .ai-daily-header {
+    margin-inline: -0.15rem;
+    padding: 0.78rem 0.15rem 0.9rem;
+  }
+
+  .ai-daily-date-row {
+    align-items: center;
+  }
+
+  .ai-daily-date-row h3 {
+    font-size: 1.3rem;
+  }
+
+  .ai-date-navigation select {
+    width: 2rem;
+    padding: 0;
+    color: transparent;
+  }
+
+  .ai-date-navigation select option {
+    color: var(--foreground-primary);
+  }
+
+  .ai-daily-overview {
+    margin-top: 0.7rem;
+  }
+
+  .ai-daily-lead {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    font-size: 0.94rem;
+  }
+
+  .ai-briefing-rail-mobile .ai-briefing-rail-label {
+    display: none;
+  }
+
+  .ai-briefing-document,
+  .ai-summary-document {
+    padding: 1.2rem 0 1.45rem;
+  }
+
+  .ai-briefing-document::before {
+    left: -0.55rem;
+    top: 1.35rem;
+  }
+
+  .ai-briefing-document-head,
+  .ai-summary-document-head {
+    gap: 0.55rem;
+  }
+
+  .ai-briefing-source,
+  .ai-summary-title strong {
+    font-size: 1.08rem;
+  }
+
+  .ai-briefing-read-button {
+    width: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  .ai-briefing-read-button svg {
+    width: 0.9rem;
+  }
+
+  .ai-briefing-document-body {
+    gap: 1.2rem;
+    margin-top: 1.1rem;
+  }
+
+  .ai-priority-item {
+    grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+    padding: 0.68rem 0;
+  }
+
+  .ai-priority-copy strong {
+    font-size: 0.86rem;
+  }
+
+  .ai-priority-copy span {
+    font-size: 0.74rem;
+  }
+
+  .ai-briefing-prose,
+  .ai-summary-prose .markdown-block {
+    max-width: none;
+    font-size: 0.98rem;
+    line-height: 1.86;
+    overflow-wrap: anywhere;
+  }
+
+  .ai-summary-open {
+    font-size: 0;
+    width: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .ai-summary-open svg {
+    width: 0.92rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .ai-library-masthead {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .ai-library-masthead-actions {
+    justify-content: flex-start;
+  }
+
+  .ai-library-view-switch {
+    flex: 1 1 auto;
+  }
+
+  .ai-library-view-switch button {
+    flex: 1 1 0;
+  }
+
+  .ai-toolbar-button {
+    font-size: 0;
+    width: 2rem;
+    min-width: 2rem;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .ai-toolbar-button span {
+    position: absolute;
+    transform: translate(0.65rem, -0.65rem);
+    font-size: 0.55rem;
+  }
+
+  .ai-library-filter-drawer {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-search-field,
+  .ai-range-switch {
+    grid-column: 1;
+  }
+
+  .ai-daily-stats {
+    font-size: 0.7rem;
+  }
+
+  .ai-briefing-actions .ai-icon-button:first-of-type {
+    display: none;
+  }
+}
