@@ -129,6 +129,9 @@
 - `internal/handlers/public_http_client.go`
   - 图片代理和外链正文共用的公网 HTTP client
   - 在拨号时固定并校验 DNS 结果，拦截内网、回环、链路本地、CGNAT、重定向绕过和 DNS rebinding
+- `internal/handlers/image_proxy_handler.go`、`image_proxy_cache.go`
+  - 安全代理文章图片，并设置浏览器缓存响应头
+  - 使用有容量上限的内存 LRU 缓存和并发请求合并，避免不同客户端重复回源
 - `internal/aisummary/client.go`
   - 统一 AI 接口适配（OpenAI Chat / Messages）
   - 提示词封装 + 返回内容提取 + 空摘要保护
