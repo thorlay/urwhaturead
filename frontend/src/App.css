@@ -4477,6 +4477,11 @@ button[data-slot='button'] svg,
     padding-right: 0;
   }
 
+  .app-shell:has(.detail-floating) .reader-layout,
+  .app-shell:has(.detail-floating) .mobile-reader-toolbar {
+    display: none;
+  }
+
   .feed,
   .detail {
     border-radius: 12px;
@@ -4532,18 +4537,18 @@ button[data-slot='button'] svg,
   }
 
   .detail-floating {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
+    position: relative;
+    inset: auto;
+    z-index: auto;
     width: 100%;
     max-width: 100%;
-    max-height: 100dvh;
+    max-height: none;
     border: none;
     border-radius: 0;
     background: var(--background-primary);
-    overflow-y: auto;
+    overflow-y: visible;
     overflow-x: hidden;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     padding: max(0.85rem, env(safe-area-inset-top)) max(0.85rem, env(safe-area-inset-right))
       max(1.1rem, env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
     box-shadow: none;
