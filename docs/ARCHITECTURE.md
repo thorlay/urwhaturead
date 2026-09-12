@@ -314,7 +314,8 @@
 - `reader-feed-panel.tsx`：左侧阅读流
 - `reader-detail-panel.tsx`：右侧详情/沉浸阅读
 - `reader-subscription-sidebar.tsx`：订阅源与标签侧栏
-- `source-management-panel.tsx`：管理页主面板
+- `source-management-panel.tsx`：管理页装配层，负责概览、筛选、批量操作与来源工具区
+- `source-management/`：管理页子模块；来源列表、健康状态、外链和行操作菜单在此维护
 - `summary-task-strip.tsx`：AI 任务队列条
 - `source-overlays.tsx`：来源弹层与上下文菜单
 
