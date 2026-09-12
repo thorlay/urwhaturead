@@ -11,5 +11,7 @@ data/rsshub-redis/
 bin/
 *.test
 coverage.out
+frontend/playwright-report/
+frontend/test-results/
 .token
 deploy/rsshub.env

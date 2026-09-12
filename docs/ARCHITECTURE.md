@@ -335,6 +335,14 @@
 - 读请求默认无 token。
 - 对 `404` 缓存缺失类接口（如摘要缓存）有单独处理。
 
+### 7.7 前端回归测试
+
+- 配置：`frontend/playwright.config.ts`
+- 用例：`frontend/tests/e2e/`
+- API 由浏览器路由 mock，不依赖本地数据库、RSSHub 或 AI 服务。
+- `npm run test:e2e` 覆盖阅读、AI、管理权限和移动端横向溢出；CI 使用 Chromium 运行。
+- 本地未安装 Playwright Chromium 时，可用 `PW_USE_SYSTEM_CHROME=1 npm run test:e2e` 复用系统 Chrome。
+
 ## 8. 配置与运行开关
 
 配置定义：`internal/config/config.go`
