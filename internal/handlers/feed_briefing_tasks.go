@@ -22,14 +22,16 @@ const (
 )
 
 type feedBriefingTaskInput struct {
-	DigestKey  string   `json:"digest_key"`
-	Limit      int      `json:"limit"`
-	Tag        string   `json:"tag,omitempty"`
-	Keyword    string   `json:"keyword,omitempty"`
-	Model      string   `json:"model"`
-	SourceIDs  []uint64 `json:"source_ids,omitempty"`
-	ArticleIDs []uint64 `json:"article_ids"`
-	Refresh    bool     `json:"refresh"`
+	DailySource bool     `json:"daily_source,omitempty"`
+	InputDigest string   `json:"input_digest,omitempty"`
+	DigestKey   string   `json:"digest_key"`
+	Limit       int      `json:"limit"`
+	Tag         string   `json:"tag,omitempty"`
+	Keyword     string   `json:"keyword,omitempty"`
+	Model       string   `json:"model"`
+	SourceIDs   []uint64 `json:"source_ids,omitempty"`
+	ArticleIDs  []uint64 `json:"article_ids"`
+	Refresh     bool     `json:"refresh"`
 }
 
 type feedBriefingTaskState struct {

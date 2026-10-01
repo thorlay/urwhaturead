@@ -123,6 +123,7 @@ Main vars:
 - `AI_SUMMARY_API_KEY_HEADER`
 - `AI_SUMMARY_API_KEY_PREFIX`
 - `AI_SUMMARY_THINKING_MODE` (`auto` / `disabled` / `enabled`; DeepSeek defaults to disabled in `auto`)
+- `AUTO_AI_BRIEFING_DAILY_TIME` (default `22:00`; daily report time in the configured timezone)
 - `AUTO_AI_BRIEFING_TIMEZONE` (default `Asia/Shanghai`; timezone used by scheduled briefing windows)
 - `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` (optional `DAYS@HH:MM-HH:MM` list; scheduled briefings wait outside these windows)
 - `FEED_BRIEFING_RATE_LIMIT_PER_HOUR` (default `10` for non-admin requests)
@@ -138,7 +139,15 @@ AUTO_AI_BRIEFING_TIMEZONE=Asia/Shanghai
 AUTO_AI_BRIEFING_BLOCKED_WINDOWS=Mon-Fri@09:00-12:00,Mon-Fri@14:00-18:00
 ```
 
-The scheduler leaves due work pending during blocked windows and runs it on a later tick. Empty `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` means no time restriction. Invalid window configuration fails closed and pauses scheduled briefings; manual AI actions remain available.
+The scheduler leaves due work pending during blocked windows and runs it on a later tick. Empty `AUTO_AI_BRIEFING_BLOCKED_WINDOWS` means no additional blocked windows; daily reports still wait until the configured daily time. Invalid window configuration fails closed and pauses scheduled briefings; manual AI actions remain available.
+
+Each enabled source generates at most one daily report, starting at `AUTO_AI_BRIEFING_DAILY_TIME` in `AUTO_AI_BRIEFING_TIMEZONE`. Existing hourly interval values remain API-compatible but no longer control generation. Empty sources are skipped; failures and empty checks retry after 10 minutes. Blocked windows defer generation to an eligible tick that day; missed days are not backfilled.
+
+Scheduled reports select the oldest uncovered articles first, up to `AUTO_AI_BRIEFING_LIMIT` (default 20, maximum 50). Remaining articles carry forward. Previously summarized articles are excluded using persisted coverage and historical report references. Legacy minimum-new-article, reply-delta and dedup-window settings no longer apply to daily reports.
+
+Unfiltered single-source manual requests reuse today's report. Administrator refresh replaces that report in place; multi-source and filtered briefings retain their existing cache behavior. Historical reports are preserved. A source/day digest and its existing unique index enforce daily identity; PostgreSQL advisory locks serialize manual and scheduled generation, and report/coverage writes commit together. Restart the API after changing schedule settings.
+
+Daily-report PostgreSQL integration tests use `TEST_DATABASE_DSN` (libpq key/value format). They create and clean up an isolated schema and use a mock AI endpoint, without calling a paid model.
 
 Admin read-only mode (recommended for public deployment):
 

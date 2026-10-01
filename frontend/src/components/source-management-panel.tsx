@@ -424,7 +424,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     {aiEnabledSources.map((source) => (
                       <div key={source.id} className="source-status-item">
                         <p className="source-status-item-title">
-                          {source.name} · {formatAIBriefingInterval(source.ai_briefing_interval_min)}
+                          {source.name} · {formatAIBriefingInterval()}
                         </p>
                         <p className="source-cell-meta">
                           最近生成 {source.ai_briefing_last_generated_at ? formatTimeAgo(source.ai_briefing_last_generated_at) : '-'}
@@ -691,28 +691,10 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void onRunBulkAIBriefingAction(true, 60)}
-              disabled={!hasSelectedSources || bulkSourceAction !== null}
-            >
-              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 1h AI'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void onRunBulkAIBriefingAction(true, 180)}
-              disabled={!hasSelectedSources || bulkSourceAction !== null}
-            >
-              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 3h AI'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
               onClick={() => void onRunBulkAIBriefingAction(true, 1440)}
               disabled={!hasSelectedSources || bulkSourceAction !== null}
             >
-              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开 24h AI'}
+              {bulkSourceAction === 'enable_ai' ? '批量开启中...' : '批量开启每日 AI 日报'}
             </Button>
             <Button
               type="button"

@@ -27,6 +27,7 @@ type FeedBriefingScheduler struct {
 	scheduleLocation  *time.Location
 	blockedWindows    []weeklyScheduleWindow
 	scheduleLabel     string
+	dailyMinute       int
 }
 
 type FeedBriefingSchedulerOptions struct {
@@ -36,6 +37,7 @@ type FeedBriefingSchedulerOptions struct {
 	MinNewArticles    int
 	DedupWindowHours  int
 	MinReplyDelta     int
+	DailyTime         string
 	Timezone          string
 	BlockedWindows    string
 }
@@ -76,7 +78,17 @@ func NewFeedBriefingScheduler(db *gorm.DB, summarizer *aisummary.Client, options
 		minReplyDelta = 5
 	}
 	scheduleLocation, blockedWindows := parseBriefingSchedule(options.Timezone, options.BlockedWindows)
+	dailyTime := strings.TrimSpace(options.DailyTime)
+	if dailyTime == "" {
+		dailyTime = "22:00"
+	}
+	dailyMinute, err := parseScheduleMinute(dailyTime, false)
+	if err != nil {
+		log.Printf("auto ai briefing disabled: invalid daily time %q", dailyTime)
+		blockedWindows = []weeklyScheduleWindow{allWeekScheduleWindow()}
+	}
 	return &FeedBriefingScheduler{
+		dailyMinute:       dailyMinute,
 		db:                db,
 		summarizer:        summarizer,
 		helper:            &FeedHandler{db: db, summarizer: summarizer},
@@ -125,9 +137,13 @@ func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 		return
 	}
 
+	local := now.In(s.scheduleLocation)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, s.scheduleLocation)
 	var sources []models.Source
 	if err := s.db.WithContext(ctx).
 		Where("enabled = ? AND ai_briefing_enabled = ?", true, true).
+		Where("ai_briefing_last_generated_at IS NULL OR ai_briefing_last_generated_at < ?", dayStart).
+		Where("ai_briefing_last_run_at IS NULL OR ai_briefing_last_run_at <= ?", now.Add(-10*time.Minute)).
 		Order("ai_briefing_last_run_at ASC NULLS FIRST").
 		Order("id ASC").
 		Limit(s.maxSourcesPerTick * 8).
@@ -138,7 +154,7 @@ func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 
 	processed := 0
 	for _, source := range sources {
-		if !sourceAIBriefingDue(source, now) {
+		if !dailyBriefingDue(source, now, s.scheduleLocation, s.dailyMinute) {
 			continue
 		}
 		if err := s.runSourceBriefing(ctx, source, now); err != nil {
@@ -151,19 +167,60 @@ func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 	}
 }
 
-func sourceAIBriefingDue(source models.Source, now time.Time) bool {
-	intervalMin := source.AIBriefingIntervalMin
-	if intervalMin <= 0 {
-		intervalMin = 360
+func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source models.Source, now time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, feedBriefingTaskTimeout)
+	defer cancel()
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var locked bool
+		if err := tx.Raw("SELECT pg_try_advisory_xact_lock(?)", dailyBriefingLockID(source.ID)).Scan(&locked).Error; err != nil {
+			return err
+		}
+		if !locked {
+			return nil
+		}
+		var current models.Source
+		if err := tx.First(&current, source.ID).Error; err != nil {
+			return err
+		}
+		if !current.Enabled || !current.AIBriefingEnabled || !dailyBriefingDue(current, now, s.scheduleLocation, s.dailyMinute) {
+			return nil
+		}
+		copy := *s
+		copy.db = tx
+		copy.helper = &FeedHandler{db: tx, summarizer: s.summarizer}
+		return copy.generateDailyBriefing(ctx, current, now)
+	})
+	if err != nil {
+		retryCtx, retryCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer retryCancel()
+		_ = s.touchSourceBriefingRun(retryCtx, source.ID, now, nil)
 	}
-	if source.AIBriefingLastRunAt == nil || source.AIBriefingLastRunAt.IsZero() {
-		return true
-	}
-	return now.Sub(source.AIBriefingLastRunAt.UTC()) >= time.Duration(intervalMin)*time.Minute
+	return err
 }
 
-func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source models.Source, now time.Time) error {
-	rows, err := s.helper.queryBriefingFeedRows(ctx, s.limit, "", "", []uint64{source.ID}, nil)
+func (s *FeedBriefingScheduler) generateDailyBriefing(ctx context.Context, source models.Source, now time.Time) error {
+	digestKey := dailyBriefingDigest(source.ID, now, s.scheduleLocation)
+	var existing models.FeedBriefing
+	found := s.db.Where("digest_key = ?", digestKey).Limit(1).Find(&existing)
+	if found.Error != nil {
+		return found.Error
+	}
+	if found.RowsAffected > 0 {
+		return s.touchSourceBriefingRun(ctx, source.ID, now, &existing.GeneratedAt)
+	}
+	var ids []uint64
+	// Select before LIMIT so previously covered articles cannot hide an unread backlog.
+	if err := s.db.Table("articles AS a").Select("a.id").Where("a.source_id = ?", source.ID).
+		Where(`NOT EXISTS (SELECT 1 FROM feed_briefing_articles c WHERE c.article_id = a.id)`).
+		Where(`NOT EXISTS (SELECT 1 FROM feed_briefings b WHERE a.id::text = ANY(string_to_array(b.article_ids, ',')))`).
+		Order("a.created_at ASC, a.id ASC").Limit(s.limit).Scan(&ids).Error; err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+	}
+
+	rows, err := s.helper.queryBriefingFeedRows(ctx, s.limit, "", "", []uint64{source.ID}, ids)
 	if err != nil {
 		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
 		return err
@@ -173,49 +230,9 @@ func (s *FeedBriefingScheduler) runSourceBriefing(ctx context.Context, source mo
 	}
 
 	model := resolveFeedBriefingModel("", s.summarizer, true)
-	coverage, err := s.loadRecentSourceCoverage(ctx, source.ID, now.Add(-s.dedupWindow))
-	if err != nil {
-		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-		return err
-	}
 	promptRows := rows
-	previous, err := s.loadLatestSourceBriefing(ctx, source.ID)
-	if err != nil {
-		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-		return err
-	}
-	if previous != nil {
-		selectedRows, newCount, shouldGenerate := selectSourceBriefingRowsWithCoverage(rows, coverage, s.minNewArticles, s.minReplyDelta)
-		if !shouldGenerate {
-			log.Printf(
-				"auto ai briefing source=%d name=%q skipped: only %d new articles (threshold=%d)",
-				source.ID,
-				source.Name,
-				newCount,
-				s.minNewArticles,
-			)
-			return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-		}
-		promptRows = selectedRows
-	}
-	if len(promptRows) == 0 {
-		return s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-	}
-
-	digestKey, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, promptRows)
-
-	var cached models.FeedBriefing
-	if err := s.db.WithContext(ctx).Where("digest_key = ?", digestKey).Take(&cached).Error; err == nil {
-		return s.touchSourceBriefingRun(ctx, source.ID, now, &cached.GeneratedAt)
-	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
-		return err
-	}
-
+	_, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, promptRows)
 	prompt := buildFeedBriefingPrompt(promptRows)
-	if previous != nil {
-		prompt = "这是一轮增量 AI 速览。只总结相对上次真正新增、出现变化、或值得重新关注的信息。不要重复复述上次已经明确的背景；新增较少时允许更短，但每个真正新增的变化仍要说明关键事实、原因或影响，不要只给一句结论，也不要硬凑结构。\n\n" + prompt
-	}
 	result, err := s.summarizer.CompleteWithModel(
 		ctx,
 		feedBriefingSystemPrompt,

@@ -118,7 +118,7 @@ export function SourceList({ controller }: { controller: SourceManagementPanelCo
                             <p className="source-title">{source.name}</p>
                             <SourceURLIconLink url={source.rss_url} />
                             {source.ai_briefing_enabled && (
-                              <Badge variant="outline">AI {formatAIBriefingInterval(source.ai_briefing_interval_min)}</Badge>
+                              <Badge variant="outline">AI {formatAIBriefingInterval()}</Badge>
                             )}
                           </div>
                           <p className="source-cell-meta">
@@ -242,7 +242,7 @@ export function SourceList({ controller }: { controller: SourceManagementPanelCo
                         <Badge key={`${source.id}-${tag}`} variant="outline" className="source-tag-badge" onClick={() => onSetSourceManageTagFilter(tag)}>{tag}</Badge>
                       ))}
                     </div>
-                    <span className="source-cell-meta">{source.ai_briefing_enabled ? `AI ${formatAIBriefingInterval(source.ai_briefing_interval_min)}` : 'AI 关闭'}</span>
+                    <span className="source-cell-meta">{source.ai_briefing_enabled ? `AI ${formatAIBriefingInterval()}` : 'AI 关闭'}</span>
                   </div>
                   <p className="source-url"><SourceURLLink url={source.rss_url} /></p>
                   {hasFetchError && (

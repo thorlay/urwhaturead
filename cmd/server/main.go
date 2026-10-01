@@ -89,6 +89,7 @@ func main() {
 		DedupWindowHours:  cfg.AutoAIBriefingDedupWindowHours,
 		MinReplyDelta:     cfg.AutoAIBriefingMinReplyDelta,
 		Timezone:          cfg.AutoAIBriefingTimezone,
+		DailyTime:         cfg.AutoAIBriefingDailyTime,
 		BlockedWindows:    cfg.AutoAIBriefingBlockedWindows,
 	})
 	go briefingScheduler.Start(ctx)
@@ -118,6 +119,7 @@ func main() {
 		cfg.AdminPassword,
 		cfg.FeedBriefingRateLimitPerHour,
 		cfg.FeedBriefingCooldownSec,
+		cfg.AutoAIBriefingTimezone,
 	)
 	server := &http.Server{
 		Addr:              ":" + cfg.ServerPort,

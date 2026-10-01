@@ -26,6 +26,7 @@ func New(
 	adminPassword string,
 	feedBriefingRateLimitPerHour int,
 	feedBriefingCooldownSec int,
+	briefingTimezone ...string,
 ) *gin.Engine {
 	startedAt := time.Now().UTC()
 	engine := gin.New()
@@ -46,7 +47,12 @@ func New(
 	})
 
 	api := engine.Group("/api/v1")
+	timezone := "Asia/Shanghai"
+	if len(briefingTimezone) > 0 {
+		timezone = briefingTimezone[0]
+	}
 	feedHandler := handlers.NewFeedHandler(db, summaryClient, handlers.FeedHandlerOptions{
+		Timezone:         timezone,
 		AdminAuthEnabled: adminAuthEnabled,
 		AdminToken:       adminToken,
 		RateLimitPerHour: feedBriefingRateLimitPerHour,

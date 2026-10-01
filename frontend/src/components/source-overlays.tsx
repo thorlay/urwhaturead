@@ -284,7 +284,7 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
                 {sourceProfileSource.ai_briefing_enabled ? '已启用' : '已关闭'}
               </Badge>
               {sourceProfileSource.ai_briefing_enabled && (
-                <span className="hint">每 {formatAIBriefingInterval(sourceProfileSource.ai_briefing_interval_min)}</span>
+                <span className="hint">{formatAIBriefingInterval()}</span>
               )}
             </dd>
           </div>
@@ -305,39 +305,12 @@ export function SourceProfileDialog(props: SourceProfileDialogProps) {
             <div className="source-profile-inline-actions">
               <Button
                 type="button"
-                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 60 ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => void onSetSourceProfileAIBriefing(true, 60)}
-                disabled={busySourceID === sourceProfileSource.id}
-              >
-                1h 速览
-              </Button>
-              <Button
-                type="button"
-                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 180 ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => void onSetSourceProfileAIBriefing(true, 180)}
-                disabled={busySourceID === sourceProfileSource.id}
-              >
-                3h 速览
-              </Button>
-              <Button
-                type="button"
-                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 360 ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => void onSetSourceProfileAIBriefing(true, 360)}
-                disabled={busySourceID === sourceProfileSource.id}
-              >
-                6h 速览
-              </Button>
-              <Button
-                type="button"
-                variant={sourceProfileSource.ai_briefing_enabled && (sourceProfileSource.ai_briefing_interval_min ?? 360) === 1440 ? 'default' : 'outline'}
+                variant={sourceProfileSource.ai_briefing_enabled ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => void onSetSourceProfileAIBriefing(true, 1440)}
                 disabled={busySourceID === sourceProfileSource.id}
               >
-                24h 速览
+                每日 AI 日报
               </Button>
               <Button
                 type="button"

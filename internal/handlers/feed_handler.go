@@ -33,6 +33,7 @@ type FeedHandler struct {
 	briefingLimiter  *briefingRateLimiter
 	briefingCooldown *briefingCooldownStore
 	briefingTasks    *feedBriefingTaskService
+	briefingLocation *time.Location
 }
 
 const (
@@ -41,6 +42,7 @@ const (
 )
 
 type FeedHandlerOptions struct {
+	Timezone         string
 	AdminAuthEnabled bool
 	AdminToken       string
 	RateLimitPerHour int
@@ -57,7 +59,9 @@ func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandl
 		cooldown = 10 * time.Minute
 	}
 
+	location, _ := parseBriefingSchedule(options.Timezone, "")
 	handler := &FeedHandler{
+		briefingLocation: location,
 		db:               db,
 		feedRepository:   newFeedRepository(db),
 		summarizer:       summarizer,
@@ -273,12 +277,23 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	}
 
 	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, effectiveModel, req.SourceIDs, promptRows)
+	inputDigest := digestKey
+	dailySource := len(uniqueSortedUint64(req.SourceIDs)) == 1 && tag == "" && keyword == ""
+	if dailySource {
+		digestKey = dailyBriefingDigest(req.SourceIDs[0], time.Now(), h.briefingLocation)
+	}
 	inputItems := buildFeedBriefingInputItems(promptRows, maxBriefingInputItems)
 
 	if !req.Refresh {
 		var cached models.FeedBriefing
 		err := h.db.WithContext(c.Request.Context()).Where("digest_key = ?", digestKey).Take(&cached).Error
 		if err == nil {
+			refs, refErr := h.cachedBriefingRefs(c.Request.Context(), cached)
+			if refErr != nil {
+				internalServerError(c, "load briefing articles failed", refErr)
+				return
+			}
+			inputItems = refs[cached.DigestKey]
 			c.JSON(http.StatusOK, gin.H{
 				"data": feedBriefingPayload{
 					DigestKey:    digestKey,
@@ -290,7 +305,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 					StopReason:   cached.StopReason,
 					GeneratedAt:  cached.GeneratedAt,
 					CacheHit:     true,
-					ArticleCount: len(promptRows),
+					ArticleCount: countCSVEntries(cached.ArticleIDs),
 					InputItems:   inputItems,
 				},
 			})
@@ -327,14 +342,16 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	}
 
 	taskInput := feedBriefingTaskInput{
-		DigestKey:  digestKey,
-		Limit:      limit,
-		Tag:        tag,
-		Keyword:    keyword,
-		Model:      effectiveModel,
-		SourceIDs:  uniqueSortedUint64(req.SourceIDs),
-		ArticleIDs: articleIDs,
-		Refresh:    req.Refresh,
+		DailySource: dailySource,
+		InputDigest: inputDigest,
+		DigestKey:   digestKey,
+		Limit:       limit,
+		Tag:         tag,
+		Keyword:     keyword,
+		Model:       effectiveModel,
+		SourceIDs:   uniqueSortedUint64(req.SourceIDs),
+		ArticleIDs:  articleIDs,
+		Refresh:     req.Refresh,
 	}
 	if req.Async {
 		state, err := h.briefingTasks.Enqueue(taskInput)
@@ -442,7 +459,11 @@ func (h *FeedHandler) runFeedBriefingTask(ctx context.Context, input feedBriefin
 		return errors.New("no feed items available for briefing")
 	}
 	digestKey, _ := buildFeedBriefingDigest(input.Limit, input.Tag, input.Keyword, input.Model, input.SourceIDs, rows)
-	if digestKey != input.DigestKey {
+	expectedDigest := input.InputDigest
+	if expectedDigest == "" {
+		expectedDigest = input.DigestKey
+	}
+	if digestKey != expectedDigest {
 		return errors.New("feed briefing input changed before generation")
 	}
 	if !input.Refresh {
@@ -465,6 +486,37 @@ func (h *FeedHandler) generateAndSaveFeedBriefing(
 	rows []feedItem,
 	inputItems []feedBriefingInputItem,
 ) (feedBriefingPayload, error) {
+	if input.DailySource {
+		var payload feedBriefingPayload
+		err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", dailyBriefingLockID(input.SourceIDs[0])).Error; err != nil {
+				return err
+			}
+			var cached models.FeedBriefing
+			found := tx.Where("digest_key = ?", input.DigestKey).Limit(1).Find(&cached)
+			if found.Error != nil {
+				return found.Error
+			}
+			copy := *h
+			copy.db = tx
+			if found.RowsAffected > 0 && !input.Refresh {
+				refs, err := copy.cachedBriefingRefs(ctx, cached)
+				if err != nil {
+					return err
+				}
+				payload = feedBriefingPayload{DigestKey: cached.DigestKey, Summary: cached.Summary, Model: cached.Model, Provider: cached.Provider, InputChars: cached.InputChars, Truncated: cached.Truncated, StopReason: cached.StopReason, GeneratedAt: cached.GeneratedAt, CacheHit: true, ArticleCount: countCSVEntries(cached.ArticleIDs), InputItems: refs[cached.DigestKey]}
+				return nil
+			}
+			var err error
+			payload, err = copy.saveGeneratedFeedBriefing(ctx, input, rows, inputItems)
+			return err
+		})
+		return payload, err
+	}
+	return h.saveGeneratedFeedBriefing(ctx, input, rows, inputItems)
+}
+
+func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedBriefingTaskInput, rows []feedItem, inputItems []feedBriefingInputItem) (feedBriefingPayload, error) {
 	prompt := buildFeedBriefingPrompt(rows)
 	result, err := h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, prompt, input.Model)
 	if err != nil {
@@ -491,6 +543,12 @@ func (h *FeedHandler) generateAndSaveFeedBriefing(
 		Assign(record).
 		FirstOrCreate(&record).Error; err != nil {
 		return feedBriefingPayload{}, fmt.Errorf("save feed briefing cache: %w", err)
+	}
+	if input.DailySource {
+		scheduler := &FeedBriefingScheduler{db: h.db}
+		if err := scheduler.saveBriefingCoverage(ctx, record, input.SourceIDs[0], rows); err != nil {
+			return feedBriefingPayload{}, err
+		}
 	}
 	h.briefingCooldown.Touch(input.DigestKey, result.GeneratedAt)
 	if inputItems == nil {

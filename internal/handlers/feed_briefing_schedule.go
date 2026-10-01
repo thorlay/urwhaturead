@@ -16,9 +16,6 @@ type weeklyScheduleWindow struct {
 
 func parseBriefingSchedule(timezone, rawWindows string) (*time.Location, []weeklyScheduleWindow) {
 	rawWindows = strings.TrimSpace(rawWindows)
-	if rawWindows == "" {
-		return time.UTC, nil
-	}
 
 	timezone = strings.TrimSpace(timezone)
 	if timezone == "" {
@@ -30,6 +27,9 @@ func parseBriefingSchedule(timezone, rawWindows string) (*time.Location, []weekl
 		return time.UTC, []weeklyScheduleWindow{allWeekScheduleWindow()}
 	}
 
+	if rawWindows == "" {
+		return location, nil
+	}
 	windows, err := parseWeeklyScheduleWindows(rawWindows)
 	if err != nil {
 		log.Printf("auto ai briefing schedule disabled: invalid blocked windows %q: %v", rawWindows, err)

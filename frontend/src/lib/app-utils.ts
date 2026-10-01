@@ -820,10 +820,8 @@ export function sourceClickCount(source: Pick<Source, 'click_count'>): number {
   return Math.max(0, source.click_count ?? 0)
 }
 
-export function formatAIBriefingInterval(intervalMin?: number): string {
-  const minutes = intervalMin && intervalMin > 0 ? intervalMin : 360
-  if (minutes % 60 === 0) return `${minutes / 60}h`
-  return `${minutes}m`
+export function formatAIBriefingInterval(): string {
+  return '每天一次'
 }
 
 export function compareSourcesByClicksDesc(left: Source, right: Source): number {
