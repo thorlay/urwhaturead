@@ -3158,6 +3158,59 @@
   gap: 1.08rem;
 }
 
+.detail-content.detail-article > .detail-toolbar {
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+  border-top: none;
+  border-bottom: 1px solid var(--border-faint);
+  padding-block: 0.5rem;
+  padding-inline: 0;
+}
+
+.detail-article .detail-toolbar-main-actions {
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.detail-article .detail-mode-actions {
+  margin-right: auto;
+}
+
+.detail-article .detail-toolbar button,
+.detail-article .detail-toolbar .detail-open-link {
+  font-size: clamp(0.7rem, 2vw, 0.8rem);
+  padding-inline: 0.45rem;
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.detail-article > .detail-header,
+.detail-article .detail-reading-section {
+  border: none;
+}
+
+.detail-article > .thread-section {
+  margin-top: 1.25rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.reading-inline-image {
+  margin: 0;
+  min-width: 0;
+}
+
+.reading-inline-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 75dvh;
+  height: auto;
+  margin-inline: auto;
+  object-fit: contain;
+}
+
 .detail-header {
   display: grid;
   gap: 0.56rem;

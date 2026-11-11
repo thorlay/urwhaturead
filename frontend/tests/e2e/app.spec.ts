@@ -219,6 +219,52 @@ test('article paragraphs preserve reading space', async ({ page }) => {
   await expect.poll(() => paragraph.evaluate((element) => Number.parseFloat(getComputedStyle(element).marginTop))).toBeGreaterThan(12)
 })
 
+async function mockThreadArticle(page: Page, withReplies: boolean) {
+  await mockAPI(page)
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => json(route, {
+    ...feedItem,
+    content: '#1 https://example.com/tool.png',
+    thread: {
+      topic_url: feedItem.link,
+      feed_url: `${feedItem.link}.rss`,
+      topic_title: feedItem.title,
+      full_content: '#1 https://example.com/tool.png',
+      total_posts: withReplies ? 2 : 1,
+      truncated: false,
+      comments: withReplies ? [{ post_number: 2, author: 'Reader', link: `${feedItem.link}#2`, content: 'A useful reply below the article.' }] : [],
+    },
+  }))
+  await page.route('**/api/v1/images/proxy?**', (route) => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"><rect width="480" height="240" fill="#ddd"/></svg>',
+  }))
+}
+
+test('thread reading hides empty discussion and displays image URLs', async ({ page }) => {
+  await mockThreadArticle(page, false)
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  const article = page.locator('.detail-article')
+  await expect(article.getByRole('img', { name: '文章配图' })).toBeVisible()
+  await expect(article.locator('.thread-section')).toHaveCount(0)
+  await expect(article.getByRole('navigation', { name: '详情内容切换' })).toHaveCount(0)
+  await expect(article.getByText('继续阅读', { exact: true })).toHaveCount(0)
+  await expect(article.locator('.detail-signals')).toHaveCount(0)
+  await article.getByRole('button', { name: '更多', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: '生成 AI 摘要' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect.poll(() => article.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+})
+
+test('thread replies appear directly below the body once', async ({ page }) => {
+  await mockThreadArticle(page, true)
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  const article = page.locator('.detail-article')
+  await expect(article.getByRole('heading', { name: '讨论 · 1 条回复' })).toBeVisible()
+  await expect(article.getByText('A useful reply below the article.', { exact: true })).toHaveCount(1)
+})
+
 test('core views do not overflow narrow screens', async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith('mobile-'), 'mobile layout assertion')
   await mockAPI(page, { admin: true })

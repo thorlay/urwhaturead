@@ -97,7 +97,9 @@ export function AIArticleReader(props: AIArticleReaderProps) {
             )}
 
             <section className="ai-article-reader-body">
-              {hasExternal && article.external ? (
+              {article.thread?.full_content?.trim() ? (
+                <PlainTextBlock content={article.thread.full_content} className="reading-block prose" />
+              ) : hasExternal && article.external ? (
                 <>
                   {article.external.title && <p className="hint">{article.external.title}</p>}
                   <PlainTextBlock content={article.external.content} className="reading-block prose" />
@@ -117,8 +119,7 @@ export function AIArticleReader(props: AIArticleReaderProps) {
             {threadComments.length > 0 && (
               <section className="ai-article-reader-comments">
                 <div className="ai-article-reader-section-head">
-                  <h3>讨论</h3>
-                  <span className="hint">{article.thread?.total_posts ?? threadComments.length} 条</span>
+                  <h3>讨论 · {threadComments.length} 条回复</h3>
                 </div>
                 <div className="ai-article-reader-comment-list">
                   {threadComments.slice(0, 30).map((comment) => (

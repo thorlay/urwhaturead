@@ -1,8 +1,23 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
-import { containsRenderableHTMLTag, plainTextParagraphs, sanitizeRichHTML } from '@/lib/app-utils'
+import { containsRenderableHTMLTag, normalizeImageURL, plainTextParagraphs, sanitizeRichHTML } from '@/lib/app-utils'
+
+function ReadingImage({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <figure className="reading-inline-image">
+      <a href={url} target="_blank" rel="noreferrer" aria-label="打开原始图片">
+        {failed ? url : <img src={normalizeImageURL(url) ?? undefined} alt="文章配图" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />}
+      </a>
+    </figure>
+  )
+}
+
+function readingParagraphParts(paragraph: string) {
+  return paragraph.split(/(^\s*(?:#\d+\s+)?https?:\/\/[^\s]+\.(?:png|jpe?g|webp|gif|avif)(?:\?[^\s]*)?\s*$)/gim).filter((part) => part.trim())
+}
 
 export function PlainTextBlock(props: { content?: string; className?: string }) {
   const paragraphs = useMemo(() => plainTextParagraphs(props.content), [props.content])
@@ -10,11 +25,13 @@ export function PlainTextBlock(props: { content?: string; className?: string }) 
 
   return (
     <div className={props.className ? `plain-text-block ${props.className}` : 'plain-text-block'}>
-      {paragraphs.map((paragraph, index) => (
-        <p key={`plain-text-paragraph-${index}`} className="plain-text-paragraph">
-          {paragraph}
-        </p>
-      ))}
+      {paragraphs.flatMap(readingParagraphParts).map((paragraph, index) => {
+        const url = paragraph.trim().replace(/^#\d+\s+/, '')
+        if (/^https?:\/\/\S+\.(?:png|jpe?g|webp|gif|avif)(?:\?\S*)?$/i.test(url)) {
+          return <ReadingImage key={`${index}-${url}`} url={url} />
+        }
+        return <p key={`plain-text-paragraph-${index}`} className="plain-text-paragraph">{paragraph}</p>
+      })}
     </div>
   )
 }
