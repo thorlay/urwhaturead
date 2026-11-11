@@ -265,6 +265,31 @@ test('thread replies appear directly below the body once', async ({ page }) => {
   await expect(article.getByText('A useful reply below the article.', { exact: true })).toHaveCount(1)
 })
 
+test('article images stay proportional and within the reading viewport', async ({ page }) => {
+  await mockAPI(page)
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => json(route, {
+    ...feedItem,
+    content_html: '<p>Image examples</p><img src="https://example.com/tall.png" alt="Tall image" width="600" height="6000"><img src="https://example.com/small.png" alt="Small image" width="80" height="40">',
+  }))
+  await page.route(/https:\/\/example\.com\/(?:tall|small)\.png/, (route) => {
+    const tall = route.request().url().includes('tall.png')
+    return route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="${tall ? 600 : 80}" height="${tall ? 6000 : 40}"><rect width="100%" height="100%" fill="#ddd"/></svg>` })
+  })
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  const tall = page.getByRole('img', { name: 'Tall image', exact: true })
+  await tall.scrollIntoViewIfNeeded()
+  await expect.poll(() => tall.evaluate((image) => (image as HTMLImageElement).naturalHeight)).toBe(6000)
+  const size = await tall.boundingBox()
+  expect(size!.height).toBeLessThanOrEqual(Math.min(420, page.viewportSize()!.height * 0.55) + 1)
+  expect(Math.abs(size!.width / size!.height - 0.1)).toBeLessThan(0.02)
+  const small = page.getByRole('img', { name: 'Small image', exact: true })
+  await expect(small).toBeVisible()
+  expect((await small.boundingBox())!.width).toBeLessThanOrEqual(82)
+  await expect(tall.locator('..')).toHaveAttribute('aria-label', '查看完整图片')
+  await expect(tall.locator('..')).toHaveAttribute('target', '_blank')
+})
+
 test('core views do not overflow narrow screens', async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith('mobile-'), 'mobile layout assertion')
   await mockAPI(page, { admin: true })

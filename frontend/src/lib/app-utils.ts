@@ -355,6 +355,16 @@ export function sanitizeRichHTMLNode(node: Node, outputDoc: Document, baseURL?: 
     const height = sanitizePositiveIntAttribute(sourceElement.getAttribute('height'))
     if (height) image.setAttribute('height', height)
 
+    if (!sourceElement.closest('a')) {
+      const link = outputDoc.createElement('a')
+      link.setAttribute('href', src)
+      link.setAttribute('target', '_blank')
+      link.setAttribute('rel', 'noopener noreferrer')
+      link.setAttribute('aria-label', '查看完整图片')
+      link.appendChild(image)
+      return link
+    }
+
     return image
   }
 

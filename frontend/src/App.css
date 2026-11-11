@@ -30,6 +30,7 @@
   --accent-ink: var(--background-clay);
   --font-ui: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-reading: var(--font-ui);
+  --reader-image-max-height: min(420px, 55dvh);
   --control-radius: 3px;
   --panel-radius: 6px;
   --chip-radius: 999px;
@@ -777,7 +778,10 @@
 
 .ai-article-reader-image img {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
   max-height: 320px;
   object-fit: contain;
 }
@@ -3205,7 +3209,8 @@
 .reading-inline-image img {
   display: block;
   max-width: 100%;
-  max-height: 75dvh;
+  width: auto;
+  max-height: var(--reader-image-max-height);
   height: auto;
   margin-inline: auto;
   object-fit: contain;
@@ -3265,7 +3270,10 @@
 }
 
 .detail-hero-image img {
-  width: 100%;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
   max-height: min(36vh, 320px);
   object-fit: contain;
   display: block;
@@ -3862,11 +3870,14 @@
   text-decoration-thickness: 0.09em;
 }
 
-.html-block img {
+.html-block img,
+.markdown-block img {
   display: block;
   width: auto;
   max-width: 100%;
   height: auto;
+  max-height: var(--reader-image-max-height);
+  object-fit: contain;
   margin: 0.2rem auto;
   border: 1px solid var(--line);
   border-radius: 3px;
