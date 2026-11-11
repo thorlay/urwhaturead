@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
-const generatedAt = '2026-09-12T06:00:00Z'
+const generatedAt = new Date().toISOString()
 
 const sources = [
   {
@@ -158,7 +158,7 @@ async function mockAPI(page: Page, options: { admin?: boolean } = {}) {
     if (path === '/api/v1/articles/101' || path === '/api/v1/articles/101/enrichment') {
       return json(route, {
         ...feedItem,
-        content_html: '<p>The complete article body is loaded only after opening the article.</p>',
+        content_html: '<p>The complete article body is loaded only after opening the article.</p><p>A second paragraph keeps a clear visual pause between ideas.</p>',
       })
     }
     if (path === '/api/v1/articles/101/view') {
@@ -208,6 +208,15 @@ test('management entry stays hidden for unauthenticated visitors', async ({ page
 
   await expect(page.getByRole('heading', { name: '聚合流' })).toBeVisible()
   await expect(page.getByRole('tab', { name: /管理/ })).toHaveCount(0)
+})
+
+test('article paragraphs preserve reading space', async ({ page }) => {
+  await mockAPI(page)
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  const paragraph = page.getByText('A second paragraph keeps a clear visual pause between ideas.', { exact: true })
+  await expect(paragraph).toBeVisible()
+  await expect.poll(() => paragraph.evaluate((element) => Number.parseFloat(getComputedStyle(element).marginTop))).toBeGreaterThan(12)
 })
 
 test('core views do not overflow narrow screens', async ({ page }, testInfo) => {

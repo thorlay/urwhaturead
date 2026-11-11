@@ -626,7 +626,9 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
           )}
 
           {readerView === 'detail' && (
-            <div className="detail-reading-controls" aria-label="阅读设置">
+            <details className="detail-reading-settings">
+              <summary>阅读设置<span>字号 · 行宽 · 行距</span></summary>
+              <div className="detail-reading-controls" aria-label="阅读设置">
               <div className="detail-reading-control-group">
                 <span>字号</span>
                 {[
@@ -678,7 +680,8 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   </button>
                 ))}
               </div>
-            </div>
+              </div>
+            </details>
           )}
 
           {detailView === 'main' && (
