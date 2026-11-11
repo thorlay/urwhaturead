@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"quick/internal/aisummary"
@@ -12,6 +13,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+func RegisterSourceMCP(engine *gin.Engine, db *gorm.DB, rsshubBaseURL, key string) {
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	engine.Any("/api/v1/mcp", gin.WrapH(handlers.NewSourceMCPHandler(db, rsshubBaseURL, key)))
+}
 
 func New(
 	db *gorm.DB,

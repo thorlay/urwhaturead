@@ -121,6 +121,10 @@ func main() {
 		cfg.FeedBriefingCooldownSec,
 		cfg.AutoAIBriefingTimezone,
 	)
+	if cfg.MCPAPIKey != "" && (len(cfg.MCPAPIKey) < 32 || cfg.MCPAPIKey == cfg.AdminToken) {
+		log.Fatal("MCP_API_KEY must have at least 32 characters and differ from ADMIN_TOKEN")
+	}
+	router.RegisterSourceMCP(engine, db, cfg.RSSHubBaseURL, cfg.MCPAPIKey)
 	server := &http.Server{
 		Addr:              ":" + cfg.ServerPort,
 		Handler:           engine,

@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	ServerPort                      string
+	MCPAPIKey                       string
 	RSSHubBaseURL                   string
 	AdminAuthEnabled                bool
 	AdminToken                      string
@@ -68,6 +69,7 @@ func Load() Config {
 
 	return Config{
 		ServerPort:                      envOrDefault("SERVER_PORT", "8080"),
+		MCPAPIKey:                       strings.TrimSpace(os.Getenv("MCP_API_KEY")),
 		RSSHubBaseURL:                   envOrDefault("RSSHUB_BASE_URL", "http://127.0.0.1:1200"),
 		AdminAuthEnabled:                envOrDefaultBool("ADMIN_AUTH_ENABLED", strings.TrimSpace(adminToken) != ""),
 		AdminToken:                      adminToken,

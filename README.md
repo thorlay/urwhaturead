@@ -1,5 +1,7 @@
 # Local PostgreSQL for RSS News Aggregator
 
+Optional AI-client subscription management: [Source MCP setup](docs/MCP.md).
+
 ## Prerequisites
 
 - Docker Desktop installed and running
