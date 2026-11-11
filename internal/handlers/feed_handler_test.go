@@ -50,9 +50,9 @@ func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
 		"forum_discussion",
 		"resource_tool",
 		"优先阅读",
-		"主要判断",
-		"继续关注",
-		"今日结论",
+		"主题脉络",
+		"待观察",
+		"不要额外输出",
 		"中高信息密度",
 		"共同事实 + 来源差异",
 		"每个 bullet 最多一个引用",
@@ -60,6 +60,15 @@ func TestBuildFeedBriefingPrompt_IsContentTypeAware(t *testing.T) {
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("buildFeedBriefingPrompt() missing %q in prompt:\n%s", want, prompt)
+		}
+	}
+	for _, unwanted := range []string{
+		"## 主要判断",
+		"## 继续关注",
+		"## 今日结论",
+	} {
+		if strings.Contains(prompt, unwanted) {
+			t.Fatalf("buildFeedBriefingPrompt() should not require redundant section %q:\n%s", unwanted, prompt)
 		}
 	}
 }

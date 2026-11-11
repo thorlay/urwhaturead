@@ -44,7 +44,7 @@ function findDeepReadSectionIndex(lines: string[]): number {
 function findNextBriefingSectionIndex(lines: string[], startIndex: number): number {
   for (let index = startIndex; index < lines.length; index += 1) {
     const plainLine = stripMarkdown(lines[index])
-    if (/^(?:\d+[).、]\s*)?(?:今日判断|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) return index
+    if (/^(?:\d+[).、]\s*)?(?:今日判断|主题脉络|待观察|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) return index
   }
   return lines.length
 }
@@ -93,7 +93,7 @@ function parseDeepReadRecommendations(summary: string): DeepReadRecommendation[]
   for (const rawLine of lines.slice(startIndex + 1)) {
     const plainLine = stripMarkdown(rawLine)
     if (!plainLine) continue
-    if (/^(?:#{1,6}\s*)?(?:\d+[).、]\s*)?(?:今日判断|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) break
+    if (/^(?:#{1,6}\s*)?(?:\d+[).、]\s*)?(?:今日判断|主题脉络|待观察|内容类型|重点主题|长文论点|风险|争议|不确定性)/.test(plainLine)) break
     const recommendation = parseDeepReadLine(rawLine)
     if (recommendation) recommendations.push(recommendation)
     if (recommendations.length >= 5) break

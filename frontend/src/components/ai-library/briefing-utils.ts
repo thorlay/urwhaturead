@@ -23,6 +23,6 @@ export function extractBriefingLead(summary: string): string {
     .split('\n')
     .map((line) => stripMarkdown(line).trim())
     .filter(Boolean)
-    .filter((line) => !/^(?:\d+[).、]\s*)?(?:今日判断|今日概览|今日聚合速览|每日简报|优先阅读|先看这个|内容类型|重点主题|主要线索|观点与讨论|风险|争议|不确定性)$/.test(line))
+    .filter((line) => !/^(?:\d+[).、]\s*)?(?:今日判断|今日概览|今日聚合速览|每日简报|优先阅读|先看这个|主题脉络|待观察|内容类型|重点主题|主要线索|观点与讨论|风险|争议|不确定性)$/.test(line))
   return previewText((lines[0] ?? summary).replace(/\s*\[A\d{1,3}\]/g, ''), 180)
 }

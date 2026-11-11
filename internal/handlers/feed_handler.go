@@ -37,7 +37,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v3"
+	feedBriefingPromptVersion = "v4"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -968,12 +968,11 @@ func parseCSVUint64OrderedLoose(raw string) []uint64 {
 func buildFeedBriefingPrompt(items []feedItem) string {
 	var builder strings.Builder
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
-	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。用 Markdown 输出，并且只输出存在独立信息价值的 section。\n")
+	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。用 Markdown 输出；事实、判断和推荐理由各自只出现一次。\n")
 	builder.WriteString("输出结构：\n")
-	builder.WriteString("## 优先阅读\n3-5 条 bullet。每条给文章标题、核心判断和一句为什么值得打开；保留最关键的数字或事实，但不在这里重复展开完整背景。\n")
-	builder.WriteString("## 主要判断\n按主题组织 2-5 个小标题；每个主题 2-4 条 bullet。每个重要主题至少解释关键事实、因果关系、影响对象和后续变量中的两项。新闻写变化、影响与后续变量；长文写论点、证据和漏洞；论坛写共识、分歧与经验；工具写用途、适用对象与限制。\n")
-	builder.WriteString("## 继续关注\n仅在存在未被前文说明的风险、不确定性或待验证事项时输出，最多 4 条。\n")
-	builder.WriteString("## 今日结论\n用 2-3 句收束本期最重要的判断：读者今天最该记住什么，以及下一步最值得观察什么。不得引入前文没有出现的新事实。\n\n")
+	builder.WriteString("## 优先阅读\n选 2-4 篇真正值得打开的文章。每条只写“文章标题 [Axx] — 阅读理由”，阅读理由说明它提供的独特价值或适合谁看，控制在一句话内；不要在这里复述新闻事实、文章摘要或正文结论。\n")
+	builder.WriteString("## 主题脉络\n按重要性组织 2-5 个主题；每个主题 1-3 条 bullet。一个事件或论点只放在一个主题下，并在第一次出现时完整说明。每条解释关键事实、因果关系、影响对象和后续变量中最有价值的部分。新闻写变化与影响；长文写论点、证据和漏洞；论坛写共识、分歧与经验；工具写用途、适用对象与限制。\n")
+	builder.WriteString("## 待观察\n可选。只写尚无答案、且未来可由明确事件、数据或时间节点验证的变量，最多 3 条；如果没有这样的变量，省略本节。\n\n")
 	builder.WriteString("要求：\n")
 	builder.WriteString("- 同一事件的共同事实只完整表述一次；不要因为事件相同就丢弃其他来源独有的数字、背景、观点、质疑或后续进展。\n")
 	builder.WriteString("- 当多个来源报道同一事件时，用“共同事实 + 来源差异”的方式组织；只有确实没有新信息的纯转载才可以忽略。\n")
@@ -987,8 +986,9 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 	builder.WriteString("- 输入达到 10 条以上时，通常应覆盖 4-8 个真正有独立价值的事件或论点；不要因为追求简短而漏掉明显重要的信息。\n")
 	builder.WriteString("- 段落必须短。一个自然段最多 4 行；优先使用 bullet；避免 5 句以上的大段文字。\n")
 	builder.WriteString("- 每个 bullet 只表达一个主判断，但可以补充 1-2 个支撑细节。不要把多个不相关事件塞进同一句。\n")
-	builder.WriteString("- 同一核心事实只能完整表述一次；“优先阅读”只给推荐理由，“主要判断”才展开事实与推理。\n")
-	builder.WriteString("- “继续关注”只能写前文没有解释过的独立不确定性，不得重复主题背景。\n")
+	builder.WriteString("- 同一核心事实只能完整表述一次；“优先阅读”只承担选文导航，“主题脉络”负责事实与推理。\n")
+	builder.WriteString("- “待观察”只能写可验证的未来变量，不得改写主题结论或重复风险背景。\n")
+	builder.WriteString("- 不要额外输出“今日概览”“内容类型分布”“主要判断”“风险/争议”“今日结论”或结尾总结；这些章节会重复前文。\n")
 	builder.WriteString("- 信息不足时可以少写，但不能用过度压缩代替判断；删除的是重复和噪音，不是关键细节。\n")
 	builder.WriteString("- 只有需要读者定位原文的具体事实、关键判断或“优先阅读”条目才使用 [Axx] 引用。每个 bullet 最多一个引用；多源佐证时选择最直接的一篇，不要堆叠引用。\n")
 	builder.WriteString("- 不要输出裸 URL、Markdown 外链或“原文”链接；阅读器会把 [Axx] 自动变成可点击的原文章入口。\n\n")
