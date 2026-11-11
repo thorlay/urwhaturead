@@ -86,6 +86,43 @@ func TestBriefingSnippet_FallsBackToContentAndTruncatesRunes(t *testing.T) {
 	}
 }
 
+func TestParseBriefingSelectionAndSelectRows(t *testing.T) {
+	indices := parseBriefingSelection("```json\n{\"ids\":[\"A03\",\"A01\",\"A03\",\"bad\"]}\n```")
+	rows := []feedItem{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
+	selected := selectBriefingRows(rows, indices, 3)
+
+	if len(selected) != 3 || selected[0].ID != 3 || selected[1].ID != 1 || selected[2].ID != 2 {
+		t.Fatalf("selected IDs=%v, want [3 1 2]", feedItemIDs(selected))
+	}
+}
+
+func TestSelectBriefingRowsFallsBackToNewestCandidates(t *testing.T) {
+	rows := []feedItem{{ID: 1}, {ID: 2}, {ID: 3}}
+	selected := selectBriefingRows(rows, nil, 2)
+
+	if len(selected) != 2 || selected[0].ID != 1 || selected[1].ID != 2 {
+		t.Fatalf("selected IDs=%v, want [1 2]", feedItemIDs(selected))
+	}
+}
+
+func TestBriefingThinkingContextPrefersCachedContent(t *testing.T) {
+	item := feedItem{
+		Summary: stringPtr("short summary"),
+		Content: stringPtr("<p>" + strings.Repeat("正文", 700) + "</p>"),
+	}
+	got := briefingThinkingContext(item)
+
+	if strings.Contains(got, "short summary") {
+		t.Fatalf("briefingThinkingContext() should prefer content: %q", got)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("briefingThinkingContext() should mark truncated content")
+	}
+	if gotRunes := len([]rune(strings.TrimSuffix(got, "..."))); gotRunes != maxBriefingContextRunes {
+		t.Fatalf("briefingThinkingContext() rune count=%d, want %d", gotRunes, maxBriefingContextRunes)
+	}
+}
+
 func TestSanitizeFeedItems(t *testing.T) {
 	items := []feedItem{
 		{

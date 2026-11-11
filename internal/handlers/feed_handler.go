@@ -37,7 +37,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v4"
+	feedBriefingPromptVersion = "v5"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -517,6 +517,14 @@ func (h *FeedHandler) generateAndSaveFeedBriefing(
 }
 
 func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedBriefingTaskInput, rows []feedItem, inputItems []feedBriefingInputItem) (feedBriefingPayload, error) {
+	preparedRows, err := h.prepareBriefingRows(ctx, rows, input.Model)
+	if err != nil {
+		return feedBriefingPayload{}, err
+	}
+	rows = preparedRows
+	input.ArticleIDs = feedItemIDs(rows)
+	inputItems = buildFeedBriefingInputItems(rows, maxBriefingInputItems)
+
 	prompt := buildFeedBriefingPrompt(rows)
 	result, err := h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, prompt, input.Model)
 	if err != nil {
@@ -726,6 +734,7 @@ func (h *FeedHandler) queryBriefingFeedRows(
 			a.title,
 			a.link,
 			a.summary,
+			a.content,
 			a.author,
 			a.published_at,
 			a.image_url,
@@ -1001,8 +1010,8 @@ func buildFeedBriefingPrompt(items []feedItem) string {
 			textclean.NormalizeInline(item.SourceTag),
 			textclean.NormalizeInline(item.Title),
 		))
-		builder.WriteString("   摘要: ")
-		builder.WriteString(briefingSnippet(item))
+		builder.WriteString("   阅读材料: ")
+		builder.WriteString(briefingThinkingContext(item))
 		builder.WriteString("\n")
 		builder.WriteString("   链接: ")
 		builder.WriteString(strings.TrimSpace(item.Link))

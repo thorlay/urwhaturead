@@ -230,7 +230,11 @@ func (s *FeedBriefingScheduler) generateDailyBriefing(ctx context.Context, sourc
 	}
 
 	model := resolveFeedBriefingModel("", s.summarizer, true)
-	promptRows := rows
+	promptRows, err := s.helper.prepareBriefingRows(ctx, rows, model)
+	if err != nil {
+		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
+		return err
+	}
 	_, articleIDs := buildFeedBriefingDigest(s.limit, "", "", model, []uint64{source.ID}, promptRows)
 	prompt := buildFeedBriefingPrompt(promptRows)
 	result, err := s.summarizer.CompleteWithModel(

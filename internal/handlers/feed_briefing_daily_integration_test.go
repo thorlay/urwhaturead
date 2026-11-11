@@ -40,7 +40,7 @@ func TestDailyBriefingPersistence(t *testing.T) {
 	defer scopedSQL.Close()
 	for _, statement := range []string{
 		`CREATE TABLE sources (id bigint PRIMARY KEY, name text, tags text[], enabled boolean, ai_briefing_enabled boolean, ai_briefing_last_run_at timestamptz, ai_briefing_last_generated_at timestamptz, updated_at timestamptz)`,
-		`CREATE TABLE articles (id bigint PRIMARY KEY, source_id bigint, cluster_id bigint, title text, link text, summary text, author text, published_at timestamptz, image_url text, reply_count integer, content_hash text, created_at timestamptz)`,
+		`CREATE TABLE articles (id bigint PRIMARY KEY, source_id bigint, cluster_id bigint, title text, link text, summary text, content text, author text, published_at timestamptz, image_url text, reply_count integer, content_hash text, created_at timestamptz)`,
 		`INSERT INTO sources VALUES (1, 'Test', ARRAY['tech'], true, true, NULL, NULL, now())`,
 		`INSERT INTO articles (id, source_id, title, summary, created_at) VALUES (1, 1, 'First', 'Content', now()), (2, 1, 'Second', 'Content', now())`,
 	} {
@@ -48,7 +48,7 @@ func TestDailyBriefingPersistence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := scoped.AutoMigrate(&models.FeedBriefing{}, &models.FeedBriefingArticle{}); err != nil {
+	if err := scoped.AutoMigrate(&models.FeedBriefing{}, &models.FeedBriefingArticle{}, &models.ArticleEnrichment{}); err != nil {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32
