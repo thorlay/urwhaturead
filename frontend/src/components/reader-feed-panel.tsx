@@ -43,6 +43,8 @@ function preloadArticleImage(url: string | null) {
 }
 
 export type ReaderFeedPanelProps = {
+  feedMode: 'all' | 'important'
+  onChangeFeedMode: (mode: 'all' | 'important') => void
   showFloatingReader: boolean
   readerView: 'stream' | 'detail'
   feedTitleOnlyMode: boolean
@@ -271,12 +273,13 @@ const FeedArticleListItem = memo(
     const replyCountText = useMemo(() => formatReplyCount(item.reply_count), [formatReplyCount, item.reply_count])
     const plainSummaryText = useMemo(() => plainText(item.summary), [item.summary, plainText])
     const compactPreviewText = useMemo(() => {
+      if (item.highlight_reason) return `入选理由：${item.highlight_reason}`
       const summary = plainText(item.summary)
       if (summary) {
         return summary
       }
       return plainText(item.content)
-    }, [item.content, item.summary, plainText])
+    }, [item.content, item.summary, item.highlight_reason, plainText])
     const isShortSummary = plainSummaryText.length > 0 && plainSummaryText.length <= 72
     const duplicateCountText =
       typeof item.duplicate_count === 'number' && item.duplicate_count > 1 ? `+${item.duplicate_count - 1}关联` : ''
@@ -310,15 +313,15 @@ const FeedArticleListItem = memo(
           <div className="feed-item-content">
             {feedTitleOnlyMode ? (
               <div className="feed-item-compact-row">
-                <h3 className="feed-item-title">
+                <h3 className={cn('feed-item-title', item.highlight_reason && 'has-highlight')}>
                   <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
-                  {compactTitleParts.summary && (
+                  {(item.highlight_reason || compactTitleParts.summary) && (
                     <>
                       <span className="feed-item-inline-sep" aria-hidden="true">
                         {' '}
                         ·{' '}
                       </span>
-                      <span className="feed-item-inline-summary">{compactTitleParts.summary}</span>
+                      <span className={cn("feed-item-inline-summary", item.highlight_reason && "feed-highlight-reason")} title={item.highlight_reason}>{item.highlight_reason ? `入选理由：${item.highlight_reason}` : compactTitleParts.summary}</span>
                     </>
                   )}
                 </h3>
@@ -391,7 +394,7 @@ const FeedArticleListItem = memo(
                 </div>
                 <h3 className="feed-item-title">{item.title}</h3>
                 <p className={cn('feed-item-summary', isShortSummary && 'short')}>
-                  {isShortSummary ? plainSummaryText : truncate(plainSummaryText, 175)}
+                  {item.highlight_reason ? `入选理由：${item.highlight_reason}` : isShortSummary ? plainSummaryText : truncate(plainSummaryText, 175)}
                 </p>
               </>
             )}
@@ -519,13 +522,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     summaryTaskStatusLabel,
   } = props
 
+  const { feedMode, onChangeFeedMode } = props
   const feedListRef = useRef<HTMLDivElement | null>(null)
   const [virtualRange, setVirtualRange] = useState({ start: 0, end: 0 })
   const listRows = useMemo<FeedListRow[]>(() => {
     const rows: FeedListRow[] = []
     const briefingIndex = Math.max(0, Math.min(feedBriefingInsertIndex, visibleFeed.length))
     for (let index = 0; index <= visibleFeed.length; index += 1) {
-      if (hasFeedBriefingEntry && index === briefingIndex) {
+      if (feedMode === 'all' && hasFeedBriefingEntry && index === briefingIndex) {
         rows.push({ key: 'feed-briefing', type: 'briefing' })
       }
       if (index < visibleFeed.length) {
@@ -534,7 +538,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
       }
     }
     return rows
-  }, [feedBriefingInsertIndex, hasFeedBriefingEntry, visibleFeed])
+  }, [feedMode, feedBriefingInsertIndex, hasFeedBriefingEntry, visibleFeed])
   const shouldVirtualizeFeed = listRows.length >= FEED_VIRTUAL_MIN_ROWS
   const estimatedFeedRowHeight = feedTitleOnlyMode ? 48 : showFeedImages ? 138 : 116
 
@@ -585,7 +589,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     ? Math.max(0, (listRows.length - virtualEnd) * estimatedFeedRowHeight)
     : 0
   const isInitialFeedLoading = loadingFeed && feed.length === 0
-  const emptyFeedMessage = favoriteOnly
+  const emptyFeedMessage = feedMode === 'important' && !favoriteOnly && !unreadOnly
+    ? '当前范围暂无 AI 推荐。可先生成来源速览，或切换到全部文章；不会为凑数推荐普通文章。'
+    : favoriteOnly
     ? '还没有收藏文章。点击文章旁边的星标后会出现在这里。'
     : unreadOnly
       ? '当前没有未读文章。'
@@ -689,6 +695,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               </DropdownMenu>
             </div>
           </div>
+          <div className="feed-priority-toggle" role="group" aria-label="阅读重点">
+            {(['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
+          </div>
           <div className="feed-read-actions">
             <div className="feed-read-toggle" role="group" aria-label="文章可见范围">
               <Button
@@ -701,7 +710,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                   onSetFavoriteOnly(false)
                 }}
               >
-                全部
+                不限已读
               </Button>
               <Button
                 type="button"
@@ -753,6 +762,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </div>
         </div>
       </div>
+
+      {feedMode === 'important' && <p className="feed-highlight-hint">来自最近 72 小时 AI 速览的优先阅读推荐 · 最多 15 条，每源最多 3 条 · 未生成速览的来源可能未覆盖</p>}
 
       <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
         <div className="feed-catch-up-status">
@@ -841,7 +852,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
       <p className="feed-shortcuts">快捷键: `j` / `k` 切换，`o` 打开原文，`esc` 关闭浮窗</p>
 
       <div ref={feedListRef} className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}>
-        {isInitialFeedLoading && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+        {isInitialFeedLoading && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
           <>
             <FeedSkeleton />
             <FeedSkeleton />
@@ -849,7 +860,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </>
         )}
 
-        {feedError && feed.length === 0 && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+        {feedError && feed.length === 0 && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
           <div className="inline-error">
             <span>聚合流加载失败: {feedError}</span>
             <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoadFeed()}>
@@ -859,7 +870,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           </div>
         )}
 
-        {!isInitialFeedLoading && !feedError && visibleFeed.length === 0 && !hasFeedBriefingEntry && (
+        {!isInitialFeedLoading && !feedError && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
           <p className="hint">{emptyFeedMessage}</p>
         )}
 

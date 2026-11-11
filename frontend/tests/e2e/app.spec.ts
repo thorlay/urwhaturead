@@ -74,6 +74,9 @@ async function mockAPI(page: Page, options: { admin?: boolean } = {}) {
       return json(route, { data: sources, meta: { limit: 100, offset: 0, count: sources.length } })
     }
     if (path === '/api/v1/feed' && request.method() === 'GET') {
+      if (url.searchParams.get('mode') === 'important') {
+        return json(route, { data: [{ ...feedItem, highlight_reason: '提供具体实验数据，适合判断技术变化的实际影响。' }], meta: { limit: 15, count: 1, next_cursor: '' } })
+      }
       return json(route, { data: [feedItem], meta: { limit: 20, count: 1, next_cursor: '' } })
     }
     if (path === '/api/v1/admin/source-status') {
@@ -208,6 +211,71 @@ test('management entry stays hidden for unauthenticated visitors', async ({ page
 
   await expect(page.getByRole('heading', { name: '聚合流' })).toBeVisible()
   await expect(page.getByRole('tab', { name: /管理/ })).toHaveCount(0)
+})
+
+test('important feed shows reasons and preserves source briefing access', async ({ page }) => {
+  await mockAPI(page)
+  await page.goto('/')
+  const modes = page.getByRole('group', { name: '阅读重点', exact: true })
+  await modes.getByRole('button', { name: '重点', exact: true }).click()
+  await expect(modes.getByRole('button', { name: '重点', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.feed-highlight-reason')).toContainText('提供具体实验数据')
+  await expect(page.getByRole('button', { name: 'AI 速览', exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  await modes.getByRole('button', { name: '全部', exact: true }).click()
+  await expect(page.locator('.feed-highlight-reason')).toHaveCount(0)
+  await expect(page.getByText(feedItem.title, { exact: true })).toBeVisible()
+})
+
+test('AI briefing in important mode still uses ordinary source candidates', async ({ page }) => {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', (route) => {
+    const url = new URL(route.request().url())
+    if (!url.searchParams.has('mode') && url.searchParams.get('limit') === '30') {
+      return json(route, { data: [feedItem, { ...feedItem, id: 102, title: 'An ordinary non-highlighted article' }], meta: { next_cursor: '' } })
+    }
+    return route.fallback()
+  })
+  await page.route('**/api/v1/feed/briefing', (route) => json(route, { data: {
+    digest_key: 'test-briefing', summary: 'A generated test briefing', model: 'deepseek-v4-flash', provider: 'test', generated_at: generatedAt, article_count: 2, input_items: [], cache_hit: false,
+  } }))
+  await page.goto('/')
+  await page.getByRole('group', { name: '阅读重点', exact: true }).getByRole('button', { name: '重点', exact: true }).click()
+  await expect(page.locator('.feed-highlight-reason')).toBeVisible()
+  const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/v1/feed/briefing' && r.method() === 'POST')
+  await page.getByRole('button', { name: 'AI 速览', exact: true }).click()
+  expect((await request).postDataJSON().article_ids).toEqual([101, 102])
+})
+
+test('important feed empty state does not pretend ordinary articles are recommendations', async ({ page }) => {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', (route) => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('mode') === 'important') return json(route, { data: [], meta: { count: 0, next_cursor: '' } })
+    return route.fallback()
+  })
+  await page.goto('/')
+  await page.getByRole('group', { name: '阅读重点', exact: true }).getByRole('button', { name: '重点', exact: true }).click()
+  await expect(page.getByText(/当前范围暂无 AI 推荐/)).toBeVisible()
+  await expect(page.getByText(feedItem.title, { exact: true })).toHaveCount(0)
+})
+
+test('a delayed important response cannot overwrite the all feed after switching back', async ({ page }) => {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('mode') !== 'important') return route.fallback()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    return json(route, { data: [{ ...feedItem, highlight_reason: 'An outdated recommendation response.' }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  await expect(page.getByText(feedItem.title, { exact: true })).toBeVisible()
+  const modes = page.getByRole('group', { name: '阅读重点', exact: true })
+  const response = page.waitForResponse((r) => new URL(r.url()).searchParams.get('mode') === 'important')
+  await modes.getByRole('button', { name: '重点', exact: true }).click()
+  await modes.getByRole('button', { name: '全部', exact: true }).click()
+  await response
+  await expect(page.getByText(feedItem.title, { exact: true })).toBeVisible()
+  await expect(page.locator('.feed-highlight-reason')).toHaveCount(0)
 })
 
 test('article paragraphs preserve reading space', async ({ page }) => {

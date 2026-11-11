@@ -50,6 +50,8 @@ export function useReaderWorkspaceComposition({
   } = sidebarState
 
   const {
+    feedMode,
+    onChangeFeedMode,
     sourceFilter,
     applySourceFilterFromSidebar,
     applySourceGroupFilterFromSidebar,
@@ -202,6 +204,8 @@ export function useReaderWorkspaceComposition({
   })
 
   const readerFeedProps = useReaderWorkspaceFeedProps({
+    feedMode,
+    onChangeFeedMode,
     showFloatingReader,
     readerView,
     feedTitleOnlyMode,

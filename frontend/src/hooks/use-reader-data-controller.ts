@@ -4,7 +4,7 @@ import { listFeed, listSources, listSourceStatus } from '../api'
 import type { Notice, AppTab } from '../lib/app-domain'
 import type { FeedItem, Source, SourceStatus } from '../types'
 
-type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
+type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string; mode: 'all' | 'important' }>
 
 type UseReaderDataControllerParams = {
   activeTab: AppTab
@@ -61,6 +61,7 @@ export function useReaderDataController({
   normalizeSourceKind,
   toErrorMessage,
 }: UseReaderDataControllerParams) {
+  const [feedMode, setFeedMode] = useState<'all' | 'important'>('all')
   const [pendingFeedCount, setPendingFeedCount] = useState(0)
   const [checkingFeedUpdates, setCheckingFeedUpdates] = useState(false)
 
@@ -133,6 +134,7 @@ export function useReaderDataController({
 
         const response = await listFeed({
           limit: 20,
+          mode: overrides?.mode ?? feedMode,
           cursor: overrides?.cursor ?? (append ? feedCursor : ''),
           tag: activeTag,
           sourceID: activeSourceID,
@@ -175,6 +177,7 @@ export function useReaderDataController({
       }
     },
     [
+      feedMode,
       feedCursor,
       feedRequestSeqRef,
       resolveFeedScope,
@@ -188,21 +191,38 @@ export function useReaderDataController({
     ],
   )
 
+  const onChangeFeedMode = useCallback((mode: 'all' | 'important') => {
+    if (mode === feedMode) return
+    if (sidebarTagFilterTimerRef.current !== null) {
+      window.clearTimeout(sidebarTagFilterTimerRef.current)
+      sidebarTagFilterTimerRef.current = null
+    }
+    setFeedMode(mode)
+    setFeed([])
+    setFeedCursor('')
+    setHasMoreFeed(false)
+    setPendingFeedCount(0)
+    void loadFeed(false, { mode, cursor: '' })
+  }, [feedMode, loadFeed, setFeed, setFeedCursor, setHasMoreFeed, sidebarTagFilterTimerRef])
+
   const checkFeedUpdates = useCallback(async () => {
     if (activeTab !== 'reader' || loadingFeed || feed.length === 0) {
       return
     }
 
+    const requestID = feedRequestSeqRef.current
     try {
       setCheckingFeedUpdates(true)
       const { activeTag, activeSourceID, activeKeyword, filteredSourceIDs, includeHidden } = resolveFeedScope()
       const response = await listFeed({
+        mode: feedMode,
         limit: Math.min(Math.max(feed.length, 20), 60),
         tag: activeTag,
         sourceID: activeSourceID,
         keyword: activeKeyword,
         includeHidden,
       })
+      if (requestID !== feedRequestSeqRef.current) return
 
       const scopedItems =
         filteredSourceIDs.length > 0
@@ -219,7 +239,7 @@ export function useReaderDataController({
     } finally {
       setCheckingFeedUpdates(false)
     }
-  }, [activeTab, feed, loadingFeed, resolveFeedScope])
+  }, [activeTab, feed, feedMode, feedRequestSeqRef, loadingFeed, resolveFeedScope])
 
   const applyPendingFeedUpdates = useCallback(async () => {
     setPendingFeedCount(0)
@@ -287,6 +307,8 @@ export function useReaderDataController({
   }, [activeTab, checkFeedUpdates])
 
   return {
+    feedMode,
+    onChangeFeedMode,
     loadSources,
     loadStatus,
     refreshStatusIfVisible,

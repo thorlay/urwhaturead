@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { listFeed } from '../api'
 import type { AppStateData } from './use-app-state-data'
 import type { AppStateRefs } from './use-app-state-refs'
 import type { AppStateRequest } from './use-app-state-request'
@@ -168,6 +169,8 @@ export function useReaderFeatureActions({
     cancelSidebarTagFeedReload,
     refreshAll,
     loadMore,
+    feedMode,
+    onChangeFeedMode,
     pendingFeedCount,
     checkingFeedUpdates,
     applyPendingFeedUpdates,
@@ -228,7 +231,7 @@ export function useReaderFeatureActions({
     saveFeedBriefingSnapshot,
     resetFeedBriefingState,
     generateFeedBriefing,
-    onGenerateFeedBriefing,
+    onGenerateFeedBriefing: generateVisibleFeedBriefing,
   } = useFeedBriefingActions({
     activeFeedBriefingAnchorArticleIDs,
     activeFeedBriefingSourceIDs,
@@ -253,6 +256,36 @@ export function useReaderFeatureActions({
     upsertSummaryTask,
     toErrorMessage,
   })
+
+  const onGenerateFeedBriefing = useCallback(async (refresh = false) => {
+    if (feedMode === 'all') return generateVisibleFeedBriefing(refresh)
+    try {
+      // Recommendations must not shrink the input of an independently requested briefing.
+      const response = await listFeed({
+        limit: 30,
+        sourceID: sourceFilter,
+        tag: tagFilter,
+        keyword: activeFeedBriefingKeyword,
+        includeHidden: activeFeedBriefingSourceIDs.some((id) => normalizeSourceKind(sourceByID.get(id)?.kind) === 'thread'),
+      })
+      const articles = response.data.filter((item) =>
+        !sourcesIndex.mutedSiteSet.has(sourcesIndex.sourceSiteKeyMap.get(item.source_id) ?? '') &&
+        (!ui.unreadOnly || !sourcesIndex.readArticleIDSet.has(item.id)) &&
+        (!ui.favoriteOnly || sourcesIndex.favoriteArticleIDSet.has(item.id)),
+      )
+      await generateFeedBriefing({
+        articleIDs: articles.map((item) => item.id),
+        sourceIDs: activeFeedBriefingSourceIDs,
+        scopeLabel: activeFeedBriefingScopeLabel,
+        taskKey: activeFeedBriefingTaskKey,
+        tag: tagFilter,
+        keyword: activeFeedBriefingKeyword,
+        refresh,
+      })
+    } catch (error) {
+      setNotice({ kind: 'error', text: `加载速览候选失败：${toErrorMessage(error)}` })
+    }
+  }, [feedMode, generateVisibleFeedBriefing, sourceFilter, tagFilter, activeFeedBriefingKeyword, activeFeedBriefingSourceIDs, sourceByID, sourcesIndex, ui.unreadOnly, ui.favoriteOnly, generateFeedBriefing, activeFeedBriefingScopeLabel, activeFeedBriefingTaskKey, setNotice])
 
   const catchUp = useReaderCatchUp({
     active: ui.activeTab === 'reader',
@@ -390,6 +423,8 @@ export function useReaderFeatureActions({
     cancelSidebarTagFeedReload,
     refreshAll,
     loadMore,
+    feedMode,
+    onChangeFeedMode,
     pendingFeedCount,
     checkingFeedUpdates,
     applyPendingFeedUpdates,

@@ -59,6 +59,7 @@ export type SourceImportResponse = {
 }
 
 export type FeedItem = {
+  highlight_reason?: string
   id: number
   source_id: number
   cluster_id?: number

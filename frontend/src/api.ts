@@ -165,6 +165,7 @@ export async function refreshSource(sourceID: number): Promise<{ ok: boolean }> 
 }
 
 export async function listFeed(params: {
+  mode?: 'all' | 'important'
   limit?: number
   cursor?: string
   tag?: string
@@ -175,6 +176,7 @@ export async function listFeed(params: {
 }): Promise<FeedResponse> {
   const query = new URLSearchParams()
   query.set('limit', String(params.limit ?? 20))
+  if (params.mode === 'important') query.set('mode', 'important')
   if (params.cursor) query.set('cursor', params.cursor)
   if (params.tag) query.set('tag', params.tag)
   if (params.sourceID) query.set('source_ids', params.sourceID)

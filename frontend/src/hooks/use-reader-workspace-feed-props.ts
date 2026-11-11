@@ -5,6 +5,8 @@ import type { AppliedSourceGroupFilter } from '../lib/app-domain'
 type FeedProps = ReaderWorkspaceProps['feedProps']
 
 type UseReaderWorkspaceFeedPropsParams = {
+  feedMode: FeedProps['feedMode']
+  onChangeFeedMode: FeedProps['onChangeFeedMode']
   showFloatingReader: FeedProps['showFloatingReader']
   readerView: FeedProps['readerView']
   feedTitleOnlyMode: FeedProps['feedTitleOnlyMode']
@@ -88,6 +90,8 @@ export function useReaderWorkspaceFeedProps(
   params: UseReaderWorkspaceFeedPropsParams,
 ): FeedProps {
   return {
+    feedMode: params.feedMode,
+    onChangeFeedMode: params.onChangeFeedMode,
     showFloatingReader: params.showFloatingReader,
     readerView: params.readerView,
     feedTitleOnlyMode: params.feedTitleOnlyMode,
