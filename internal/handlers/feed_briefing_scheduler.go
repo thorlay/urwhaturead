@@ -274,6 +274,9 @@ func (s *FeedBriefingScheduler) generateDailyBriefing(ctx context.Context, sourc
 		_ = s.touchSourceBriefingRun(ctx, source.ID, now, nil)
 		return err
 	}
+	if err := saveArticleHighlights(ctx, s.db, record); err != nil {
+		return err
+	}
 
 	if err := s.touchSourceBriefingRun(ctx, source.ID, now, &result.GeneratedAt); err != nil {
 		return err

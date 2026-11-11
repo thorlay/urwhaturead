@@ -558,6 +558,9 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 			return feedBriefingPayload{}, err
 		}
 	}
+	if err := saveArticleHighlights(ctx, h.db, record); err != nil {
+		return feedBriefingPayload{}, fmt.Errorf("save article highlights: %w", err)
+	}
 	h.briefingCooldown.Touch(input.DigestKey, result.GeneratedAt)
 	if inputItems == nil {
 		inputItems = buildFeedBriefingInputItems(rows, maxBriefingInputItems)

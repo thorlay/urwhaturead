@@ -125,6 +125,7 @@ func main() {
 		log.Fatal("MCP_API_KEY must have at least 32 characters and differ from ADMIN_TOKEN")
 	}
 	router.RegisterSourceMCP(engine, db, cfg.RSSHubBaseURL, cfg.MCPAPIKey)
+	go handlers.BackfillArticleHighlights(ctx, db)
 	server := &http.Server{
 		Addr:              ":" + cfg.ServerPort,
 		Handler:           engine,

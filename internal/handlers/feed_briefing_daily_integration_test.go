@@ -140,4 +140,42 @@ func TestDailyBriefingPersistence(t *testing.T) {
 	if reports[0].ArticleIDs == reports[1].ArticleIDs {
 		t.Fatal("next day repeated already summarized article")
 	}
+	if err := scoped.AutoMigrate(&models.ArticleHighlight{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, sql := range []string{
+		`ALTER TABLE sources ADD COLUMN kind text DEFAULT 'feed', ADD COLUMN hidden_in_sidebar boolean DEFAULT false`,
+		`CREATE TABLE event_clusters (id bigint PRIMARY KEY, article_count bigint)`,
+		`INSERT INTO articles(id,source_id,title,created_at) VALUES(3,1,'Third',now()),(4,1,'Fourth',now())`,
+	} {
+		if err := scoped.Exec(sql).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	recommendation := models.FeedBriefing{ArticleIDs: "1,2,3,4", GeneratedAt: now, Summary: "## 优先阅读\n- First [A01] — 提供独立的实验数据和证据。\n- Second [A02] — 解释技术变化带来的实际影响。\n- Third [A03] — 分析不同方案之间的关键取舍。\n- Fourth [A04] — 介绍新的方法与适用边界。"}
+	if err := saveArticleHighlights(ctx, scoped, recommendation); err != nil {
+		t.Fatal(err)
+	}
+	repository := newFeedRepository(scoped)
+	important, queryErr := repository.list(ctx, feedListParams{important: true, limit: 15})
+	if queryErr != nil {
+		t.Fatal(queryErr.cause)
+	}
+	if len(important.rows) != 3 || important.rows[0].HighlightReason == "" {
+		t.Fatalf("source cap/reasons failed: %+v", important.rows)
+	}
+	filtered, queryErr := repository.list(ctx, feedListParams{important: true, limit: 15, keyword: "First", sourceIDs: []uint64{1}, tag: "tech"})
+	if queryErr != nil {
+		t.Fatal(queryErr.cause)
+	}
+	if len(filtered.rows) != 1 || filtered.rows[0].ID != 1 {
+		t.Fatalf("filters failed: %+v", filtered.rows)
+	}
+	if err := scoped.Model(&models.ArticleHighlight{}).Where("article_id = ?", 1).Update("generated_at", now.Add(-96*time.Hour)).Error; err != nil {
+		t.Fatal(err)
+	}
+	filtered, queryErr = repository.list(ctx, feedListParams{important: true, limit: 15, keyword: "First"})
+	if queryErr != nil || len(filtered.rows) != 0 {
+		t.Fatal("expired recommendation remained visible")
+	}
 }

@@ -14,6 +14,7 @@ type feedRepository struct {
 }
 
 type feedListParams struct {
+	important     bool
 	limit         int
 	dedupe        bool
 	includeHidden bool
@@ -80,6 +81,9 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 	}
 	if params.since != nil {
 		query = query.Where("a.created_at > ?", *params.since)
+	}
+	if params.important {
+		return r.listImportant(ctx, query, params)
 	}
 
 	result := feedListResult{}
@@ -168,5 +172,29 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 		}
 	}
 	result.queryElapsed = time.Since(queryStartedAt)
+	return result, nil
+}
+
+func (r *feedRepository) listImportant(ctx context.Context, query *gorm.DB, params feedListParams) (feedListResult, *feedRepositoryError) {
+	started := time.Now()
+	query = query.Joins("JOIN article_highlights h ON h.article_id = a.id").
+		Where("h.generated_at >= ? AND s.enabled = ?", time.Now().Add(-72*time.Hour), true).
+		Select(`a.id,a.source_id,a.cluster_id,s.name AS source_name,
+		COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
+		a.title,a.link,a.summary,a.author,a.published_at,a.image_url,a.reply_count,
+		a.created_at,COALESCE(a.published_at,a.created_at) AS sort_time,
+		h.reason AS highlight_reason,h.generated_at AS recommendation_time,
+		ROW_NUMBER() OVER (PARTITION BY a.source_id ORDER BY h.generated_at DESC,a.id DESC) AS source_rank`)
+	limit := params.limit
+	if limit > 15 {
+		limit = 15
+	}
+	result := feedListResult{}
+	err := r.db.WithContext(ctx).Table("(?) AS selected", query).Select("selected.*").Where("source_rank <= 3").Order("recommendation_time DESC,id DESC").Limit(limit).Scan(&result.rows).Error
+	result.queryElapsed = time.Since(started)
+	if err != nil {
+		return result, &feedRepositoryError{message: "query important feed failed", cause: err}
+	}
+	result.totalCount = int64(len(result.rows))
 	return result, nil
 }

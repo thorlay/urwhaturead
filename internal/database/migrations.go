@@ -104,6 +104,9 @@ func registeredSchemaMigrations() []schemaMigration {
 			Name:    "gorm_schema_baseline",
 			Up:      migrateGORMBaseline,
 		},
+		{Version: 2, Name: "article_highlights", Up: func(db *gorm.DB) error {
+			return db.AutoMigrate(&models.ArticleHighlight{})
+		}},
 	}
 }
 

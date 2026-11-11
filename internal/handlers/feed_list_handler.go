@@ -21,24 +21,25 @@ const (
 )
 
 type feedItem struct {
-	ID             uint64         `json:"id"`
-	SourceID       uint64         `json:"source_id"`
-	ClusterID      *uint64        `json:"cluster_id,omitempty"`
-	SourceName     string         `json:"source_name"`
-	SourceTag      string         `json:"source_tag"`
-	Title          string         `json:"title"`
-	Link           string         `json:"link"`
-	Summary        *string        `json:"summary,omitempty"`
-	Content        *string        `json:"content,omitempty"`
-	Author         *string        `json:"author,omitempty"`
-	PublishedAt    *time.Time     `json:"published_at,omitempty"`
-	ImageURL       *string        `json:"image_url,omitempty"`
-	ReplyCount     *int           `json:"reply_count,omitempty"`
-	ContentHash    string         `json:"-" gorm:"column:content_hash"`
-	DuplicateCount int            `json:"duplicate_count"`
-	CreatedAt      time.Time      `json:"created_at"`
-	SortTime       time.Time      `json:"-"`
-	Raw            datatypes.JSON `json:"-" gorm:"column:raw"`
+	HighlightReason string         `json:"highlight_reason,omitempty"`
+	ID              uint64         `json:"id"`
+	SourceID        uint64         `json:"source_id"`
+	ClusterID       *uint64        `json:"cluster_id,omitempty"`
+	SourceName      string         `json:"source_name"`
+	SourceTag       string         `json:"source_tag"`
+	Title           string         `json:"title"`
+	Link            string         `json:"link"`
+	Summary         *string        `json:"summary,omitempty"`
+	Content         *string        `json:"content,omitempty"`
+	Author          *string        `json:"author,omitempty"`
+	PublishedAt     *time.Time     `json:"published_at,omitempty"`
+	ImageURL        *string        `json:"image_url,omitempty"`
+	ReplyCount      *int           `json:"reply_count,omitempty"`
+	ContentHash     string         `json:"-" gorm:"column:content_hash"`
+	DuplicateCount  int            `json:"duplicate_count"`
+	CreatedAt       time.Time      `json:"created_at"`
+	SortTime        time.Time      `json:"-"`
+	Raw             datatypes.JSON `json:"-" gorm:"column:raw"`
 }
 
 type feedCursor struct {
@@ -61,7 +62,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 	}
 
 	nextCursor := ""
-	if len(result.rows) > params.limit {
+	if len(result.rows) > params.limit && !params.important {
 		last := result.rows[params.limit-1]
 		nextCursor = encodeFeedCursor(feedCursor{SortTime: last.SortTime, ID: last.ID})
 		result.rows = result.rows[:params.limit]
@@ -71,6 +72,7 @@ func (h *FeedHandler) List(c *gin.Context) {
 	sanitizeElapsed := time.Since(sanitizeStartedAt)
 
 	meta := gin.H{
+		"mode":                   c.DefaultQuery("mode", "all"),
 		"limit":                  params.limit,
 		"count":                  len(result.rows),
 		"next_cursor":            nextCursor,
@@ -89,6 +91,11 @@ func (h *FeedHandler) List(c *gin.Context) {
 
 func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 	params := feedListParams{limit: 20}
+	mode := c.DefaultQuery("mode", "all")
+	if mode != "all" && mode != "important" {
+		return params, fmt.Errorf("mode must be all or important")
+	}
+	params.important = mode == "important"
 	if limitRaw := c.Query("limit"); limitRaw != "" {
 		value, err := strconv.Atoi(limitRaw)
 		if err != nil || value <= 0 || value > 100 {
@@ -98,6 +105,9 @@ func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 	}
 
 	params.dedupe = parseFeedDedupeQuery(c.Query("dedupe"))
+	if params.important && params.limit > 15 {
+		params.limit = 15
+	}
 	params.includeHidden = parseBoolQuery(strings.TrimSpace(c.Query("include_hidden")))
 	params.tag = normalizeSourceTag(c.Query("tag"))
 	params.keyword = strings.TrimSpace(c.Query("q"))
