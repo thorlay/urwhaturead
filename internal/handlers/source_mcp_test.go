@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -97,6 +98,7 @@ func TestSourceMCPBehindLocalReverseProxy(t *testing.T) {
 	h := NewSourceMCPHandler(nil, "", testMCPKey)
 	req := httptest.NewRequest("POST", "https://urwhaturead.com/api/v1/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
 	req.RemoteAddr = "127.0.0.1:12345"
+	req = req.WithContext(context.WithValue(req.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080}))
 	req.Header.Set("Authorization", "Bearer "+testMCPKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
