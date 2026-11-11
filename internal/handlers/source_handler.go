@@ -300,18 +300,45 @@ func (h *SourceHandler) Create(c *gin.Context) {
 		return
 	}
 
+	source, err := h.createSource(c.Request.Context(), req)
+	if errors.Is(err, errInvalidSourceRequest) {
+		badRequest(c, err.Error())
+		return
+	}
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23505":
+				c.JSON(http.StatusConflict, gin.H{"error": "source already exists for this owner and RSS URL"})
+				return
+			case "23503":
+				badRequest(c, "invalid owner_user_id")
+				return
+			}
+		}
+		internalServerError(c, "create source failed", err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, source)
+}
+
+var errInvalidSourceRequest = errors.New("invalid source request")
+
+func (h *SourceHandler) createSource(ctx context.Context, req createSourceRequest) (*models.Source, error) {
 	name := strings.TrimSpace(req.Name)
 	rssURL, err := h.resolveSourceRSSURL(strings.TrimSpace(req.RSSURL))
 	if err != nil {
-		badRequest(c, err.Error())
-		return
+		return nil, fmt.Errorf("%w: %v", errInvalidSourceRequest, err)
 	}
 	tags := normalizeSourceTags(req.Tags)
 	shouldInferTag := shouldInferFromProvidedTags(tags)
 
 	var probe *probeResult
 	if name == "" || shouldInferTag {
-		result, err := h.probeFeed(rssURL)
+		result, err := h.probeFeedWithContext(ctx, rssURL)
 		if err == nil {
 			probe = result
 		}
@@ -341,8 +368,7 @@ func (h *SourceHandler) Create(c *gin.Context) {
 	pollIntervalSec := 900
 	if req.PollIntervalSec != nil {
 		if *req.PollIntervalSec <= 0 {
-			badRequest(c, "poll_interval_sec must be > 0")
-			return
+			return nil, fmt.Errorf("%w: poll_interval_sec must be > 0", errInvalidSourceRequest)
 		}
 		pollIntervalSec = *req.PollIntervalSec
 	}
@@ -354,8 +380,7 @@ func (h *SourceHandler) Create(c *gin.Context) {
 	aiBriefingIntervalMin := 360
 	if req.AIBriefingIntervalMin != nil {
 		if *req.AIBriefingIntervalMin <= 0 {
-			badRequest(c, "ai_briefing_interval_min must be > 0")
-			return
+			return nil, fmt.Errorf("%w: ai_briefing_interval_min must be > 0", errInvalidSourceRequest)
 		}
 		aiBriefingIntervalMin = *req.AIBriefingIntervalMin
 	}
@@ -374,24 +399,11 @@ func (h *SourceHandler) Create(c *gin.Context) {
 		PollIntervalSec:       pollIntervalSec,
 	}
 
-	if err := h.db.Create(&source).Error; err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23505":
-				c.JSON(http.StatusConflict, gin.H{"error": "source already exists for this owner and RSS URL"})
-				return
-			case "23503":
-				badRequest(c, "invalid owner_user_id")
-				return
-			}
-		}
-		internalServerError(c, "create source failed", err)
-		return
+	if err := h.db.WithContext(ctx).Create(&source).Error; err != nil {
+		return nil, err
 	}
-
 	normalizeSourceForResponse(&source)
-	c.JSON(http.StatusCreated, source)
+	return &source, nil
 }
 
 func (h *SourceHandler) Reclassify(c *gin.Context) {
