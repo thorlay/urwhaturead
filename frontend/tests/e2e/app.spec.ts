@@ -53,7 +53,7 @@ function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 }
 
-async function mockAPI(page: Page, options: { admin?: boolean } = {}) {
+async function mockAPI(page: Page, options: { admin?: boolean; catchUpCount?: number } = {}) {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -77,7 +77,7 @@ async function mockAPI(page: Page, options: { admin?: boolean } = {}) {
       if (url.searchParams.get('mode') === 'important') {
         return json(route, { data: [{ ...feedItem, highlight_reason: '提供具体实验数据，适合判断技术变化的实际影响。' }], meta: { limit: 15, count: 1, next_cursor: '' } })
       }
-      return json(route, { data: [feedItem], meta: { limit: 20, count: 1, next_cursor: '' } })
+      return json(route, { data: [feedItem], meta: { limit: 20, count: 1, total_count: url.searchParams.has('since') ? options.catchUpCount : undefined, next_cursor: '' } })
     }
     if (path === '/api/v1/admin/source-status') {
       return json(route, {
@@ -401,4 +401,25 @@ test('article reader uses desktop columns and a full mobile page', async ({ page
   await detail.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(detail).toHaveCount(0)
   await expect(page.getByText(feedItem.title, { exact: true })).toBeVisible()
+})
+
+
+test('split feed toolbar and catch-up text do not collide', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockAPI(page, { catchUpCount: 3256 })
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  await expect(page.locator('.detail-floating')).toContainText(feedItem.content)
+  const status = page.locator('.feed-catch-up-status')
+  await expect(status).toContainText('3256')
+  const heading = await page.locator('.feed-header-title').boundingBox()
+  const toolbar = await page.locator('.feed-header-tools').boundingBox()
+  const catchUp = await page.locator('.feed-catch-up').boundingBox()
+  const statusBounds = await status.boundingBox()
+  const actions = await page.locator('.feed-catch-up-actions').boundingBox()
+  expect(toolbar!.y).toBeGreaterThanOrEqual(heading!.y + heading!.height)
+  expect(catchUp!.y).toBeGreaterThanOrEqual(toolbar!.y + toolbar!.height)
+  expect(actions!.y).toBeGreaterThanOrEqual(statusBounds!.y + statusBounds!.height)
+  const text = await status.locator('span').boundingBox()
+  expect(text!.height).toBeLessThan(40)
 })
