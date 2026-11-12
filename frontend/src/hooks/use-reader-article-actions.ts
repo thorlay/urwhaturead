@@ -106,6 +106,7 @@ export function useReaderArticleActions({
         setArticleError(null)
         setSelectedFeedBriefing(false)
         setSelectedArticleID(articleID)
+        setSelectedArticle(null)
         setArticleSummary('')
         setArticleSummaryMeta('')
         setArticleSummaryError(null)

@@ -423,3 +423,42 @@ test('split feed toolbar and catch-up text do not collide', async ({ page }) => 
   const text = await status.locator('span').boundingBox()
   expect(text!.height).toBeLessThan(40)
 })
+
+test('reading targets remain still on hover and sidebar collapse', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockAPI(page)
+  await page.goto('/')
+  const row = page.locator('.feed-item').filter({ hasText: feedItem.title })
+  const title = row.locator('.feed-item-title')
+  const before = await title.boundingBox()
+  await row.hover()
+  const after = await title.boundingBox()
+  expect(after!.x).toBe(before!.x)
+  expect(await row.evaluate((element) => getComputedStyle(element).animationName)).toBe('none')
+  expect(await page.locator('.reader-stack').evaluate((element) => getComputedStyle(element).transitionDuration)).toBe('0s')
+  await row.click()
+  await expect(page.locator('.detail-floating')).toContainText(feedItem.content)
+  expect(await page.locator('.detail-floating').evaluate((element) => getComputedStyle(element).scrollbarGutter)).toBe('stable')
+})
+
+test('opening an article keeps its row visible after the split resizes', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 })
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', async (route) => {
+    const items = Array.from({ length: 40 }, (_, index) => index === 18 ? feedItem : {
+      ...feedItem, id: 200 + index, title: `Other article ${index}`,
+    })
+    return json(route, { data: items, meta: { count: items.length, next_cursor: '' } })
+  })
+  await page.goto('/')
+  const row = page.locator('.feed-item').filter({ hasText: feedItem.title })
+  await row.scrollIntoViewIfNeeded()
+  await row.click()
+  await expect(page.locator('.detail-title')).toHaveText(feedItem.title)
+  await expect(row).toHaveClass(/active/)
+  await expect.poll(async () => {
+    const list = await page.locator('.feed-list').boundingBox()
+    const selected = await row.boundingBox()
+    return selected!.y >= list!.y - 1 && selected!.y + selected!.height <= list!.y + list!.height + 1
+  }).toBe(true)
+})

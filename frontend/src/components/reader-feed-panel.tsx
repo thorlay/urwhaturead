@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -524,6 +525,27 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
   const { feedMode, onChangeFeedMode } = props
   const feedListRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    if (!showFloatingReader || readerView !== 'stream') return
+    const list = feedListRef.current
+    if (!list) return
+    // Opening the split pane changes the toolbar height and available list area.
+    // Keep the selected row visible without scrolling the surrounding page.
+    const revealSelection = () => {
+      if (!window.matchMedia('(min-width: 981px)').matches) return
+      const selected = list.querySelector<HTMLElement>('.feed-item.active')
+      if (!selected) return
+      const bounds = list.getBoundingClientRect()
+      const row = selected.getBoundingClientRect()
+      if (row.top < bounds.top) list.scrollTop += row.top - bounds.top
+      else if (row.bottom > bounds.bottom) list.scrollTop += row.bottom - bounds.bottom
+    }
+    revealSelection()
+    const observer = new ResizeObserver(revealSelection)
+    observer.observe(list)
+    return () => observer.disconnect()
+  }, [selectedArticleID, selectedFeedBriefing, showFloatingReader, readerView])
+
   const [virtualRange, setVirtualRange] = useState({ start: 0, end: 0 })
   const listRows = useMemo<FeedListRow[]>(() => {
     const rows: FeedListRow[] = []

@@ -2770,7 +2770,6 @@
 
 .feed-item:hover {
   background: var(--row-hover);
-  padding-left: 0.62rem;
 }
 
 .feed-item.active {
@@ -5625,4 +5624,27 @@ button[data-slot='button'] svg,
   .reader-layout-split .feed-catch-up-status small {
     white-space: nowrap;
   }
+}
+
+/* Keep reading targets still while hovering and changing articles. */
+.reader-stack,
+.reader-stack .subscription-sidebar,
+.reader-stack .subscription-sidebar-expanded,
+.reader-stack .subscription-compact-rail,
+.reader-stack .subscription-tree,
+.reader-stack .subscription-tag-filters,
+.reader-stack .subscription-item {
+  transition: none;
+}
+
+.reader-stack .feed-item {
+  animation: none;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.detail-floating,
+.detail-page {
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  animation: none;
 }
