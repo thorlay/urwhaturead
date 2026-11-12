@@ -57,12 +57,11 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         />
       )}
 
-      <main className="reader-layout">
+      <main className={`reader-layout ${showFloatingReader && readerView === 'stream' ? 'reader-layout-split' : ''}`}>
         <div className={`reader-stack ${showSubscriptionSidebar ? 'sidebar-open' : 'sidebar-closed'}`}>
           <ReaderSubscriptionSidebar {...sidebarProps} />
           <ReaderFeedPanel {...feedProps} />
         </div>
-      </main>
 
       {(showFloatingReader || readerView === 'detail') && (
         <Suspense
@@ -79,6 +78,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
           <ReaderDetailPanel {...detailProps} />
         </Suspense>
       )}
+      </main>
     </>
   )
 }

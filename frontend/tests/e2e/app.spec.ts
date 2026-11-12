@@ -376,3 +376,29 @@ test('core views do not overflow narrow screens', async ({ page }, testInfo) => 
   await expect(page.locator('.source-mobile-card').first()).toBeVisible()
   await expectNoHorizontalOverflow()
 })
+
+test('article reader uses desktop columns and a full mobile page', async ({ page }, testInfo) => {
+  const mobile = testInfo.project.name.startsWith('mobile')
+  await mockAPI(page)
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  const detail = page.locator('.detail-floating')
+  await expect(detail).toContainText(feedItem.content)
+  await expect(page.locator('.subscription-sidebar')).toHaveClass(/collapsed/)
+  if (mobile) {
+    await expect(page.locator('.reader-stack')).toBeHidden()
+    const bounds = await detail.boundingBox()
+    expect(bounds!.width).toBeGreaterThan((page.viewportSize()!.width) * 0.9)
+  } else {
+    await expect(page.locator('.feed')).toBeVisible()
+    const feed = await page.locator('.feed').boundingBox()
+    const reader = await detail.boundingBox()
+    expect(reader!.x).toBeGreaterThanOrEqual(feed!.x + feed!.width - 1)
+    expect(feed!.width).toBeGreaterThanOrEqual(300)
+    expect(await detail.evaluate((element) => getComputedStyle(element).position)).toBe('relative')
+  }
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  await detail.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(detail).toHaveCount(0)
+  await expect(page.getByText(feedItem.title, { exact: true })).toBeVisible()
+})
