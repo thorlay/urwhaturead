@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { ArrowDown, BookOpenText, LogOut, Radar, RefreshCw, Settings2, Sparkles } from 'lucide-react'
+import { ArrowDown, BookOpenText, LogOut, RefreshCw, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -45,7 +45,7 @@ export function AppTopbar(props: AppTopbarProps) {
       <header className="topbar">
         <div className="topbar-brand">
           <span className="topbar-brand-mark" aria-hidden="true">
-            <Radar />
+            <img src="/urwhaturead.svg?v=reading-fish" alt="" width="32" height="32" />
           </span>
           <div className="topbar-brand-copy">
             <p className="eyebrow">ur what u read</p>
