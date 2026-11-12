@@ -1,10 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>UR What U Read</title>
   <rect width="64" height="64" rx="12" fill="#141413" />
-  <g fill="none" stroke="#faf9f5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M24 32C32 16 47 18 54 32C47 46 32 48 24 32Z" />
-    <path d="M24 32L12 22V42Z" />
-    <path d="M32 29H38M32 36H41" />
+  <g fill="none" stroke="#faf9f5" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 35C28 23 41 17 53 22C51 35 40 44 27 40C24 45 20 49 14 50C14 45 17 42 20 40C15 38 12 35 11 30C16 29 21 32 24 35Z" />
+    <path d="M31 38C35 35 36 32 35 29" />
   </g>
-  <circle cx="46" cy="29" r="2" fill="#faf9f5" />
+  <circle cx="45" cy="26" r="1.9" fill="#faf9f5" />
 </svg>

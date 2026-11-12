@@ -45,7 +45,7 @@ export function AppTopbar(props: AppTopbarProps) {
       <header className="topbar">
         <div className="topbar-brand">
           <span className="topbar-brand-mark" aria-hidden="true">
-            <img src="/urwhaturead.svg?v=reading-fish" alt="" width="32" height="32" />
+            <img src="/urwhaturead.svg?v=swimming-fish" alt="" width="32" height="32" />
           </span>
           <div className="topbar-brand-copy">
             <p className="eyebrow">ur what u read</p>
