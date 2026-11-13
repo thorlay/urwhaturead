@@ -314,7 +314,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               {feedBriefingScopeLabel ? ` · ${feedBriefingScopeLabel}` : ''}
               {feedBriefingFreshnessLabel ? ` · ${feedBriefingFreshnessLabel}` : ''}
             </p>
-            <h3 className="detail-title">AI 聚合速览</h3>
+            <h3 className="detail-title">{feedBriefingScopeLabel === '论坛讨论简报' ? '论坛讨论简报' : 'AI 聚合速览'}</h3>
           </header>
 
           <div className="detail-toolbar detail-toolbar-sticky">
@@ -376,7 +376,10 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               <div className="skeleton skeleton-line short" />
             </div>
           )}
-          {feedBriefing && <MarkdownBlock content={feedBriefing} />}
+          {feedBriefing && <MarkdownBlock content={feedBriefing.replace(/\[A(\d{1,3})\]/g, (citation, rawIndex: string) => {
+            const ref = feedBriefingItems[Number(rawIndex) - 1]
+            return ref && /^https?:\/\//i.test(ref.link) ? `[${feedBriefingScopeLabel === '论坛讨论简报' ? '原帖' : '原文'} ${Number(rawIndex)}](${ref.link})` : citation
+          })} />}
           {feedBriefingItems.length > 0 && (
             <section className="ai-briefing-inputs">
               <p className="hint">

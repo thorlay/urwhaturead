@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { listFeed } from '../api'
+import { buildFeedBriefingTaskKey } from '../lib/summary-task-utils'
 import type { AppStateData } from './use-app-state-data'
 import type { AppStateRefs } from './use-app-state-refs'
 import type { AppStateRequest } from './use-app-state-request'
@@ -254,7 +255,42 @@ export function useReaderFeatureActions({
     toErrorMessage,
   })
 
-  const onGenerateFeedBriefing = useCallback(async (refresh = false) => {
+  const onGenerateFeedBriefing = useCallback(async (refresh = false, forum = false) => {
+    if (forum) {
+      try {
+        setLoadingFeedBriefing(true)
+        const response = await listFeed({ limit: 30, tag: 'forum', since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() })
+        const articles = response.data.filter((item) =>
+          !sourcesIndex.mutedSiteSet.has(sourcesIndex.sourceSiteKeyMap.get(item.source_id) ?? ''),
+        )
+        if (articles.length === 0) {
+          setNotice({ kind: 'info', text: '最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。' })
+          return
+        }
+        setSourceFilter('')
+        setSourceGroupFilter(null)
+        setSidebarTagFilters([])
+        setTagFilter('forum')
+        setKeyword('')
+        setUnreadOnly(false)
+        setFavoriteOnly(false)
+        const succeeded = await generateFeedBriefing({
+          articleIDs: articles.map((item) => item.id),
+          scopeLabel: '论坛讨论简报',
+          title: '论坛讨论简报',
+          tag: 'forum',
+          taskKey: buildFeedBriefingTaskKey({ model: aiModel, sourceIDs: [], tag: 'forum', keyword: '', unreadOnly: false, mutedSiteKeys: [...sourcesIndex.mutedSiteSet].sort() }),
+          refresh,
+          selectOnSuccess: true,
+        })
+        if (succeeded) openFeedBriefing()
+      } catch (error) {
+        setNotice({ kind: 'error', text: `加载论坛讨论失败：${toErrorMessage(error)}` })
+      } finally {
+        setLoadingFeedBriefing(false)
+      }
+      return
+    }
     if (feedMode === 'all') return generateVisibleFeedBriefing(refresh)
     try {
       // Recommendations must not shrink the input of an independently requested briefing.
@@ -282,7 +318,7 @@ export function useReaderFeatureActions({
     } catch (error) {
       setNotice({ kind: 'error', text: `加载速览候选失败：${toErrorMessage(error)}` })
     }
-  }, [feedMode, generateVisibleFeedBriefing, sourceFilter, tagFilter, activeFeedBriefingKeyword, activeFeedBriefingSourceIDs, sourceByID, sourcesIndex, ui.unreadOnly, ui.favoriteOnly, generateFeedBriefing, activeFeedBriefingScopeLabel, activeFeedBriefingTaskKey, setNotice])
+  }, [openFeedBriefing, aiModel, setLoadingFeedBriefing, setSourceFilter, setSourceGroupFilter, setSidebarTagFilters, setTagFilter, setKeyword, setUnreadOnly, setFavoriteOnly, feedMode, generateVisibleFeedBriefing, sourceFilter, tagFilter, activeFeedBriefingKeyword, activeFeedBriefingSourceIDs, sourceByID, sourcesIndex, ui.unreadOnly, ui.favoriteOnly, generateFeedBriefing, activeFeedBriefingScopeLabel, activeFeedBriefingTaskKey, setNotice])
 
   const catchUp = useReaderCatchUp({
     active: ui.activeTab === 'reader',

@@ -385,6 +385,7 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 	}
 
 	inserted := 0
+	w.enrichNGAFeedDiscussions(ctx, source, feed)
 	for _, item := range feed.Items {
 		article, ok := mapFeedItemToArticle(source.ID, item)
 		if !ok {
@@ -477,10 +478,11 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 		req.Header.Set("Accept", "application/atom+xml,application/rss+xml,text/xml;q=0.9,*/*;q=0.8")
 	}
 
-	if source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
+	// NGA board RSS contains main posts only; unchanged main posts can still have new replies.
+	if !isNGABoardFeed(source.RSSURL) && source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
 		req.Header.Set("If-None-Match", *source.ETag)
 	}
-	if source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
+	if !isNGABoardFeed(source.RSSURL) && source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
 		req.Header.Set("If-Modified-Since", *source.LastModified)
 	}
 	if w.shouldDebugURL(source.RSSURL) {
@@ -885,6 +887,10 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 		textclean.NormalizeFromHTML(item.Content),
 	)
 	content := textclean.NormalizeFromHTMLBlock(item.Content)
+	if content == "" && feedextract.IsForumThread(link) {
+		// RSSHub often places the complete discussion in description instead of content:encoded.
+		content = textclean.NormalizeFromHTMLBlock(item.Description)
+	}
 	author := ""
 	if item.Author != nil {
 		author = textclean.NormalizeInline(item.Author.Name)
@@ -910,12 +916,16 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 	}
 
 	payload, _ := json.Marshal(item)
-	hashInput := strings.Join([]string{
+	hashParts := []string{
 		strings.ToLower(title),
 		strings.ToLower(summary),
 		strings.ToLower(link),
 		formatTime(publishedAt),
-	}, "|")
+	}
+	if feedextract.IsForumThread(link) {
+		hashParts = append(hashParts, content)
+	}
+	hashInput := strings.Join(hashParts, "|")
 	hashBytes := sha256.Sum256([]byte(hashInput))
 
 	article := models.Article{
@@ -1007,7 +1017,8 @@ func (w *RSSWorker) saveArticleIfNew(ctx context.Context, article models.Article
 }
 
 func (w *RSSWorker) updateExistingArticleReplyCount(ctx context.Context, article models.Article) error {
-	if article.ReplyCount == nil {
+	updates := existingArticleDiscussionUpdates(article)
+	if len(updates) == 0 {
 		return nil
 	}
 	query := w.db.WithContext(ctx).
@@ -1018,9 +1029,7 @@ func (w *RSSWorker) updateExistingArticleReplyCount(ctx context.Context, article
 	} else {
 		query = query.Where("link = ? OR content_hash = ?", article.Link, article.ContentHash)
 	}
-	return query.
-		Where("reply_count IS NULL OR reply_count <> ?", *article.ReplyCount).
-		Update("reply_count", *article.ReplyCount).Error
+	return query.Updates(updates).Error
 }
 
 func (w *RSSWorker) markSourceSuccess(
@@ -1074,4 +1083,23 @@ func (w *RSSWorker) markSourceFailure(
 		Model(&models.Source{}).
 		Where("id = ?", sourceID).
 		Updates(updates).Error
+}
+
+// A repeated forum GUID can contain new replies even when its reply count is absent.
+func existingArticleDiscussionUpdates(article models.Article) map[string]any {
+	updates := map[string]any{}
+	if article.ReplyCount != nil {
+		updates["reply_count"] = *article.ReplyCount
+	}
+	if _, nga := feedextract.NGAThreadID(article.Link); nga && (article.Content == nil || !strings.Contains(*article.Content, "\n楼层作者：")) {
+		// A transient reply-fetch failure must not replace a previously enriched thread with only its main post.
+		return updates
+	}
+	if feedextract.IsForumThread(article.Link) && article.Content != nil && strings.TrimSpace(*article.Content) != "" {
+		updates["content"] = *article.Content
+		updates["summary"] = article.Summary
+		updates["raw"] = article.Raw
+		updates["content_hash"] = article.ContentHash
+	}
+	return updates
 }

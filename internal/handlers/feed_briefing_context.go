@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"quick/internal/feedextract"
 	"quick/internal/models"
 	"quick/internal/textclean"
 )
@@ -42,7 +43,11 @@ func (h *FeedHandler) prepareBriefingRows(ctx context.Context, rows []feedItem, 
 
 func buildBriefingSelectionPrompt(rows []feedItem) string {
 	var builder strings.Builder
-	builder.WriteString("从候选中选择 6 篇用于最终速览。不要只按时间排序，也不要选择纯重复转载。候选如下：\n")
+	if isForumBriefing(rows) {
+		builder.WriteString("选择 6 个有实质讨论、观点差异或具体经验的帖子，兼顾不同论坛与话题；不只按时间或标题判断，不把争吵等同于信息价值。\n")
+	} else {
+		builder.WriteString("从候选中选择 6 篇用于最终速览。不要只按时间排序，也不要选择纯重复转载。候选如下：\n")
+	}
 	for index, row := range rows {
 		builder.WriteString(fmt.Sprintf(
 			"[A%02d] [%s/%s] %s\n摘要: %s\n",
@@ -52,6 +57,13 @@ func buildBriefingSelectionPrompt(rows []feedItem) string {
 			textclean.NormalizeInline(row.Title),
 			briefingSnippet(row),
 		))
+		if _, nga := feedextract.NGAThreadID(row.Link); nga {
+			if row.Content != nil && strings.Contains(*row.Content, "\n楼层作者：") {
+				builder.WriteString("回复证据: 已抓取部分回复，优先考虑其中有观点差异或实用经验的帖子。\n")
+			} else {
+				builder.WriteString("回复证据: 仅有主帖，不能据此推断大家的观点。\n")
+			}
+		}
 	}
 	return builder.String()
 }
@@ -129,6 +141,10 @@ func (h *FeedHandler) enrichBriefingRowsFromCache(ctx context.Context, rows []fe
 		byArticleID[enrichment.ArticleID] = enrichment
 	}
 	for index := range rows {
+		// Preserve feed-provided reply boundaries and avoid mixing external articles into forum evidence.
+		if rows[index].SourceTag == "forum" || feedextract.IsForumThread(rows[index].Link) {
+			continue
+		}
 		chunks := make([]string, 0, 3)
 		if rows[index].Content != nil {
 			chunks = appendUniqueBriefingChunk(chunks, *rows[index].Content)

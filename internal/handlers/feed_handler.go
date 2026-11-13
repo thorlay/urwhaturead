@@ -37,7 +37,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v5"
+	feedBriefingPromptVersion = "v6-forum"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -526,6 +526,12 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 	inputItems = buildFeedBriefingInputItems(rows, maxBriefingInputItems)
 
 	prompt := buildFeedBriefingPrompt(rows)
+	if isForumBriefing(rows) {
+		prompt = buildForumBriefingPromptWithBudget(rows, h.summarizer.InputByteLimit())
+		if len(prompt) > h.summarizer.InputByteLimit() {
+			return feedBriefingPayload{}, errors.New("forum briefing input budget is too small to include thread references")
+		}
+	}
 	result, err := h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, prompt, input.Model)
 	if err != nil {
 		return feedBriefingPayload{}, err
@@ -733,7 +739,7 @@ func (h *FeedHandler) queryBriefingFeedRows(
 			a.source_id,
 			a.cluster_id,
 			s.name AS source_name,
-			COALESCE(NULLIF(s.tags[1], ''), 'general') AS source_tag,
+			CASE WHEN s.tags @> ARRAY['forum']::text[] THEN 'forum' ELSE COALESCE(NULLIF(s.tags[1], ''), 'general') END AS source_tag,
 			a.title,
 			a.link,
 			a.summary,
@@ -789,6 +795,16 @@ func buildFeedBriefingDigest(
 		articleIDs = append(articleIDs, row.ID)
 	}
 	uniqueSources := uniqueSortedUint64(sourceIDs)
+	// Replies evolve without creating new article IDs. Invalidate forum caches when they change.
+	forumRevision := ""
+	if isForumBriefing(rows) {
+		for _, row := range rows {
+			forumRevision += fmt.Sprintf("%d:%s:%s|", row.ID, row.ContentHash, forumDiscussionContext(row))
+			if row.ReplyCount != nil {
+				forumRevision += fmt.Sprintf("replies=%d|", *row.ReplyCount)
+			}
+		}
+	}
 	payload := strings.Join([]string{
 		feedBriefingPromptVersion,
 		fmt.Sprintf("limit=%d", limit),
@@ -797,6 +813,7 @@ func buildFeedBriefingDigest(
 		"model=" + strings.TrimSpace(model),
 		"source_ids=" + joinUint64(uniqueSources),
 		"article_ids=" + joinUint64(articleIDs),
+		"forum_revision=" + forumRevision,
 	}, "|")
 	sum := sha1.Sum([]byte(payload))
 	return hex.EncodeToString(sum[:]), articleIDs
@@ -820,6 +837,9 @@ func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Clien
 }
 
 func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string, sourceNameByID map[uint64]string) string {
+	if strings.TrimSpace(tag) == "forum" && strings.TrimSpace(sourceIDsCSV) == "" && strings.TrimSpace(keyword) == "" {
+		return "论坛讨论简报"
+	}
 	tag = normalizeSourceTag(tag)
 	keyword = normalizeBriefingKeyword(keyword)
 	if tag != "" && keyword != "" {
@@ -978,6 +998,9 @@ func parseCSVUint64OrderedLoose(raw string) []uint64 {
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {
+	if isForumBriefing(items) {
+		return buildForumBriefingPrompt(items)
+	}
 	var builder strings.Builder
 	builder.WriteString("请基于以下信息条目输出「今日聚合速览」。这些条目可能是新闻、长文/博客观点、论坛讨论、工具资源或混合内容；不要默认按新闻稿方式总结。\n")
 	builder.WriteString("阅读体验优先：输出要像给个人阅读器看的速览，不要像研究报告、表格清单或行业研报。用 Markdown 输出；事实、判断和推荐理由各自只出现一次。\n")

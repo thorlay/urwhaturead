@@ -21,6 +21,7 @@ export function resolveFeedBriefingScopeLabel(sourceIDs: number[], sourceByID: M
     return `${sourceIDs.length} 个来源`
   }
   const normalizedTag = tag.trim()
+  if (normalizedTag === 'forum') return '论坛讨论简报'
   if (normalizedTag) {
     return `标签: ${normalizedTag}`
   }

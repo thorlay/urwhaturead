@@ -148,6 +148,9 @@ function LinkedBriefingMarkdown(props: {
               const index = Number.parseInt(href.slice(INTERNAL_ARTICLE_LINK_PREFIX.length), 10)
               const article = props.articleRefs[index - 1]
               if (!article) return <sup className="ai-citation-missing">{children}</sup>
+              if (props.content.includes('# 论坛讨论简报') && /^https?:\/\//i.test(article.link)) {
+                return <a href={article.link} target="_blank" rel="noreferrer" title={article.title} aria-label={`打开原帖：${article.title}`}>{children}</a>
+              }
               return (
                 <Button
                   type="button"

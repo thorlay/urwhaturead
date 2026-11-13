@@ -73,6 +73,15 @@ func (c *Client) DefaultModel() string {
 	return strings.TrimSpace(c.model)
 }
 
+// InputByteLimit exposes the existing request limit so multi-item prompts can
+// distribute their budget without silently dropping the last items.
+func (c *Client) InputByteLimit() int {
+	if c == nil {
+		return defaultMaxInputChars
+	}
+	return c.maxInputChars
+}
+
 func (c *Client) Probe(ctx context.Context) error {
 	if c == nil {
 		return ErrNotConfigured

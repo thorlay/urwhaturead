@@ -90,7 +90,7 @@ export type ReaderFeedPanelProps = {
   catchUpCount: number
   catchUpLoading: boolean
   catchUpError: string | null
-  onGenerateFeedBriefing: (refresh: boolean) => Promise<void>
+  onGenerateFeedBriefing: (refresh: boolean, forum?: boolean) => Promise<void>
   onRefreshCatchUp: () => Promise<void>
   onGenerateCatchUpBriefing: () => Promise<void>
   onMarkCaughtUp: () => void
@@ -648,6 +648,19 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             >
               <Sparkles aria-hidden="true" />
               {loadingFeedBriefing ? '生成中...' : 'AI 速览'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loadingFeedBriefing}
+              onClick={() => {
+                onCloseFeedAIMoreMenu()
+                void onGenerateFeedBriefing(false, true)
+              }}
+              title="汇总最近 24 小时收录的论坛热门帖，查看讨论焦点、主要观点和原帖"
+            >
+              论坛讨论简报
             </Button>
             <div ref={feedAIMoreRef} className="feed-ai-more">
               <DropdownMenu

@@ -589,3 +589,39 @@ test('mobile whole-page reading restores the list scroll position', async ({ pag
   await expect(row).toBeInViewport()
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
 })
+
+test('forum discussion briefing selects forum evidence and opens original threads', async ({ page }) => {
+  await mockAPI(page, { admin: true })
+  const thread = { ...feedItem, id: 201, source_id: 2, source_name: 'Example Forum', source_tag: 'forum', title: 'Is this tool worth using?', link: 'https://v2ex.com/t/201' }
+  await page.route('**/api/v1/feed?**', (route) => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('tag') === 'forum') {
+      return json(route, { data: [thread], meta: { next_cursor: '' } })
+    }
+    return route.fallback()
+  })
+  await page.route('**/api/v1/feed/briefing', (route) => json(route, { data: {
+    digest_key: 'forum-test', summary: '# 论坛讨论简报\n\n## 大家在聊什么\n\n### 工具体验\n\n- 主要观点：有人认为省时，也有人担心隐私成本。\n- 原帖：[A01]', model: 'test', provider: 'test', generated_at: generatedAt, article_count: 1,
+    input_items: [{ ...thread }], cache_hit: false,
+  } }))
+  await page.goto('/')
+  const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/v1/feed/briefing' && r.method() === 'POST')
+  await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
+  expect((await request).postDataJSON()).toMatchObject({ tag: 'forum', article_ids: [201] })
+  await expect(page.getByRole('heading', { name: '大家在聊什么' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '原帖 1', exact: true })).toHaveAttribute('href', thread.link)
+})
+
+test('forum briefing explains empty evidence without generating a report', async ({ page }) => {
+  await mockAPI(page)
+  let generations = 0
+  await page.route('**/api/v1/feed?**', (route) => {
+    if (new URL(route.request().url()).searchParams.get('tag') === 'forum') return json(route, { data: [], meta: { next_cursor: '' } })
+    return route.fallback()
+  })
+  await page.route('**/api/v1/feed/briefing', (route) => { if (!route.request().postDataJSON()?.cache_only) generations += 1; return json(route, { error: 'cache not found' }, 404) })
+  await page.goto('/')
+  await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
+  await expect(page.getByText('最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。')).toBeVisible()
+  expect(generations).toBe(0)
+})

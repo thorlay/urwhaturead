@@ -381,3 +381,28 @@ curl -X POST http://localhost:8080/api/v1/sources/discover \
   -H "Content-Type: application/json" \
   -d '{"url":"https://www.uscardforum.com"}'
 ```
+
+### 论坛讨论简报
+
+先确保 RSSHub 已更新，支持 Hacker News 的最低评论数参数。加载服务器 `.env` 后运行：
+
+```bash
+set -a
+source .env
+set +a
+go run ./cmd/setup-forums
+```
+
+该命令幂等接入 V2EX 热门页（含回复）和 Hacker News 高分讨论（100 分、至少 30 条评论），统一打上 `forum` 标签并首次抓取。重复执行不创建重复源，也不改变已有订阅的启用或 AI 定时设置。初次抓取失败会返回非零状态，已保存的订阅仍保留以便重试。RSSHub 地址使用当前环境的 `RSSHUB_BASE_URL`。
+
+在聚合流顶部点击「论坛讨论简报」，汇总最近 24 小时收录的论坛帖子，展示讨论焦点、主要观点、共识与分歧及可点击原帖引用。长讨论会从开头、中间、末尾抽取材料，按 AI 输入预算分配到每个帖子；回复不足时明确标注，不将少量样本推断成全社区共识。重复抓取 V2EX/HN 原帖时同步更新回复正文，论坛简报缓存随回复材料变化失效。
+
+这不自动部署生产服务；其他环境需更新 Quick、RSSHub 并执行相同接入命令。
+
+#### NGA 网事杂谈与游戏综合讨论
+
+加载 Quick 的 `.env` 后执行 `go run ./cmd/setup-forums --nga`，幂等接入 `rsshub://nga/forum/-7`（网事杂谈）及 `rsshub://nga/forum/414`（游戏综合讨论）。这是板块帖子订阅，不是精华或热榜。两个源均使用 `forum` 标签，可进入论坛讨论简报。
+
+需要登录的板块须在 RSSHub 侧配置 `NGA_PASSPORT_UID`、`NGA_PASSPORT_CID`；浏览器登录不会自动同步。把两项填入 `.run/nga-session.env`（不要发送到聊天或提交仓库），本机运行 `python3 scripts/rsshub-nga-session.py`；脚本默认复用相邻的 `../RSSHub/docker-compose.yml`，也可用 `--compose-file` 指向其他部署。它生成不含凭据值的 `.run/rsshub-nga-session.yml` 并重新创建 RSSHub，之后手动重建服务时也需包含该覆盖文件及对应环境变量，或重跑此脚本。使用 `deploy/rsshub-compose.yml` 部署时，也可以将两项直接写到已忽略的 `deploy/rsshub.env`。
+
+NGA 的分区源只提供主帖。Quick 每次轮询最多为每板块 12 个近期帖子获取接口返回的部分楼层，限制同时 3 个请求、总计 45 秒；保留作者和楼层链接，不将回复样本当作完整讨论。部分帖子可能不返回回复，简报会标注材料不足；登录失效或回复抓取失败时，保留已保存的回复正文。
