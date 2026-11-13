@@ -61,3 +61,16 @@ func TestForumEvidenceRetainsLowVoteDissent(t *testing.T) {
 		t.Fatalf("missing dissent or sampling limits: %v", row.Content)
 	}
 }
+
+func TestForumSelectionSkipsHeadlinesWithoutReplies(t *testing.T) {
+	replies := "Alice: quick. Bob: too expensive."
+	metadata := "Article URL: example.com # Comments: 700"
+	rows := []feedItem{{ID: 1, Link: "https://news.ycombinator.com/item?id=1", Content: &metadata}, {ID: 2, Link: "https://news.ycombinator.com/item?id=2", Content: &replies}, {ID: 3, Link: "https://v2ex.com/t/3"}}
+	got := forumEvidenceCandidates(rows)
+	if len(got) != 2 || got[0].ID != 2 || got[1].ID != 3 {
+		t.Fatalf("headlines must not displace reply evidence: %+v", got)
+	}
+	if len(forumEvidenceCandidates(rows[:1])) != 1 {
+		t.Fatal("keep insufficient-evidence explanation when nothing else exists")
+	}
+}

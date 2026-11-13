@@ -27,6 +27,9 @@ type briefingSelection struct {
 }
 
 func (h *FeedHandler) prepareBriefingRows(ctx context.Context, rows []feedItem, model string) ([]feedItem, error) {
+	if isForumBriefing(rows) {
+		rows = forumEvidenceCandidates(rows)
+	}
 	selected := rows
 	if len(rows) > maxBriefingDeepReads {
 		result, err := h.summarizer.CompleteWithModel(ctx, briefingSelectionSystemPrompt, buildBriefingSelectionPrompt(rows), model)
@@ -269,4 +272,19 @@ func (h *FeedHandler) enrichForumBriefingEvidence(ctx context.Context, row *feed
 	}
 	content := b.String() + "\n[主帖/原始材料节选]\n" + truncateFeedText(textclean.NormalizeFromHTMLBlock(original), 500)
 	row.Content = &content
+}
+
+func forumEvidenceCandidates(rows []feedItem) []feedItem {
+	candidates := make([]feedItem, 0, len(rows))
+	for _, row := range rows {
+		if strings.HasPrefix(row.Link, "https://news.ycombinator.com/item?") && (row.Content == nil || strings.TrimSpace(*row.Content) == "" || strings.Contains(*row.Content, "# Comments:")) {
+			continue
+		}
+		candidates = append(candidates, row)
+	}
+	// Keep the honest insufficient-evidence explanation if no usable candidates exist.
+	if len(candidates) > 0 {
+		return candidates
+	}
+	return rows
 }

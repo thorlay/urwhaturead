@@ -38,7 +38,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v7-forum-observation"
+	feedBriefingPromptVersion = "v8-forum-observation"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -917,23 +917,36 @@ func (h *FeedHandler) loadArticleRefsForBriefings(
 		return map[string][]feedBriefingInputItem{}, nil
 	}
 
+	hasForum := false
+	for _, row := range rows {
+		if row.Tag == "forum" || strings.Contains(row.Summary, "# 论坛讨论简报") {
+			hasForum = true
+		}
+	}
+	columns := "id, source_id, title, link, published_at"
+	if hasForum {
+		columns += ", CASE WHEN raw->>'guid' LIKE 'https://news.ycombinator.com/item?%' THEN raw->>'guid' ELSE link END AS discussion_link"
+	}
 	var articles []struct {
-		ID          uint64
-		SourceID    uint64
-		Title       string
-		Link        string
-		PublishedAt *time.Time
+		DiscussionLink string
+		ID             uint64
+		SourceID       uint64
+		Title          string
+		Link           string
+		PublishedAt    *time.Time
 	}
 	if err := h.db.WithContext(ctx).
 		Table("articles").
-		Select("id, source_id, title, link, published_at").
+		Select(columns).
 		Where("id IN ?", articleIDs).
 		Scan(&articles).Error; err != nil {
 		return nil, err
 	}
 
+	discussionLinks := map[uint64]string{}
 	articleByID := make(map[uint64]feedBriefingInputItem, len(articles))
 	for _, article := range articles {
+		discussionLinks[article.ID] = article.DiscussionLink
 		title := textclean.NormalizeInline(article.Title)
 		if title == "" {
 			title = fmt.Sprintf("文章 #%d", article.ID)
@@ -950,7 +963,15 @@ func (h *FeedHandler) loadArticleRefsForBriefings(
 
 	result := make(map[string][]feedBriefingInputItem, len(rows))
 	for _, row := range rows {
-		result[row.DigestKey] = orderFeedBriefingArticleRefs(row.ArticleIDs, articleByID)
+		refs := orderFeedBriefingArticleRefs(row.ArticleIDs, articleByID)
+		if row.Tag == "forum" || strings.Contains(row.Summary, "# 论坛讨论简报") {
+			for i := range refs {
+				if link := discussionLinks[refs[i].ID]; link != "" {
+					refs[i].Link = link
+				}
+			}
+		}
+		result[row.DigestKey] = refs
 	}
 	return result, nil
 }

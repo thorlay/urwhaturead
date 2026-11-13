@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"os"
+	"quick/internal/models"
 	"testing"
 	"time"
 
@@ -67,6 +68,15 @@ func TestForumRankingAndNewsIsolation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := db.Exec(`INSERT INTO articles(id,source_id,title,link,raw) VALUES(8,2,'HN article','https://example.com/article','{"guid":"https://news.ycombinator.com/item?id=123"}')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	h := NewFeedHandler(db, nil, FeedHandlerOptions{})
+	refs, err := h.loadArticleRefsForBriefings(context.Background(), []models.FeedBriefing{{DigestKey: "forum", Tag: "forum", ArticleIDs: "8"}, {DigestKey: "news", ArticleIDs: "8"}}, map[uint64]string{2: "HN"})
+	if err != nil || refs["forum"][0].Link != "https://news.ycombinator.com/item?id=123" || refs["news"][0].Link != "https://example.com/article" {
+		t.Fatalf("forum references must preserve discussion links: %+v %v", refs, err)
+	}
+
 	repo := newFeedRepository(db)
 	news, e := repo.list(context.Background(), feedListParams{channel: "news", limit: 20})
 	if e != nil || len(news.rows) != 1 || news.rows[0].ID != 1 {
