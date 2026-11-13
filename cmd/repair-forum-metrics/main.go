@@ -13,13 +13,18 @@ import (
 // Reparse only recent forum metadata, preserving article content and subscriptions.
 func main() {
 	apply := flag.Bool("apply", false, "Write corrected counts; default only previews total changes")
+	sourceID := flag.Uint64("source-id", 0, "Limit corrections to one source")
 	flag.Parse()
 	db, err := database.New(config.Load())
 	if err != nil {
 		log.Fatal(err)
 	}
 	var rows []models.Article
-	err = db.Table("articles a").Select("a.id,a.raw,a.reply_count").Joins("JOIN sources s ON s.id=a.source_id").Where(`coalesce(a.published_at,a.created_at)>now()-interval '3 days' AND (s.tags @> ARRAY['forum']::text[] OR s.site_key IN ('v2ex','v2ex.com','hackernews','news.ycombinator.com','hnrss.org','nga','reddit','uscardforum.com','linux.do','1point3acres','tieba') OR s.rss_url ~* '/(v2ex|hackernews|nga|reddit|uscardforum|linuxdo|1point3acres|tieba)/')`).Scan(&rows).Error
+	query := db.Table("articles a").Select("a.id,a.raw,a.reply_count").Joins("JOIN sources s ON s.id=a.source_id").Where(`coalesce(a.published_at,a.created_at)>now()-interval '3 days' AND (s.tags @> ARRAY['forum']::text[] OR s.site_key IN ('v2ex','v2ex.com','hackernews','news.ycombinator.com','hnrss.org','nga','reddit','uscardforum.com','linux.do','1point3acres','tieba') OR s.rss_url ~* '/(v2ex|hackernews|nga|reddit|uscardforum|linuxdo|1point3acres|tieba)/')`)
+	if *sourceID > 0 {
+		query = query.Where("a.source_id=?", *sourceID)
+	}
+	err = query.Scan(&rows).Error
 	if err != nil {
 		log.Fatal(err)
 	}

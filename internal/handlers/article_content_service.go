@@ -43,11 +43,10 @@ const (
 )
 
 var (
-	uscardTopicLinkPattern = regexp.MustCompile(`^https?://www\.uscardforum\.com/t/topic/(\d+)(?:/\d+)?/?$`)
-	uscardPostLinkPattern  = regexp.MustCompile(`/t/topic/\d+/(\d+)$`)
-	v2exReplyLinkPattern   = regexp.MustCompile(`#reply(\d+)$`)
-	redditIDPattern        = regexp.MustCompile(`^[a-z0-9]{5,10}$`)
-	httpURLPattern         = regexp.MustCompile(`https?://[^\s"'<>]+`)
+	uscardPostLinkPattern = regexp.MustCompile(`/t/topic/\d+/(\d+)$`)
+	v2exReplyLinkPattern  = regexp.MustCompile(`#reply(\d+)$`)
+	redditIDPattern       = regexp.MustCompile(`^[a-z0-9]{5,10}$`)
+	httpURLPattern        = regexp.MustCompile(`https?://[^\s"'<>]+`)
 )
 
 type cachedThread struct {
@@ -261,13 +260,10 @@ func forumThreadTargetFromLink(rawLink string) (forumThreadTarget, bool) {
 }
 
 func uscardTopicRSSURL(rawLink string) (feedURL string, topicURL string, ok bool) {
-	link := strings.TrimSpace(rawLink)
-	match := uscardTopicLinkPattern.FindStringSubmatch(link)
-	if len(match) < 2 {
+	topicURL, ok = feedextract.USCardTopicURL(rawLink)
+	if !ok {
 		return "", "", false
 	}
-	topicID := match[1]
-	topicURL = "https://www.uscardforum.com/t/topic/" + topicID
 	return topicURL + ".rss", topicURL, true
 }
 

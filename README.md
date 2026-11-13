@@ -419,3 +419,7 @@ NGA 评论展示通过只读的 `app_api.php?__lib=post&__act=list` 接口补充
 论坛回复数仅信任结构化元数据或 HN RSS 的明确计数字段，不从用户讨论正文猜测。V2EX 通过公开 topic API 获取 `replies`，HN 通过官方 Firebase item API 获取 `descendants`（每轮最多 40 个请求、并发 4、总计 12 秒）；NGA 通过已登录的只读 `app_api.php?__lib=subject&__act=list` 板块接口获取 `replies`，登录信息沿用受保护配置。接口失败时保持计数未知，不将 0 与未知混淆。
 
 旧版本曾把链接数字、日期或正文片段误识别为回复数。上线时加载 Quick 环境后运行 `go run ./cmd/repair-forum-metrics` 预览，使用 `--apply` 仅修正近三天论坛文章的回复数字段，再重新抓取订阅补齐元数据；文章正文和订阅设置不变。
+
+#### 美卡论坛
+
+已有的 `https://www.uscardforum.com/latest.rss` 订阅纳入论坛观察。回复数读取 RSS 末尾与本帖链接匹配的 Discourse 元数据（`N 个帖子 - M 位参与者` 或英文格式），以 `N-1` 计算回复数；不将参与人数或正文数字当作回复量。JSON 接口不可用时仍可从 RSS 获得计数，讨论简报通过原帖 `.rss` 补充可访问的回复样本。沿用近三天、至少 20 条回复的筛选，较早发表的长年大楼不会挤占新帖观察。旧订阅可以用 `go run ./cmd/repair-forum-metrics --source-id=1 --apply` 补齐近期计数（将 1 替换为实际来源 ID）。
