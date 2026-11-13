@@ -804,3 +804,20 @@ test('feed UI: automatic pagination stops after an error until manually retried'
   await expect(page.getByText('Recovered automatic page', { exact: true })).toBeVisible()
   expect(pageCalls).toBe(2)
 })
+
+test('NGA reader displays replies separately below the main post', async ({ page }) => {
+  await mockAPI(page)
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => {
+    if (!['/api/v1/articles/101', '/api/v1/articles/101/enrichment'].includes(new URL(route.request().url()).pathname)) return route.fallback()
+    return json(route, { ...feedItem, link: 'https://nga.178.com/read.php?tid=123', content_html: '<p>NGA original HTML</p>', thread: {
+      topic_url: 'https://nga.178.com/read.php?tid=123', feed_url: 'http://rsshub:1200/nga/post/123', topic_title: 'NGA discussion', full_content: 'NGA main post', total_posts: 2, truncated: false,
+      comments: [{ post_number: 0, author: 'Alice', link: 'https://nga.178.com/read.php?tid=123#postcontent456', content: 'NGA reply with a different opinion' }],
+    } })
+  })
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  await expect(page.getByRole('heading', { name: '讨论 · 1 条回复' })).toBeVisible()
+  await expect(page.getByText('NGA reply with a different opinion', { exact: true })).toBeVisible()
+  await expect(page.getByText('NGA main post', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('这里展示已获取的部分回复，完整讨论可打开原帖查看。')).toBeVisible()
+})

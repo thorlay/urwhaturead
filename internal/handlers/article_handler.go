@@ -586,6 +586,7 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 	if contentHTML := feedextract.ContentHTMLFromRaw(article.Raw); contentHTML != "" {
 		article.ContentHTML = &contentHTML
 	}
+	article.Thread = ngaSavedDiscussion(article)
 	if article.ImageURL == nil {
 		if fallback := feedextract.ImageFromRaw(article.Raw, article.Link); fallback != "" {
 			article.ImageURL = &fallback
@@ -600,7 +601,7 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 	cached, fetchedAt, found, err := h.loadPersistedEnrichment(ctx, article.ID)
 	if err != nil {
 		log.Printf("load article enrichment cache article_id=%d: %v", article.ID, err)
-	} else if found {
+	} else if found && !needsNGAThreadEnrichment(article.Link, cached) {
 		article.Thread = cached.Thread
 		article.External = cached.External
 		if time.Since(fetchedAt) >= articleEnrichmentCacheTTL {

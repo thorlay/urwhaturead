@@ -170,6 +170,9 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 	if _, topicURL, isV2EX := v2exTopicRSSURLs(topicLink); isV2EX && s.rssHubBaseURL != "" {
 		target.FeedURLs = []string{s.rssHubBaseURL + "/v2ex/post/" + strings.TrimPrefix(topicURL, "https://www.v2ex.com/t/")}
 	}
+	if tid, nga := feedextract.NGAThreadID(topicLink); nga {
+		target.FeedURLs = []string{normalizeRSSHubBaseURL(s.rssHubBaseURL) + "/nga/post/" + tid}
+	}
 	for _, feedURL := range target.FeedURLs {
 		if cached, ok := s.getCachedThread(feedURL, time.Now().UTC()); ok {
 			return &cached, true
@@ -202,6 +205,19 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 }
 
 func forumThreadTargetFromLink(rawLink string) (forumThreadTarget, bool) {
+	if tid, nga := feedextract.NGAThreadID(rawLink); nga {
+		return forumThreadTarget{
+			FeedURLs:     []string{defaultRSSHubBaseURL + "/nga/post/" + tid},
+			TopicURL:     "https://nga.178.com/read.php?tid=" + tid,
+			DefaultTitle: "NGA 讨论",
+			PostNumberFromItemFn: func(link string) int {
+				if strings.HasSuffix(link, "#postcontent0") {
+					return 1
+				}
+				return 0
+			},
+		}, true
+	}
 	feedURL, topicURL, ok := uscardTopicRSSURL(rawLink)
 	if ok {
 		return forumThreadTarget{

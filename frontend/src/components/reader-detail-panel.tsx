@@ -678,6 +678,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                   )}
                 </div>
               </div>
+			  {selectedArticle.thread.feed_url?.includes('/nga/post/') && <p className="hint">这里展示已获取的部分回复，完整讨论可打开原帖查看。</p>}
 
               {threadComments.length > 0 && (
                 <>
