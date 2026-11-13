@@ -1,11 +1,5 @@
+import type { FeedLoadOverrides } from '../lib/feed-query'
 import { useEffect } from 'react'
-
-type FeedLoadOverrides = {
-  tag?: string
-  sourceID?: string
-  keyword?: string
-  cursor?: string
-}
 
 type UseAppBootstrapParams = {
   loadSources: () => Promise<void>

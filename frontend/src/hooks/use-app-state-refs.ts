@@ -14,7 +14,6 @@ export function useAppStateRefs(reader: Pick<ReaderStateController, 'articleRequ
   const feedAutoLoadRef = useRef<HTMLDivElement | null>(null)
   const sidebarTagFilterTimerRef = useRef<number | null>(null)
   const feedAutoLoadCooldownRef = useRef(0)
-  const feedRequestSeqRef = useRef(0)
   const { articleRequestSeqRef, summaryRequestSeqRef, streamScrollYRef } = reader
   const summaryTaskNotifiedRef = useRef<Set<string>>(new Set())
   const readerSessionRef = useRef<ReaderSession | null>(null)
@@ -32,7 +31,6 @@ export function useAppStateRefs(reader: Pick<ReaderStateController, 'articleRequ
     sidebarTagFilterTimerRef,
     feedAutoLoadCooldownRef,
     streamScrollYRef,
-    feedRequestSeqRef,
     articleRequestSeqRef,
     summaryRequestSeqRef,
     summaryTaskNotifiedRef,

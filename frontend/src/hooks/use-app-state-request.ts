@@ -1,19 +1,17 @@
+import type { FeedQueryController } from './use-feed-query'
 import type { ReaderStateController } from './use-reader-state'
 import { useState } from 'react'
 import type { Notice } from '../lib/app-domain'
 
-export function useAppStateRequest(reader: Pick<ReaderStateController, 'loadingArticle' | 'setLoadingArticle' | 'articleError' | 'setArticleError'>) {
+export function useAppStateRequest(reader: Pick<ReaderStateController, 'loadingArticle' | 'setLoadingArticle' | 'articleError' | 'setArticleError'>, feedQuery: FeedQueryController) {
   const { loadingArticle, setLoadingArticle, articleError, setArticleError } = reader
   const [loadingSources, setLoadingSources] = useState(false)
-  const [loadingFeed, setLoadingFeed] = useState(false)
+  const { loadingFeed, feedError, feedCursor, hasMoreFeed } = feedQuery
   const [loadingStatus, setLoadingStatus] = useState(false)
 
   const [sourcesError, setSourcesError] = useState<string | null>(null)
-  const [feedError, setFeedError] = useState<string | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
-  const [feedCursor, setFeedCursor] = useState('')
-  const [hasMoreFeed, setHasMoreFeed] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [, setNowTick] = useState(0)
 
@@ -21,7 +19,6 @@ export function useAppStateRequest(reader: Pick<ReaderStateController, 'loadingA
     loadingSources,
     setLoadingSources,
     loadingFeed,
-    setLoadingFeed,
     loadingArticle,
     setLoadingArticle,
     loadingStatus,
@@ -29,15 +26,12 @@ export function useAppStateRequest(reader: Pick<ReaderStateController, 'loadingA
     sourcesError,
     setSourcesError,
     feedError,
-    setFeedError,
     articleError,
     setArticleError,
     statusError,
     setStatusError,
     feedCursor,
-    setFeedCursor,
     hasMoreFeed,
-    setHasMoreFeed,
     notice,
     setNotice,
     setNowTick,

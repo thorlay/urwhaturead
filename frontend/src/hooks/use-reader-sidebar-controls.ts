@@ -1,9 +1,8 @@
+import type { FeedLoadOverrides } from '../lib/feed-query'
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { AppliedSourceGroupFilter, SidebarTagFilterMode } from '../lib/app-domain'
 import type { ArticleDetail, Source } from '../types'
-
-type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
 
 type UseReaderSidebarControlsParams = {
   cancelSidebarTagFeedReload: () => void
@@ -22,7 +21,6 @@ type UseReaderSidebarControlsParams = {
   setSourceFilter: Dispatch<SetStateAction<string>>
   setSelectedArticle: Dispatch<SetStateAction<ArticleDetail | null>>
   setSelectedArticleID: Dispatch<SetStateAction<number | null>>
-  setFeedCursor: Dispatch<SetStateAction<string>>
   loadFeed: (append?: boolean, overrides?: FeedLoadOverrides) => Promise<void>
   sidebarSourceItemRefs: MutableRefObject<Map<number, HTMLDivElement>>
   sourceTagList: (source: Pick<Source, 'tags'>) => string[]
@@ -40,7 +38,6 @@ export function useReaderSidebarControls({
   setSourceFilter,
   setSelectedArticle,
   setSelectedArticleID,
-  setFeedCursor,
   loadFeed,
   sidebarSourceItemRefs,
   sourceTagList,
@@ -73,7 +70,6 @@ export function useReaderSidebarControls({
     setSourceFilter(sourceID)
     setSelectedArticle(null)
     setSelectedArticleID(null)
-    setFeedCursor('')
     void loadFeed(false, { sourceID })
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
       setShowSubscriptionSidebar(false)
@@ -82,7 +78,6 @@ export function useReaderSidebarControls({
     cancelSidebarTagFeedReload,
     loadFeed,
     resetFeedBriefingState,
-    setFeedCursor,
     setSelectedArticle,
     setSelectedArticleID,
     setShowSubscriptionSidebar,
@@ -115,7 +110,6 @@ export function useReaderSidebarControls({
     if (normalized.length === 0) {
       setSourceGroupFilter(null)
       setSourceFilter('')
-      setFeedCursor('')
       void loadFeed(false, { sourceID: '' })
       return
     }
@@ -141,13 +135,11 @@ export function useReaderSidebarControls({
       kind: 'tag',
     })
     setSourceFilter(sourceIDValue)
-    setFeedCursor('')
     void loadFeed(false, { sourceID: sourceIDValue, cursor: '' })
   }, [
     readerFeedSources,
     resetFeedBriefingState,
     loadFeed,
-    setFeedCursor,
     setSidebarTagFilterMode,
     setSidebarTagFilters,
     setSourceFilter,
@@ -169,7 +161,6 @@ export function useReaderSidebarControls({
     setSourceFilter(sourceIDValue)
     setSelectedArticle(null)
     setSelectedArticleID(null)
-    setFeedCursor('')
     void loadFeed(false, { sourceID: sourceIDValue, cursor: '' })
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches) {
       setShowSubscriptionSidebar(false)
@@ -178,7 +169,6 @@ export function useReaderSidebarControls({
     cancelSidebarTagFeedReload,
     loadFeed,
     resetFeedBriefingState,
-    setFeedCursor,
     setSelectedArticle,
     setSelectedArticleID,
     setShowSubscriptionSidebar,

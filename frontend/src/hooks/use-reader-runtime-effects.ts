@@ -6,6 +6,7 @@ type UseReaderRuntimeEffectsParams = {
   activeTab: AppTab
   canAutoLoadFeed: boolean
   hasMoreFeed: boolean
+  feedError: string | null
   loadingFeed: boolean
   feedCursor: string
   feedAutoLoadRef: RefObject<HTMLDivElement | null>
@@ -25,6 +26,7 @@ export function useReaderRuntimeEffects({
   canAutoLoadFeed,
   hasMoreFeed,
   loadingFeed,
+  feedError,
   feedCursor,
   feedAutoLoadRef,
   feedAutoLoadCooldownRef,
@@ -40,7 +42,7 @@ export function useReaderRuntimeEffects({
   useEffect(() => {
     const target = feedAutoLoadRef.current
     if (!target) return
-    if (activeTab !== 'reader' || !canAutoLoadFeed || !hasMoreFeed) return
+    if (activeTab !== 'reader' || !canAutoLoadFeed || !hasMoreFeed || feedError) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -68,6 +70,7 @@ export function useReaderRuntimeEffects({
     canAutoLoadFeed,
     hasMoreFeed,
     loadingFeed,
+    feedError,
     feedCursor,
     feedAutoLoadCooldownRef,
     feedAutoLoadRef,

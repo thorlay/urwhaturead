@@ -32,6 +32,7 @@ type UseReaderFeatureEffectsParams = {
   activeTab: AppTab
   unreadOnly: boolean
   favoriteOnly: boolean
+  feedError: string | null
   loadingFeed: boolean
   loadingFeedBriefing: boolean
   activeFeedBriefingAnchorArticleIDs: number[]
@@ -94,6 +95,7 @@ export function useReaderFeatureEffects({
   unreadOnly,
   favoriteOnly,
   loadingFeed,
+  feedError,
   loadingFeedBriefing,
   activeFeedBriefingAnchorArticleIDs,
   hasFeedBriefingEntry,
@@ -188,6 +190,7 @@ export function useReaderFeatureEffects({
     canAutoLoadFeed: !unreadOnly && !favoriteOnly,
     hasMoreFeed,
     loadingFeed,
+    feedError,
     feedCursor,
     feedAutoLoadRef,
     feedAutoLoadCooldownRef,

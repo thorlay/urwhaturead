@@ -625,3 +625,182 @@ test('forum briefing explains empty evidence without generating a report', async
   await expect(page.getByText('最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。')).toBeVisible()
   expect(generations).toBe(0)
 })
+
+async function openFeedQuerySearch(page: Page) {
+  await page.locator('.feed-ai-more').getByRole('button').click()
+  await page.getByRole('menuitem', { name: '打开搜索与筛选' }).click()
+  await expect(page.getByPlaceholder('搜索标题/摘要')).toBeVisible()
+}
+
+// Manual-pagination tests control when loading starts; other cases keep the real observer.
+async function disableFeedAutoLoad(page: Page) {
+  await page.addInitScript(() => {
+    const Observer = window.IntersectionObserver
+    window.IntersectionObserver = class extends Observer {
+      observe(target: Element) {
+        if (!target.classList.contains('feed-auto-load-sentinel')) super.observe(target)
+      }
+    }
+  })
+}
+
+test('feed UI: rapid searches keep the latest submitted filter', async ({ page }) => {
+  await mockAPI(page)
+  let releaseOld!: () => void
+  const gate = new Promise<void>((resolve) => { releaseOld = resolve })
+  await page.route('**/api/v1/feed?**', async (route) => {
+    const query = new URL(route.request().url()).searchParams
+    if (query.has('since') || !query.has('q')) return route.fallback()
+    const keyword = query.get('q')!
+    if (keyword === 'older') await gate
+    return json(route, { data: [{ ...feedItem, id: keyword === 'older' ? 301 : 302, title: `Search result ${keyword}` }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  await openFeedQuerySearch(page)
+  const input = page.getByPlaceholder('搜索标题/摘要')
+  const search = page.getByRole('button', { name: '搜索', exact: true })
+  const oldRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('q') === 'older')
+  await input.fill('older')
+  await search.click()
+  await oldRequest
+  await input.fill('latest')
+  await search.click()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText('Search result latest')
+  const oldResponse = page.waitForResponse((response) => new URL(response.url()).searchParams.get('q') === 'older')
+  releaseOld()
+  await (await oldResponse).finished()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText('Search result latest')
+  await expect(search).toBeEnabled()
+})
+
+test('feed UI: switching source while a page loads never appends the old source', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await disableFeedAutoLoad(page)
+  await mockAPI(page)
+  let releasePage!: () => void
+  const gate = new Promise<void>((resolve) => { releasePage = resolve })
+  const pageRequests: Array<{ source: string; cursor: string }> = []
+  await page.route('**/api/v1/feed?**', async (route) => {
+    const params = new URL(route.request().url()).searchParams
+    const source = params.get('source_ids')
+    if (!source || params.has('since')) return route.fallback()
+    const cursor = params.get('cursor') || ''
+    if (cursor) pageRequests.push({ source, cursor })
+    if (source === '1') {
+      if (cursor) await gate
+      return json(route, { data: [{ ...feedItem, id: cursor ? 310 : 311, title: cursor ? 'Obsolete source page' : 'First source row' }], meta: { next_cursor: cursor ? '' : 'source-one-page' } })
+    }
+    return json(route, { data: [{ ...feedItem, id: cursor ? 313 : 312, source_id: 2, source_name: 'Example Forum', title: cursor ? 'Second source next page' : 'Second source row' }], meta: { next_cursor: cursor ? '' : 'source-two-page' } })
+  })
+  await page.goto('/')
+  const oldPage = page.waitForRequest((request) => new URL(request.url()).searchParams.get('cursor') === 'source-one-page')
+  await page.locator('.subscription-item').filter({ hasText: 'Example Technology' }).click()
+  await page.locator('.feed-load-more-button').click()
+  await oldPage
+  await page.locator('.subscription-item').filter({ hasText: 'Example Forum' }).click()
+  await expect(page.locator('.feed-item-inline-title').first()).toHaveText('Second source row')
+  await page.locator('.feed-load-more-button').click()
+  const oldResponse = page.waitForResponse((response) => new URL(response.url()).searchParams.get('cursor') === 'source-one-page')
+  releasePage()
+  await (await oldResponse).finished()
+  await expect(page.getByText('Second source next page', { exact: true })).toBeVisible()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText(['Second source row', 'Second source next page'])
+  expect(pageRequests).toEqual([
+    { source: '1', cursor: 'source-one-page' }, { source: '2', cursor: 'source-two-page' },
+  ])
+})
+
+test('feed UI: repeated load-more clicks issue one page and keep rows unique', async ({ page }) => {
+  await disableFeedAutoLoad(page)
+  await mockAPI(page)
+  let pageCalls = 0
+  let releasePage!: () => void
+  const gate = new Promise<void>((resolve) => { releasePage = resolve })
+  await page.route('**/api/v1/feed?**', async (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (!params.has('cursor')) return json(route, { data: [feedItem], meta: { next_cursor: 'duplicate-page' } })
+    pageCalls += 1
+    await gate
+    return json(route, { data: [feedItem, { ...feedItem, id: 320, title: 'Unique appended row' }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  const more = page.locator('.feed-load-more-button')
+  await expect(more).toBeEnabled()
+  const request = page.waitForRequest((request) => new URL(request.url()).searchParams.get('cursor') === 'duplicate-page')
+  await more.evaluate((button: HTMLButtonElement) => { button.click(); button.click() })
+  await request
+  await expect(more).toBeDisabled()
+  releasePage()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText([feedItem.title, 'Unique appended row'])
+  expect(pageCalls).toBe(1)
+})
+
+test('feed UI: failed first page and failed pagination retry their original requests', async ({ page }) => {
+  await disableFeedAutoLoad(page)
+  await mockAPI(page)
+  let firstCalls = 0
+  let pageCalls = 0
+  await page.route('**/api/v1/feed?**', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (!params.has('cursor')) {
+      if (++firstCalls === 1) return json(route, { error: 'First page temporarily unavailable' }, 500)
+      return json(route, { data: [feedItem], meta: { next_cursor: 'retry-page' } })
+    }
+    expect(params.get('cursor')).toBe('retry-page')
+    if (++pageCalls === 1) return json(route, { error: 'Next page temporarily unavailable' }, 500)
+    return json(route, { data: [{ ...feedItem, id: 330, title: 'Recovered pagination row' }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  await page.locator('.feed .inline-error').getByRole('button', { name: '重试', exact: true }).click()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText(feedItem.title)
+  const more = page.locator('.feed-load-more-button')
+  await more.click()
+  await expect(page.getByText('加载 feed 失败: Next page temporarily unavailable', { exact: true })).toBeVisible()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText(feedItem.title)
+  await expect(more).toBeEnabled()
+  await more.click()
+  await expect(page.locator('.feed-item-inline-title')).toHaveText([feedItem.title, 'Recovered pagination row'])
+  expect(pageCalls).toBe(2)
+})
+
+test('feed UI: pagination ignores search text until it is submitted', async ({ page }) => {
+  await disableFeedAutoLoad(page)
+  await mockAPI(page)
+  const appendedQueries: string[] = []
+  await page.route('**/api/v1/feed?**', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (!params.has('cursor')) return json(route, { data: [feedItem], meta: { next_cursor: 'applied-query-page' } })
+    appendedQueries.push(params.get('q') || '')
+    return json(route, { data: [{ ...feedItem, id: 340, title: 'Next page of the applied query' }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  await openFeedQuerySearch(page)
+  await page.getByPlaceholder('搜索标题/摘要').fill('not submitted yet')
+  await page.locator('.feed-load-more-button').click()
+  await expect(page.getByText('Next page of the applied query', { exact: true })).toBeVisible()
+  expect(appendedQueries).toEqual([''])
+})
+
+test('feed UI: automatic pagination stops after an error until manually retried', async ({ page }) => {
+  await page.clock.install()
+  await mockAPI(page)
+  let pageCalls = 0
+  await page.route('**/api/v1/feed?**', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (!params.has('cursor')) return json(route, { data: [feedItem], meta: { next_cursor: 'auto-retry-page' } })
+    if (++pageCalls === 1) return json(route, { error: 'Automatic pagination failed' }, 500)
+    return json(route, { data: [{ ...feedItem, id: 350, title: 'Recovered automatic page' }], meta: { next_cursor: '' } })
+  })
+  await page.goto('/')
+  await expect(page.getByText('加载 feed 失败: Automatic pagination failed', { exact: true })).toBeVisible()
+  await page.clock.runFor(1500)
+  expect(pageCalls).toBe(1)
+  await expect(page.locator('.feed-item-inline-title')).toHaveText(feedItem.title)
+  await page.locator('.feed-load-more-button').click()
+  await expect(page.getByText('Recovered automatic page', { exact: true })).toBeVisible()
+  expect(pageCalls).toBe(2)
+})

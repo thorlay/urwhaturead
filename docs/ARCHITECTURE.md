@@ -290,7 +290,7 @@
 应用状态由 hooks 持有，`App.tsx` 负责组合。阅读区的模式、选中项、文章详情、加载/错误状态和来源侧栏显隐统一由 `use-reader-state.ts` 持有，使用 `lib/reader-state.ts` 的 reducer 切换。重点状态域包括：
 
 - 来源域：`sources/sourceStatus`
-- 流域：`feed/feedCursor/hasMoreFeed`
+- 流域：`use-feed-query.ts` 订阅 `lib/feed-query.ts` 的统一查询状态，持有已提交条件、列表、游标、加载/错误、失败页和新增数量。`data.feed` 与 `request.feedCursor/hasMoreFeed/loadingFeed/feedError` 只提供兼容读取，不再有独立 setter。
 - 详情域：`selectedArticle/selectedArticleID`
 - AI 域：`articleSummary/feedBriefing/summaryTasks/aiModel`
 - 筛选域：`keyword/tagFilter/sourceFilter/unreadOnly/mutedSiteKeys`
@@ -300,6 +300,10 @@
 
 目录：`frontend/src/hooks/`
 
+- `use-feed-query` / `lib/feed-query`：列表查询及分页唯一入口。`replace(scope)` 提交筛选并从首屏加载；`loadMore()`、`retry()`、`refresh()` 只使用已提交查询。关键词输入等草稿不会改变后续分页条件。
+- 请求开始时同步登记查询与分页归属，合并相同的在途请求；新查询使旧请求和旧更新检查失效。分页按文章 ID 去重，失败保留已有列表和游标，返回相同游标则结束翻页，避免无进展循环。
+- 后台 `checkUpdates()` 只更新新增数量，不替换或重排列表。自动翻页遇到错误后停止，用户可通过现有“更多”按钮重试失败页；首屏失败仍使用原有“重试”入口。
+- `use-reader-data-controller`：负责从界面草稿构造查询条件、来源/健康状态请求和刷新编排；禁止在筛选控件中直接修改分页游标。
 - `use-reader-state`：阅读区状态唯一入口。`openReaderArticle`、`openReaderBriefing`、`closeReader`、`enterImmersiveReader` 分别负责打开文章/速览、关闭、进入沉浸阅读；禁止重新引入独立的模式和详情显隐 setter。
 - 阅读模式为 `list | split | immersive`，选中项为 `none | article | briefing`。原有 `readerView/showFloatingReader` 仅为组件兼容派生值。
 - 打开新内容或关闭阅读时，统一递增文章与摘要请求序号；异步回调必须核对序号。进入沉浸阅读不取消当前文章请求。
@@ -351,6 +355,7 @@
 - 用例：`frontend/tests/e2e/`
 - API 由浏览器路由 mock，不依赖本地数据库、RSSHub 或 AI 服务。
 - `npm run test:e2e` 覆盖阅读、AI、管理权限和移动端横向溢出；CI 使用 Chromium 运行。
+- 查询回归覆盖：快速切换筛选、旧分页晚到、重复加载及文章去重、首屏/分页失败重试、未提交草稿不影响翻页，以及更新提示只计数不重排。独立查询测试与浏览器交互测试均由 Playwright 运行。
 - 阅读回归还覆盖：慢文章响应不能覆盖新选中项、关闭后的晚到错误、AI 内容库速览切换、沉浸阅读返回列表和手机整页阅读的滚动位置恢复。
 - 本地未安装 Playwright Chromium 时，可用 `PW_USE_SYSTEM_CHROME=1 npm run test:e2e` 复用系统 Chrome。
 

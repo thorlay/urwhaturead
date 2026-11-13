@@ -1,9 +1,8 @@
+import type { FeedLoadOverrides } from '../lib/feed-query'
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { AppliedSourceGroupFilter, Notice, SidebarTagFilterMode } from '../lib/app-domain'
 import type { ArticleDetail } from '../types'
-
-type FeedLoadOverrides = Partial<{ tag: string; sourceID: string; keyword: string; cursor: string }>
 
 type UseReaderFilterControlsParams = {
   aiModel: string
@@ -25,7 +24,6 @@ type UseReaderFilterControlsParams = {
   setMutedSiteKeys: Dispatch<SetStateAction<string[]>>
   setSelectedArticle: Dispatch<SetStateAction<ArticleDetail | null>>
   setSelectedArticleID: Dispatch<SetStateAction<number | null>>
-  setFeedCursor: Dispatch<SetStateAction<string>>
   setShowManageModelPicker: Dispatch<SetStateAction<boolean>>
   setArticleSummary: Dispatch<SetStateAction<string>>
   setArticleSummaryMeta: Dispatch<SetStateAction<string>>
@@ -53,7 +51,6 @@ export function useReaderFilterControls({
   setMutedSiteKeys,
   setSelectedArticle,
   setSelectedArticleID,
-  setFeedCursor,
   setShowManageModelPicker,
   setArticleSummary,
   setArticleSummaryMeta,
@@ -65,13 +62,11 @@ export function useReaderFilterControls({
     resetFeedBriefingState()
     setSelectedArticle(null)
     setSelectedArticleID(null)
-    setFeedCursor('')
     void loadFeed(false)
   }, [
     cancelSidebarTagFeedReload,
     loadFeed,
     resetFeedBriefingState,
-    setFeedCursor,
     setSelectedArticle,
     setSelectedArticleID,
   ])
@@ -89,7 +84,6 @@ export function useReaderFilterControls({
     setMutedSiteKeys([])
     setSelectedArticle(null)
     setSelectedArticleID(null)
-    setFeedCursor('')
     void loadFeed(false, {
       tag: '',
       sourceID: '',
@@ -100,7 +94,6 @@ export function useReaderFilterControls({
     cancelSidebarTagFeedReload,
     loadFeed,
     resetFeedBriefingState,
-    setFeedCursor,
     setKeyword,
     setMutedSiteKeys,
     setSelectedArticle,
@@ -151,7 +144,7 @@ export function useReaderFilterControls({
       cancelSidebarTagFeedReload,
       loadFeed,
       resetFeedBriefingState,
-      setKeyword,
+    setKeyword,
       setMutedSiteKeys,
       setSidebarTagFilters,
       setSourceFilter,
