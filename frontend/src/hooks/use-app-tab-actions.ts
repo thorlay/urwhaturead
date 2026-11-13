@@ -1,13 +1,12 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { AppTab, ReaderView } from '../lib/app-domain'
+import type { AppTab } from '../lib/app-domain'
 
 type UseAppTabActionsParams = {
   canAccessManagement: boolean
   finalizeReaderSession: (reason: 'close' | 'navigate') => void
   setActiveTab: Dispatch<SetStateAction<AppTab>>
-  setReaderView: Dispatch<SetStateAction<ReaderView>>
-  setShowFloatingReader: Dispatch<SetStateAction<boolean>>
+  closeReader: () => void
   refreshAll: () => Promise<void>
   onAdminLogout: () => Promise<void>
 }
@@ -16,34 +15,30 @@ export function useAppTabActions({
   canAccessManagement,
   finalizeReaderSession,
   setActiveTab,
-  setReaderView,
-  setShowFloatingReader,
+  closeReader,
   refreshAll,
   onAdminLogout,
 }: UseAppTabActionsParams) {
   const onOpenReaderTab = useCallback(() => {
     finalizeReaderSession('close')
     setActiveTab('reader')
-    setReaderView('stream')
-    setShowFloatingReader(false)
-  }, [finalizeReaderSession, setActiveTab, setReaderView, setShowFloatingReader])
+    closeReader()
+  }, [finalizeReaderSession, setActiveTab, closeReader])
 
   const onOpenAITab = useCallback(() => {
     finalizeReaderSession('close')
-    setShowFloatingReader(false)
-    setReaderView('stream')
+    closeReader()
     setActiveTab('ai')
-  }, [finalizeReaderSession, setActiveTab, setReaderView, setShowFloatingReader])
+  }, [finalizeReaderSession, setActiveTab, closeReader])
 
   const onOpenSourcesTab = useCallback(() => {
     if (!canAccessManagement) {
       return
     }
     finalizeReaderSession('close')
-    setShowFloatingReader(false)
-    setReaderView('stream')
+    closeReader()
     setActiveTab('sources')
-  }, [canAccessManagement, finalizeReaderSession, setActiveTab, setReaderView, setShowFloatingReader])
+  }, [canAccessManagement, finalizeReaderSession, setActiveTab, closeReader])
 
   const onRefreshAllClick = useCallback(() => {
     void refreshAll()

@@ -111,9 +111,8 @@ function App() {
     setShowManageModelPicker,
     activeTab,
     setActiveTab,
-    setReaderView,
-    setShowFloatingReader,
-    setSelectedFeedBriefing,
+    closeReader,
+    openReaderBriefing,
     sourceProfileSource,
     setSourceProfileSource,
     sourceProfileTagPickerOpen,
@@ -125,6 +124,7 @@ function App() {
   } = ui
 
   const sidebarState = useReaderSidebarState({
+    reader: ui,
     sources,
     sourceTagList,
   })
@@ -300,10 +300,7 @@ function App() {
       .filter((value) => Number.isFinite(value) && value > 0)
 
     setSelectedArticle(null)
-    setSelectedArticleID(null)
-    setReaderView('detail')
-    setShowFloatingReader(false)
-    setSelectedFeedBriefing(true)
+    openReaderBriefing('immersive')
     setFeedBriefing(item.summary)
     setFeedBriefingMeta(`${item.provider} · ${item.model} · ${item.article_count} 条信息`)
     setFeedBriefingItems([])
@@ -318,8 +315,7 @@ function App() {
 
   const returnToAILibrary = () => {
     finalizeReaderSession('navigate')
-    setReaderView('stream')
-    setShowFloatingReader(false)
+    closeReader()
     setActiveTab('ai')
     setCanReturnToAILibrary(false)
   }
@@ -343,8 +339,7 @@ function App() {
   } = useAdminAccess({
     activeTab,
     setActiveTab,
-    setReaderView,
-    setShowFloatingReader,
+    closeReader,
     setNotice,
   })
 
@@ -411,8 +406,7 @@ function App() {
     canAccessManagement,
     finalizeReaderSession,
     setActiveTab,
-    setReaderView,
-    setShowFloatingReader,
+    closeReader,
     refreshAll,
     onAdminLogout,
   })

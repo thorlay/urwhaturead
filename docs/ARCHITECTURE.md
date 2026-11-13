@@ -287,7 +287,7 @@
 
 ### 7.2 主要状态域
 
-顶层状态仍然主要在 `App.tsx`，但阅读流的组合与副作用已经下沉到专用 hooks。重点状态域仍包括：
+应用状态由 hooks 持有，`App.tsx` 负责组合。阅读区的模式、选中项、文章详情、加载/错误状态和来源侧栏显隐统一由 `use-reader-state.ts` 持有，使用 `lib/reader-state.ts` 的 reducer 切换。重点状态域包括：
 
 - 来源域：`sources/sourceStatus`
 - 流域：`feed/feedCursor/hasMoreFeed`
@@ -300,6 +300,10 @@
 
 目录：`frontend/src/hooks/`
 
+- `use-reader-state`：阅读区状态唯一入口。`openReaderArticle`、`openReaderBriefing`、`closeReader`、`enterImmersiveReader` 分别负责打开文章/速览、关闭、进入沉浸阅读；禁止重新引入独立的模式和详情显隐 setter。
+- 阅读模式为 `list | split | immersive`，选中项为 `none | article | briefing`。原有 `readerView/showFloatingReader` 仅为组件兼容派生值。
+- 打开新内容或关闭阅读时，统一递增文章与摘要请求序号；异步回调必须核对序号。进入沉浸阅读不取消当前文章请求。
+- `use-app-state-data/request/refs` 继续向已有调用方提供阅读字段，但它们不再各自创建这些状态。筛选及缓存应用保留 selection-only 操作，不负责打开详情。
 - `use-reader-feature-section`：阅读区主组合层，串联 reader 相关 action/data/effects
 - `use-reader-feature-derived`：阅读流与详情的派生状态
 - `use-reader-feature-effects`：阅读流相关副作用与轮询
@@ -322,8 +326,14 @@
 ### 7.5 样式边界
 
 - `frontend/src/index.css`：页面基础样式和 Tailwind 入口
-- `frontend/src/App.css`：应用壳、阅读流、详情和管理页共享样式
+- `frontend/src/App.css`：只保留样式导入清单；导入顺序就是级联顺序，不应随意调整。
+- `frontend/src/styles/reader/`：阅读布局、来源侧栏、文章列表、详情正文，以及分栏和减少位移动画的规则。
+- `frontend/src/styles/app-shell.css`、`controls.css`、`shared-content.css`：应用壳、公共控件与共享内容样式。
+- `frontend/src/styles/source-management.css`、`source-overlays.css`：来源管理及弹层样式。
+- `frontend/src/styles/responsive.css`：原有跨组件屏幕断点与减少动画规则；本轮保留其顺序和声明，以维持视觉效果。
 - `frontend/src/styles/ai-library.css`：AI 历史页、速览文档和对应响应式规则
+
+阅读组件基础规则在对应文件修改，分栏规则在 `reader/split-and-motion.css` 修改，跨组件手机规则在 `responsive.css` 修改；不要向 `App.css` 追加覆盖。
 
 新增 AI 历史页样式应放入 `styles/ai-library.css`，不要继续堆入全局 `App.css`。两个文件由 `App.tsx` 按上述顺序加载，以保留既有级联优先级。
 
@@ -341,6 +351,7 @@
 - 用例：`frontend/tests/e2e/`
 - API 由浏览器路由 mock，不依赖本地数据库、RSSHub 或 AI 服务。
 - `npm run test:e2e` 覆盖阅读、AI、管理权限和移动端横向溢出；CI 使用 Chromium 运行。
+- 阅读回归还覆盖：慢文章响应不能覆盖新选中项、关闭后的晚到错误、AI 内容库速览切换、沉浸阅读返回列表和手机整页阅读的滚动位置恢复。
 - 本地未安装 Playwright Chromium 时，可用 `PW_USE_SYSTEM_CHROME=1 npm run test:e2e` 复用系统 Chrome。
 
 ## 8. 配置与运行开关

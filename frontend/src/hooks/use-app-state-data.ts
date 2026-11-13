@@ -1,5 +1,6 @@
+import type { ReaderStateController } from './use-reader-state'
 import { useState } from 'react'
-import type { ArticleDetail, FeedBriefingInputItem, FeedItem, Source, SourceStatus } from '../types'
+import type { FeedBriefingInputItem, FeedItem, Source, SourceStatus } from '../types'
 import {
   aiModelOptions,
   aiModelStorageKey,
@@ -10,11 +11,10 @@ import {
 } from '../lib/app-domain'
 import { parseStoredFavoriteArticleIDs, parseStoredReadArticleIDs } from '../lib/app-utils'
 
-export function useAppStateData() {
+export function useAppStateData(reader: Pick<ReaderStateController, 'selectedArticleID' | 'setSelectedArticleID' | 'selectedArticle' | 'setSelectedArticle'>) {
   const [sources, setSources] = useState<Source[]>([])
   const [feed, setFeed] = useState<FeedItem[]>([])
-  const [selectedArticle, setSelectedArticle] = useState<ArticleDetail | null>(null)
-  const [selectedArticleID, setSelectedArticleID] = useState<number | null>(null)
+  const { selectedArticleID, setSelectedArticleID, selectedArticle, setSelectedArticle } = reader
   const [articleSummary, setArticleSummary] = useState('')
   const [articleSummaryMeta, setArticleSummaryMeta] = useState('')
   const [summaryTasks, setSummaryTasks] = useState<SummaryTask[]>([])

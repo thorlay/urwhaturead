@@ -1,0 +1,62 @@
+/* The feed remains a narrow column even on a wide desktop. */
+@media (min-width: 981px) {
+  .reader-layout-split .feed-header {
+    flex-direction: column;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+
+  .reader-layout-split .feed-header-tools {
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .reader-layout-split .feed-header-tools > * {
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
+  .reader-layout-split .feed-catch-up {
+    flex-direction: column;
+    align-items: stretch;
+    flex-shrink: 0;
+    gap: 0.4rem;
+  }
+
+  .reader-layout-split .feed-catch-up-status,
+  .reader-layout-split .feed-catch-up-actions {
+    flex-wrap: wrap;
+  }
+
+  .reader-layout-split .feed-catch-up-status > span {
+    flex: 1 0 auto;
+    max-width: 100%;
+  }
+
+  .reader-layout-split .feed-catch-up-status small {
+    white-space: nowrap;
+  }
+}
+
+/* Keep reading targets still while hovering and changing articles. */
+.reader-stack,
+.reader-stack .subscription-sidebar,
+.reader-stack .subscription-sidebar-expanded,
+.reader-stack .subscription-compact-rail,
+.reader-stack .subscription-tree,
+.reader-stack .subscription-tag-filters,
+.reader-stack .subscription-item {
+  transition: none;
+}
+
+.reader-stack .feed-item {
+  animation: none;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.detail-floating,
+.detail-page {
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+  animation: none;
+}

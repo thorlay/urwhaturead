@@ -1,7 +1,8 @@
+import type { ReaderStateController } from './use-reader-state'
 import { useRef } from 'react'
 import type { ReaderSession } from '../lib/app-domain'
 
-export function useAppStateRefs() {
+export function useAppStateRefs(reader: Pick<ReaderStateController, 'articleRequestSeqRef' | 'summaryRequestSeqRef' | 'streamScrollYRef'>) {
   const floatingDetailRef = useRef<HTMLElement | null>(null)
   const sourceSelectAllRef = useRef<HTMLInputElement | null>(null)
   const sourceContextMenuRef = useRef<HTMLDivElement | null>(null)
@@ -13,10 +14,8 @@ export function useAppStateRefs() {
   const feedAutoLoadRef = useRef<HTMLDivElement | null>(null)
   const sidebarTagFilterTimerRef = useRef<number | null>(null)
   const feedAutoLoadCooldownRef = useRef(0)
-  const streamScrollYRef = useRef<number | null>(null)
   const feedRequestSeqRef = useRef(0)
-  const articleRequestSeqRef = useRef(0)
-  const summaryRequestSeqRef = useRef(0)
+  const { articleRequestSeqRef, summaryRequestSeqRef, streamScrollYRef } = reader
   const summaryTaskNotifiedRef = useRef<Set<string>>(new Set())
   const readerSessionRef = useRef<ReaderSession | null>(null)
 

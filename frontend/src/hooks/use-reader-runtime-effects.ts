@@ -92,6 +92,8 @@ export function useReaderRuntimeEffects({
       if (target && panel.contains(target)) {
         return
       }
+      // The detail menu is portaled outside the panel, but belongs to the reader.
+      if (target instanceof Element && target.closest('.detail-more-menu')) return
       closeFloatingReader()
     }
 

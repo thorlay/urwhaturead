@@ -42,6 +42,7 @@ export function useDetailPanel(params: UseDetailPanelParams) {
       if (target && detailMoreMenuRef.current?.contains(target)) {
         return
       }
+      if (target instanceof Element && target.closest('.detail-more-menu')) return
       setDetailMoreMenuOpen(false)
     }
 

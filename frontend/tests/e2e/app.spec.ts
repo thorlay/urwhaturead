@@ -462,3 +462,130 @@ test('opening an article keeps its row visible after the split resizes', async (
     return selected!.y >= list!.y - 1 && selected!.y + selected!.height <= list!.y + list!.height + 1
   }).toBe(true)
 })
+
+const secondArticle = {
+  ...feedItem, id: 102, title: 'The second selected article',
+  content: 'Only the second article belongs in this reader.',
+}
+
+async function mockReaderPair(page: Page) {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', (route) => json(route, {
+    data: [feedItem, secondArticle], meta: { count: 2, next_cursor: '' },
+  }))
+  await page.route(/\/api\/v1\/articles\/102(?:\/enrichment)?$/, (route) => json(route, secondArticle))
+}
+
+async function holdFirstArticle(page: Page, status = 200) {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, async (route) => {
+    await gate
+    return json(route, status === 200 ? {
+      ...feedItem, content: 'A late response from the first article.', content_html: '',
+    } : { error: 'Delayed first article failure' }, status)
+  })
+  return async () => {
+    const responses = [
+      page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/articles/101'),
+      page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/articles/101/enrichment'),
+    ]
+    release()
+    await Promise.all((await Promise.all(responses)).map((response) => response.finished()))
+    // Let the browser consume both responses before asserting the visible selection.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  }
+}
+
+test('a slow article response cannot replace a newer selection', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockReaderPair(page)
+  const releaseFirst = await holdFirstArticle(page)
+  await page.goto('/')
+  await page.locator('.feed-item').filter({ hasText: feedItem.title }).click()
+  await expect(page.locator('.detail-title')).toHaveText(feedItem.title)
+  await page.locator('.feed-item').filter({ hasText: secondArticle.title }).click()
+  await expect(page.locator('.detail-title')).toHaveText(secondArticle.title)
+  await releaseFirst()
+  await expect(page.locator('.detail-title')).toHaveText(secondArticle.title)
+  await expect(page.locator('.detail-floating')).toContainText(secondArticle.content)
+  await expect(page.locator('.feed-item.active')).toContainText(secondArticle.title)
+  await expect(page.locator('.detail-floating')).not.toContainText('A late response')
+})
+
+test('closing pending reading ignores its late error and allows reopening', async ({ page }) => {
+  await mockReaderPair(page)
+  const releaseFirst = await holdFirstArticle(page, 500)
+  await page.goto('/')
+  await page.locator('.feed-item').filter({ hasText: feedItem.title }).click()
+  await expect(page.locator('.detail-title')).toHaveText(feedItem.title)
+  await page.locator('.detail-floating').getByRole('button', { name: '关闭', exact: true }).click()
+  await releaseFirst()
+  await expect(page.locator('.detail-floating, .detail-page')).toHaveCount(0)
+  await expect(page.locator('.notice').filter({ hasText: '加载文章详情失败' })).toHaveCount(0)
+  await page.locator('.feed-item').filter({ hasText: secondArticle.title }).click()
+  await expect(page.locator('.detail-title')).toHaveText(secondArticle.title)
+})
+
+test('opening a library briefing invalidates an unfinished article', async ({ page }) => {
+  await mockReaderPair(page)
+  const releaseFirst = await holdFirstArticle(page)
+  await page.goto('/')
+  await page.locator('.feed-item').filter({ hasText: feedItem.title }).click()
+  await page.getByRole('tab', { name: 'AI', exact: true }).click()
+  // Briefings in the AI library have their own immersive reading entry.
+  const briefing = page.getByText('A stable briefing for the AI library.', { exact: false })
+  await expect(briefing.first()).toBeVisible()
+  await page.getByRole('button', { name: '回到阅读视角', exact: true }).click()
+  await expect(page.locator('.detail-page')).toContainText('A stable briefing for the AI library.')
+  await releaseFirst()
+  await expect(page.locator('.detail-page')).toContainText('A stable briefing for the AI library.')
+  await expect(page.locator('.detail-page')).not.toContainText('A late response')
+  await expect(page.locator('.detail-page .skeleton')).toHaveCount(0)
+  await page.locator('.detail-origin-return').getByRole('button', { name: /返回/ }).click()
+  await expect(page.getByRole('heading', { name: '每日 AI 简报' })).toBeVisible()
+})
+
+test('immersive reading returns to the same scrolled list', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', (route) => json(route, {
+    data: Array.from({ length: 40 }, (_, index) => index === 18 ? feedItem : {
+      ...feedItem, id: 200 + index, title: `Scroll preservation article ${index}`,
+    }), meta: { count: 40, next_cursor: '' },
+  }))
+  await page.goto('/')
+  const row = page.locator('.feed-item').filter({ hasText: feedItem.title })
+  await row.scrollIntoViewIfNeeded()
+  await row.click()
+  await expect(page.locator('.detail-title')).toHaveText(feedItem.title)
+  const list = page.locator('.feed-list')
+  const scrollBefore = await list.evaluate((element) => element.scrollTop)
+  await page.locator('.detail-floating').getByRole('button', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '沉浸阅读' }).click()
+  await expect(page.locator('.detail-page')).toBeVisible()
+  await page.locator('.detail-page').getByRole('button', { name: /返回/ }).click()
+  await expect(page.locator('.detail-page')).toHaveCount(0)
+  await expect(row).toBeInViewport()
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(scrollBefore)
+})
+
+test('mobile whole-page reading restores the list scroll position', async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.startsWith('mobile'), 'Mobile document scrolling')
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', (route) => json(route, {
+    data: Array.from({ length: 40 }, (_, index) => index === 18 ? feedItem : {
+      ...feedItem, id: 200 + index, title: `Mobile scroll article ${index}`,
+    }), meta: { count: 40, next_cursor: '' },
+  }))
+  await page.goto('/')
+  const row = page.locator('.feed-item').filter({ hasText: feedItem.title })
+  await row.scrollIntoViewIfNeeded()
+  const scrollBefore = await page.evaluate(() => window.scrollY)
+  expect(scrollBefore).toBeGreaterThan(0)
+  await row.click()
+  await expect(page.locator('.detail-title')).toHaveText(feedItem.title)
+  await page.locator('.detail-floating').getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(row).toBeInViewport()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+})

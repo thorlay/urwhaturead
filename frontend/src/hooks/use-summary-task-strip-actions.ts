@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { AppTab, FeedBriefingSnapshot, Notice, ReaderView, SummaryTask } from '../lib/app-domain'
+import type { AppTab, FeedBriefingSnapshot, Notice, SummaryTask } from '../lib/app-domain'
 
 type UseSummaryTaskStripActionsParams = {
   feedBriefingSnapshots: Record<string, FeedBriefingSnapshot>
@@ -8,7 +8,6 @@ type UseSummaryTaskStripActionsParams = {
   setNotice: Dispatch<SetStateAction<Notice | null>>
   setActiveTab: Dispatch<SetStateAction<AppTab>>
   openFeedBriefing: () => void
-  setReaderView: Dispatch<SetStateAction<ReaderView>>
   openArticle: (articleID: number) => Promise<void>
   removeSummaryTask: (taskKey: string) => void
 }
@@ -19,7 +18,6 @@ export function useSummaryTaskStripActions({
   setNotice,
   setActiveTab,
   openFeedBriefing,
-  setReaderView,
   openArticle,
   removeSummaryTask,
 }: UseSummaryTaskStripActionsParams) {
@@ -40,7 +38,6 @@ export function useSummaryTaskStripActions({
         return
       }
       setActiveTab('reader')
-      setReaderView('stream')
       void openArticle(task.articleID)
     },
     [
@@ -50,8 +47,7 @@ export function useSummaryTaskStripActions({
       openFeedBriefing,
       setActiveTab,
       setNotice,
-      setReaderView,
-    ],
+        ],
   )
 
   const onDismissSummaryTask = useCallback(

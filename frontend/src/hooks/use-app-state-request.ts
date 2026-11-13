@@ -1,15 +1,15 @@
+import type { ReaderStateController } from './use-reader-state'
 import { useState } from 'react'
 import type { Notice } from '../lib/app-domain'
 
-export function useAppStateRequest() {
+export function useAppStateRequest(reader: Pick<ReaderStateController, 'loadingArticle' | 'setLoadingArticle' | 'articleError' | 'setArticleError'>) {
+  const { loadingArticle, setLoadingArticle, articleError, setArticleError } = reader
   const [loadingSources, setLoadingSources] = useState(false)
   const [loadingFeed, setLoadingFeed] = useState(false)
-  const [loadingArticle, setLoadingArticle] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState(false)
 
   const [sourcesError, setSourcesError] = useState<string | null>(null)
   const [feedError, setFeedError] = useState<string | null>(null)
-  const [articleError, setArticleError] = useState<string | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
   const [feedCursor, setFeedCursor] = useState('')

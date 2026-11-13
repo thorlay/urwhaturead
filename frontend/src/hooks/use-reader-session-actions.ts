@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
-import type { ReaderSession, ReaderView } from '../lib/app-domain'
+import type { ReaderSession } from '../lib/app-domain'
 import type { ArticleDetail } from '../types'
 
 type FinalizeReason = 'close' | 'navigate'
@@ -11,21 +11,17 @@ type UseReaderSessionActionsParams = {
   upsertReadArticleID: (previous: number[], articleID: number) => number[]
   readMarkMinScrollProgress: number
   closeDetailMoreMenu: () => void
-  setShowFloatingReader: Dispatch<SetStateAction<boolean>>
-  articleRequestSeqRef: MutableRefObject<number>
-  summaryRequestSeqRef: MutableRefObject<number>
+  closeReader: () => void
+  openReaderBriefing: (mode?: 'split' | 'immersive') => void
   setLoadingArticle: Dispatch<SetStateAction<boolean>>
   setArticleError: Dispatch<SetStateAction<string | null>>
   setSelectedArticle: Dispatch<SetStateAction<ArticleDetail | null>>
-  setSelectedArticleID: Dispatch<SetStateAction<number | null>>
-  setSelectedFeedBriefing: Dispatch<SetStateAction<boolean>>
   setArticleSummary: Dispatch<SetStateAction<string>>
   setArticleSummaryMeta: Dispatch<SetStateAction<string>>
   setArticleSummaryError: Dispatch<SetStateAction<string | null>>
   setLoadingArticleSummary: Dispatch<SetStateAction<boolean>>
   setExpandedThreadComments: Dispatch<SetStateAction<boolean>>
   setThreadCommentsNewestFirst: Dispatch<SetStateAction<boolean>>
-  setReaderView: Dispatch<SetStateAction<ReaderView>>
   floatingDetailRef: RefObject<HTMLElement | null>
 }
 
@@ -35,21 +31,17 @@ export function useReaderSessionActions({
   upsertReadArticleID,
   readMarkMinScrollProgress,
   closeDetailMoreMenu,
-  setShowFloatingReader,
-  articleRequestSeqRef,
-  summaryRequestSeqRef,
+  closeReader,
+  openReaderBriefing,
   setLoadingArticle,
   setArticleError,
   setSelectedArticle,
-  setSelectedArticleID,
-  setSelectedFeedBriefing,
   setArticleSummary,
   setArticleSummaryMeta,
   setArticleSummaryError,
   setLoadingArticleSummary,
   setExpandedThreadComments,
   setThreadCommentsNewestFirst,
-  setReaderView,
   floatingDetailRef,
 }: UseReaderSessionActionsParams) {
   const markArticleRead = useCallback(
@@ -92,34 +84,28 @@ export function useReaderSessionActions({
 
   const closeFloatingReader = useCallback(() => {
     finalizeReaderSession('close')
-    setShowFloatingReader(false)
+    closeReader()
     closeDetailMoreMenu()
-  }, [closeDetailMoreMenu, finalizeReaderSession, setShowFloatingReader])
+  }, [closeDetailMoreMenu, finalizeReaderSession, closeReader])
 
   const openFeedBriefing = useCallback(() => {
     finalizeReaderSession('close')
-    ++articleRequestSeqRef.current
-    ++summaryRequestSeqRef.current
     closeDetailMoreMenu()
     setLoadingArticle(false)
     setArticleError(null)
     setSelectedArticle(null)
-    setSelectedArticleID(null)
-    setSelectedFeedBriefing(true)
     setArticleSummary('')
     setArticleSummaryMeta('')
     setArticleSummaryError(null)
     setLoadingArticleSummary(false)
     setExpandedThreadComments(false)
     setThreadCommentsNewestFirst(false)
-    setReaderView('stream')
-    setShowFloatingReader(true)
+    openReaderBriefing()
 
     if (floatingDetailRef.current) {
       floatingDetailRef.current.scrollTo({ top: 0, behavior: 'auto' })
     }
   }, [
-    articleRequestSeqRef,
     closeDetailMoreMenu,
     finalizeReaderSession,
     floatingDetailRef,
@@ -130,13 +116,9 @@ export function useReaderSessionActions({
     setExpandedThreadComments,
     setLoadingArticle,
     setLoadingArticleSummary,
-    setReaderView,
     setSelectedArticle,
-    setSelectedArticleID,
-    setSelectedFeedBriefing,
-    setShowFloatingReader,
+    openReaderBriefing,
     setThreadCommentsNewestFirst,
-    summaryRequestSeqRef,
   ])
 
   return {

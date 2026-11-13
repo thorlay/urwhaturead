@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { ReaderStateController } from './use-reader-state'
 import type { Source } from '../types'
 import type { AppliedSourceGroupFilter, SidebarTagFilterMode, SourceGroup } from '../lib/app-domain'
 import { compareSourcesByClicksDesc, compareTrackedSourcesByActivityDesc, normalizeSourceKind, sourceClickCount } from '../lib/app-utils'
@@ -7,6 +8,7 @@ const trackedSidebarPreviewLimit = 10
 const sidebarTagCollapseCount = 8
 
 type UseReaderSidebarStateParams = {
+  reader: Pick<ReaderStateController, 'showSubscriptionSidebar' | 'setShowSubscriptionSidebar'>
   sources: Source[]
   sourceTagList: (source: Pick<Source, 'tags'>) => string[]
 }
@@ -18,10 +20,7 @@ export function useReaderSidebarState(params: UseReaderSidebarStateParams) {
   const [sidebarTagFilters, setSidebarTagFilters] = useState<string[]>([])
   const [sidebarTagFilterMode, setSidebarTagFilterMode] = useState<SidebarTagFilterMode>('or')
   const [showAllSidebarTags, setShowAllSidebarTags] = useState(false)
-  const [showSubscriptionSidebar, setShowSubscriptionSidebar] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return !window.matchMedia('(max-width: 980px)').matches
-  })
+  const { showSubscriptionSidebar, setShowSubscriptionSidebar } = params.reader
   const [showTrackedSidebar, setShowTrackedSidebar] = useState(false)
   const [showAllTrackedSidebar, setShowAllTrackedSidebar] = useState(false)
 

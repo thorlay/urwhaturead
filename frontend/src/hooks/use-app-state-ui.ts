@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Source } from '../types'
-import type { AppTab, ReaderView } from '../lib/app-domain'
+import { useReaderState } from './use-reader-state'
+import type { AppTab } from '../lib/app-domain'
 
 export function useAppStateUI() {
   const [keyword, setKeyword] = useState('')
@@ -17,9 +18,7 @@ export function useAppStateUI() {
   const [showManageModelPicker, setShowManageModelPicker] = useState(false)
 
   const [activeTab, setActiveTab] = useState<AppTab>('reader')
-  const [readerView, setReaderView] = useState<ReaderView>('stream')
-  const [showFloatingReader, setShowFloatingReader] = useState(false)
-  const [selectedFeedBriefing, setSelectedFeedBriefing] = useState(false)
+  const reader = useReaderState()
   const [expandedThreadComments, setExpandedThreadComments] = useState(false)
   const [threadCommentsNewestFirst, setThreadCommentsNewestFirst] = useState(false)
 
@@ -55,12 +54,7 @@ export function useAppStateUI() {
     setShowManageModelPicker,
     activeTab,
     setActiveTab,
-    readerView,
-    setReaderView,
-    showFloatingReader,
-    setShowFloatingReader,
-    selectedFeedBriefing,
-    setSelectedFeedBriefing,
+    ...reader,
     expandedThreadComments,
     setExpandedThreadComments,
     threadCommentsNewestFirst,

@@ -38,11 +38,8 @@ type UseReaderArticleActionsParams = {
   resolveSummaryTaskIdentity: (articleID?: number) => SummaryTaskIdentity
   upsertSummaryTask: (task: SummaryTask) => void
   setLoadingArticle: Dispatch<SetStateAction<boolean>>
-  setReaderView: Dispatch<SetStateAction<'stream' | 'detail'>>
-  setShowFloatingReader: Dispatch<SetStateAction<boolean>>
+  openReaderArticle: (id: number) => void
   setArticleError: Dispatch<SetStateAction<string | null>>
-  setSelectedFeedBriefing: Dispatch<SetStateAction<boolean>>
-  setSelectedArticleID: Dispatch<SetStateAction<number | null>>
   setArticleSummary: Dispatch<SetStateAction<string>>
   setArticleSummaryMeta: Dispatch<SetStateAction<string>>
   setArticleSummaryError: Dispatch<SetStateAction<string | null>>
@@ -72,11 +69,8 @@ export function useReaderArticleActions({
   resolveSummaryTaskIdentity,
   upsertSummaryTask,
   setLoadingArticle,
-  setReaderView,
-  setShowFloatingReader,
+  openReaderArticle,
   setArticleError,
-  setSelectedFeedBriefing,
-  setSelectedArticleID,
   setArticleSummary,
   setArticleSummaryMeta,
   setArticleSummaryError,
@@ -96,16 +90,13 @@ export function useReaderArticleActions({
         finalizeReaderSession('navigate')
       }
 
-      const articleRequestID = ++articleRequestSeqRef.current
-      const summaryRequestID = ++summaryRequestSeqRef.current
+      openReaderArticle(articleID)
+      const articleRequestID = articleRequestSeqRef.current
+      const summaryRequestID = summaryRequestSeqRef.current
       try {
         setLoadingArticle(true)
         closeDetailMoreMenu()
-        setReaderView('stream')
-        setShowFloatingReader(true)
         setArticleError(null)
-        setSelectedFeedBriefing(false)
-        setSelectedArticleID(articleID)
         setSelectedArticle(null)
         setArticleSummary('')
         setArticleSummaryMeta('')
@@ -180,11 +171,8 @@ export function useReaderArticleActions({
       setLoadingArticle,
       setLoadingArticleSummary,
       setNotice,
-      setReaderView,
+      openReaderArticle,
       setSelectedArticle,
-      setSelectedArticleID,
-      setSelectedFeedBriefing,
-      setShowFloatingReader,
       setThreadCommentsNewestFirst,
       sourceByID,
       startReaderSession,
