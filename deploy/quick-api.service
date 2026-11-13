@@ -8,6 +8,7 @@ Type=simple
 User=REPLACE_WITH_YOUR_LINUX_USER
 WorkingDirectory=/opt/quick
 EnvironmentFile=/opt/quick/.env
+EnvironmentFile=-/opt/quick/.run/forum-private/nga-session.env
 ExecStart=/opt/quick/bin/quick-server
 Restart=always
 RestartSec=3

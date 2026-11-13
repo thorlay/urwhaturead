@@ -131,6 +131,7 @@ export type ArticleDetail = {
     total_posts: number
     truncated: boolean
     comments: Array<{
+      upvotes?: number
       post_number: number
       author: string
       published_at?: string

@@ -96,6 +96,8 @@ func main() {
 
 	articleOptions := handlers.ArticleHandlerOptions{
 		RSSHubBaseURL:             cfg.RSSHubBaseURL,
+		NGAPassportUID:            cfg.NGAPassportUID,
+		NGAPassportCID:            cfg.NGAPassportCID,
 		ExternalFetchEnabled:      cfg.ExternalFetchEnabled,
 		ExternalFetchEnabledSet:   true,
 		ExternalFetchAllowedHosts: cfg.ExternalFetchAllowedHosts,

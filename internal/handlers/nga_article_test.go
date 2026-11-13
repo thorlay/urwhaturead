@@ -23,6 +23,10 @@ func TestNGASavedRepliesBecomeReaderDiscussion(t *testing.T) {
 	if !needsNGAThreadEnrichment(article.Link, articleEnrichmentResult{}) {
 		t.Fatal("legacy empty enrichment must not hide newly supported replies")
 	}
+	if !needsNGAThreadEnrichment(article.Link, articleEnrichmentResult{Thread: thread}) {
+		t.Fatal("legacy discussion caches must reload vote metadata")
+	}
+	thread.VoteMetadataVersion = 1
 	if needsNGAThreadEnrichment(article.Link, articleEnrichmentResult{Thread: thread}) {
 		t.Fatal("valid discussion cache should be reused")
 	}

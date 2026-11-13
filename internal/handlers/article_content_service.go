@@ -77,6 +77,9 @@ type forumThreadTarget struct {
 }
 
 type ArticleContentService struct {
+	ngaPassportUID   string
+	ngaPassportCID   string
+	ngaVoteEndpoint  string
 	rssHubBaseURL    string
 	threadFailures   map[string]time.Time
 	httpClient       *http.Client
@@ -133,6 +136,9 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 	}
 
 	return &ArticleContentService{
+		ngaPassportUID:       strings.TrimSpace(options.NGAPassportUID),
+		ngaPassportCID:       strings.TrimSpace(options.NGAPassportCID),
+		ngaVoteEndpoint:      "https://ngabbs.com/app_api.php?__lib=post&__act=list",
 		rssHubBaseURL:        strings.TrimRight(strings.TrimSpace(options.RSSHubBaseURL), "/"),
 		threadFailures:       make(map[string]time.Time),
 		httpClient:           newHandlerHTTPClient(12*time.Second, false),
@@ -197,6 +203,9 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 			continue
 		}
 
+		if tid, nga := feedextract.NGAThreadID(topicLink); nga {
+			s.enrichNGAVotes(ctx, tid, thread)
+		}
 		s.setCachedThread(feedURL, *thread, time.Now().UTC().Add(threadCacheTTL))
 		return thread, true
 	}

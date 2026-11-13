@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { sortThreadCommentsByUpvotes } from '../../src/lib/thread-comment-sort'
 
 const generatedAt = new Date().toISOString()
 
@@ -820,4 +821,45 @@ test('NGA reader displays replies separately below the main post', async ({ page
   await expect(page.getByText('NGA reply with a different opinion', { exact: true })).toBeVisible()
   await expect(page.getByText('NGA main post', { exact: true })).toHaveCount(1)
   await expect(page.getByText('这里展示已获取的部分回复，完整讨论可打开原帖查看。')).toBeVisible()
+})
+
+
+test('NGA likes sort all loaded replies before previewing and preserve floor labels', async ({ page }) => {
+  await mockAPI(page)
+  const comments = [
+    { author: 'Unknown', content: 'Unknown votes', upvotes: undefined },
+    { author: 'Zero', content: 'Zero votes', upvotes: 0 },
+    { author: 'Low', content: 'One vote', upvotes: 1 },
+    { author: 'Top', content: 'Top voted reply', upvotes: 36 },
+    { author: 'Tied', content: 'Another top reply', upvotes: 36 },
+  ].map((comment, index) => ({ ...comment, post_number: index + 2, link: `https://nga.178.com/read.php?tid=123#postcontent${index + 1}` }))
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => json(route, {
+    ...feedItem, link: 'https://nga.178.com/read.php?tid=123', thread: {
+      topic_url: 'https://nga.178.com/read.php?tid=123', feed_url: 'http://rsshub/nga/post/123', topic_title: 'Thread', full_content: 'Main', total_posts: 6, truncated: false, comments,
+    },
+  }))
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  await expect(page.getByText('Top voted reply', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('赞数 0', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '按赞数排序', exact: true }).click()
+  const replies = page.locator('.thread-comment')
+  await expect(replies).toHaveCount(3)
+  await expect(replies.nth(0)).toContainText('Top voted reply')
+  await expect(replies.nth(0)).toContainText('#5')
+  await expect(replies.nth(1)).toContainText('Another top reply')
+  await expect(replies.nth(2)).toContainText('One vote')
+  await page.getByRole('button', { name: '查看全部评论（5）' }).click()
+  await expect(replies.last()).toContainText('Unknown votes')
+  await expect(replies.last().getByLabel(/赞数/)).toHaveCount(0)
+  await page.getByRole('button', { name: '最早在前', exact: true }).click()
+  await expect(replies.first()).toContainText('Unknown votes')
+  await expect(page.getByRole('button', { name: '按赞数排序', exact: true })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('comment vote sorting is stable and does not mutate chronological replies', () => {
+  const comments = [{ upvotes: undefined }, { upvotes: 0 }, { upvotes: 9 }, { upvotes: 9 }, { upvotes: null }]
+  const ranked = sortThreadCommentsByUpvotes(comments)
+  expect(ranked).toEqual([comments[2], comments[3], comments[1], comments[0], comments[4]])
+  expect(comments[0].upvotes).toBeUndefined()
 })

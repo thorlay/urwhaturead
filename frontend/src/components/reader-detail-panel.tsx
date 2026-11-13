@@ -1,11 +1,13 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { ArrowLeft, ChevronDown, ChevronUp, CircleAlert, ExternalLink, LoaderCircle, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
+import { sortThreadCommentsByUpvotes } from '../lib/thread-comment-sort'
 
 type ThreadComment = {
+  upvotes?: number
   post_number: number
   author: string
   published_at?: string
@@ -206,6 +208,13 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   } = props
 
   const [readingPreferences, setReadingPreferences] = useState<ReadingPreferences>(readStoredReadingPreferences)
+  const [voteSortArticleID, setVoteSortArticleID] = useState<number | null>(null)
+  const sortByVotes = selectedArticleID != null && voteSortArticleID === selectedArticleID
+  const hasCommentVotes = threadComments.some((comment) => typeof comment.upvotes === 'number')
+  const rankedThreadComments = useMemo(() => sortThreadCommentsByUpvotes(threadComments), [threadComments])
+  const displayedThreadComments = sortByVotes
+    ? expandedThreadComments ? rankedThreadComments : rankedThreadComments.slice(0, threadPreviewCommentLimit)
+    : visibleThreadComments
   const hasAIArticleSummary = Boolean(articleSummary.trim())
   const shouldShowAIInspector = hasAIArticleSummary || loadingArticleSummary || Boolean(articleSummaryError || selectedSummaryTask?.error)
   const hasCapturedExternal = Boolean(selectedArticle?.external?.content)
@@ -671,23 +680,33 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
                       variant="outline"
                       size="sm"
                       className="thread-order-toggle"
-                      onClick={onToggleThreadCommentsNewestFirst}
+                      aria-pressed={!sortByVotes}
+                      onClick={() => {
+                        setVoteSortArticleID(null)
+                        if (!sortByVotes) onToggleThreadCommentsNewestFirst()
+                      }}
                     >
                       {threadCommentsNewestFirst ? '最新在前' : '最早在前'}
                     </Button>
                   )}
+                  {hasCommentVotes && threadComments.length > 1 && (
+                    <Button type="button" variant="outline" size="sm" className="thread-order-toggle" aria-pressed={sortByVotes} onClick={() => setVoteSortArticleID(selectedArticleID)}>
+                      按赞数排序
+                    </Button>
+                  )}
                 </div>
               </div>
-			  {selectedArticle.thread.feed_url?.includes('/nga/post/') && <p className="hint">这里展示已获取的部分回复，完整讨论可打开原帖查看。</p>}
+              {selectedArticle.thread.feed_url?.includes('/nga/post/') && <p className="hint">这里展示已获取的部分回复，完整讨论可打开原帖查看。</p>}
 
               {threadComments.length > 0 && (
                 <>
                   <div className="thread-comments">
-                    {visibleThreadComments.map((comment, index) => (
-                      <article key={`${comment.link}-${index}`} className="thread-comment">
+                    {displayedThreadComments.map((comment) => (
+                      <article key={`${comment.link}-${threadComments.indexOf(comment)}`} className="thread-comment">
                         <p className="thread-comment-meta">
-                          #{comment.post_number || index + 2} · {comment.author || 'unknown'} ·{' '}
+                          #{comment.post_number || threadComments.indexOf(comment) + 2} · {comment.author || 'unknown'} ·{' '}
                           {comment.published_at ? formatTimeAgo(comment.published_at) : '-'}
+                          {typeof comment.upvotes === 'number' && <span aria-label={`赞数 ${comment.upvotes}`}> · 赞 {comment.upvotes}</span>}
                         </p>
                         <PlainTextBlock content={comment.content} className="reading-block" />
                       </article>

@@ -53,5 +53,5 @@ func ngaSavedDiscussion(article articleDetail) *articleThread {
 
 func needsNGAThreadEnrichment(link string, cached articleEnrichmentResult) bool {
 	_, nga := feedextract.NGAThreadID(link)
-	return nga && cached.Thread == nil
+	return nga && (cached.Thread == nil || cached.Thread.VoteMetadataVersion < 1)
 }

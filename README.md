@@ -406,3 +406,9 @@ go run ./cmd/setup-forums
 需要登录的板块须在 RSSHub 侧配置 `NGA_PASSPORT_UID`、`NGA_PASSPORT_CID`；浏览器登录不会自动同步。把两项填入 `.run/nga-session.env`（不要发送到聊天或提交仓库），本机运行 `python3 scripts/rsshub-nga-session.py`；脚本默认复用相邻的 `../RSSHub/docker-compose.yml`，也可用 `--compose-file` 指向其他部署。它生成不含凭据值的 `.run/rsshub-nga-session.yml` 并重新创建 RSSHub，之后手动重建服务时也需包含该覆盖文件及对应环境变量，或重跑此脚本。使用 `deploy/rsshub-compose.yml` 部署时，也可以将两项直接写到已忽略的 `deploy/rsshub.env`。
 
 NGA 的分区源只提供主帖。Quick 每次轮询最多为每板块 12 个近期帖子获取接口返回的部分楼层，限制同时 3 个请求、总计 45 秒；保留作者和楼层链接，不将回复样本当作完整讨论。部分帖子可能不返回回复，简报会标注材料不足；登录失效或回复抓取失败时，保留已保存的回复正文。
+
+#### NGA 回复赞数
+
+NGA 评论展示通过只读的 `app_api.php?__lib=post&__act=list` 接口补充每个 `pid` 的 `vote_good`，并按楼层 ID 与 RSSHub 返回的评论匹配。Quick 进程需要配置 `NGA_PASSPORT_UID`、`NGA_PASSPORT_CID`；生产服务模板会可选读取 `.run/forum-private/nga-session.env`，与已有 RSSHub 登录配置共用本机受保护文件。登录信息不返回给前端、不存入文章数据库。
+
+评论区可选择「按赞数排序」或切回时间顺序。排序范围是已加载的回复，先按赞数排序后再折叠预览；同赞数保持原顺序，没有赞数的排在最后并不显示数字。真实的 0 赞会显示为 0；读取赞数失败时正文与回复仍正常展示。赞数随评论缓存更新，不会发起点赞或点踩操作。
