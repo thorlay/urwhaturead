@@ -245,14 +245,21 @@ export function useReaderFeatureActions({
     if (forum) {
       try {
         setLoadingFeedBriefing(true)
-        const response = await listFeed({ limit: 30, tag: 'forum', since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() })
-        const articles = response.data.filter((item) =>
-          !sourcesIndex.mutedSiteSet.has(sourcesIndex.sourceSiteKeyMap.get(item.source_id) ?? ''),
-        )
+        const response = await listFeed({ limit: 100, tag: 'forum', channel: 'forum' })
+        const counts = new Map<number, number>()
+        const links = new Set<string>()
+        const articles = response.data.filter((item) => {
+          const count = counts.get(item.source_id) ?? 0
+          if (count >= 8 || links.has(item.link) || sourcesIndex.mutedSiteSet.has(sourcesIndex.sourceSiteKeyMap.get(item.source_id) ?? '')) return false
+          counts.set(item.source_id, count + 1)
+          links.add(item.link)
+          return true
+        }).slice(0, 40)
         if (articles.length === 0) {
-          setNotice({ kind: 'info', text: '最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。' })
+          setNotice({ kind: 'info', text: '近三天暂无至少 20 条回复的论坛帖子。' })
           return
         }
+        await loadFeed(false, {channel: 'forum', tag: 'forum', sourceID: '', keyword: '', mode: 'all'})
         setSourceFilter('')
         setSourceGroupFilter(null)
         setSidebarTagFilters([])
@@ -304,7 +311,7 @@ export function useReaderFeatureActions({
     } catch (error) {
       setNotice({ kind: 'error', text: `加载速览候选失败：${toErrorMessage(error)}` })
     }
-  }, [openFeedBriefing, aiModel, setLoadingFeedBriefing, setSourceFilter, setSourceGroupFilter, setSidebarTagFilters, setTagFilter, setKeyword, setUnreadOnly, setFavoriteOnly, feedMode, generateVisibleFeedBriefing, sourceFilter, tagFilter, activeFeedBriefingKeyword, activeFeedBriefingSourceIDs, sourceByID, sourcesIndex, ui.unreadOnly, ui.favoriteOnly, generateFeedBriefing, activeFeedBriefingScopeLabel, activeFeedBriefingTaskKey, setNotice])
+  }, [loadFeed, openFeedBriefing, aiModel, setLoadingFeedBriefing, setSourceFilter, setSourceGroupFilter, setSidebarTagFilters, setTagFilter, setKeyword, setUnreadOnly, setFavoriteOnly, feedMode, generateVisibleFeedBriefing, sourceFilter, tagFilter, activeFeedBriefingKeyword, activeFeedBriefingSourceIDs, sourceByID, sourcesIndex, ui.unreadOnly, ui.favoriteOnly, generateFeedBriefing, activeFeedBriefingScopeLabel, activeFeedBriefingTaskKey, setNotice])
 
   const catchUp = useReaderCatchUp({
     active: ui.activeTab === 'reader',

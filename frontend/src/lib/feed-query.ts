@@ -1,6 +1,7 @@
 import type { FeedItem, FeedResponse } from '../types'
 
 export type FeedScope = {
+  channel?: 'news' | 'forum' | 'all'
   mode: 'all' | 'important'
   tag: string
   sourceID: string
@@ -27,7 +28,7 @@ export function normalizeFeedScope(scope: FeedScope): FeedScope {
   return { ...scope, sourceID: ids.join(','), keyword: scope.keyword.trim() }
 }
 function scopeKey(scope: FeedScope) {
-  return JSON.stringify([scope.mode, scope.tag, scope.sourceID, scope.keyword, scope.includeHidden])
+  return JSON.stringify([scope.channel, scope.mode, scope.tag, scope.sourceID, scope.keyword, scope.includeHidden])
 }
 function scopedItems(items: FeedItem[], scope: FeedScope) {
   const sourceIDs = new Set(scope.sourceID.split(',').filter(Boolean).map(Number))
@@ -94,7 +95,7 @@ export function createFeedQuery(fetchFeed: FetchFeed) {
     publish({
       scope, loading: true, error: null, failedPage: null, checkingUpdates: false,
       ...(scopeChanged ? { cursor: '', pendingCount: 0 } : {}),
-      ...(modeChanged ? { items: [] } : {}),
+      ...((modeChanged || scopeChanged) ? { items: [] } : {}),
     })
     return promise
   }

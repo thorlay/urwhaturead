@@ -51,6 +51,8 @@ func main() {
 	}
 
 	rssWorker := worker.NewRSSWorker(db, worker.RSSWorkerOptions{
+		NGAPassportUID:   cfg.NGAPassportUID,
+		NGAPassportCID:   cfg.NGAPassportCID,
 		TickSec:          cfg.WorkerTickSec,
 		FetchConcurrency: cfg.WorkerFetchConcurrency,
 		RequestRetries:   cfg.WorkerRequestRetries,

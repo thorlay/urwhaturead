@@ -36,6 +36,7 @@ func (w *RSSWorker) enrichNGAFeedDiscussions(ctx context.Context, source models.
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
+	w.enrichNGAReplyCounts(ctx, u.Path, feed)
 	sem := make(chan struct{}, 3)
 	var wg sync.WaitGroup
 	count := 0
@@ -44,6 +45,17 @@ func (w *RSSWorker) enrichNGAFeedDiscussions(ctx context.Context, source models.
 	items := append([]*gofeed.Item(nil), feed.Items...)
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := items[i].PublishedParsed, items[j].PublishedParsed
+		recentA := a != nil && a.After(time.Now().Add(-72*time.Hour))
+		recentB := b != nil && b.After(time.Now().Add(-72*time.Hour))
+		if recentA != recentB {
+			return recentA
+		}
+		if recentA && recentB {
+			ca, cb := feedextract.ReplyCountFromFeedItem(items[i]), feedextract.ReplyCountFromFeedItem(items[j])
+			if ca != nil && cb != nil && *ca != *cb {
+				return *ca > *cb
+			}
+		}
 		if a == nil {
 			return false
 		}

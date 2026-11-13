@@ -101,7 +101,7 @@ export type ReaderFeedPanelProps = {
   onToggleFeedTitleOnlyMode: () => void
   onToggleFeedImages: () => void
   onToggleFeedSearch: () => void
-  onApplyFilters: () => void
+  onApplyFilters: (channel?: 'news' | 'forum') => void
   onToggleAdvancedFilters: () => void
   onChangeKeyword: (value: string) => void
   onChangeTagFilter: (value: string) => void
@@ -631,8 +631,12 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     >
       <div className="feed-header">
         <div className="feed-header-title">
-          <h2>聚合流</h2>
-          <p className="hint">以列表为主，沉浸阅读可单独进入详情页</p>
+          <h2>{tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
+          <p className="hint">{tagFilter === 'forum' ? '近 3 天发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
+          <div role="group" aria-label="阅读频道">
+            <Button size="sm" variant={tagFilter !== 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter !== 'forum'} onClick={() => onApplyFilters('news')}>资讯</Button>
+            <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
+          </div>
         </div>
         <div className="feed-header-tools">
           <div className="feed-ai-actions">
@@ -642,7 +646,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               size="sm"
               onClick={() => {
                 onCloseFeedAIMoreMenu()
-                void onGenerateFeedBriefing(false)
+                void onGenerateFeedBriefing(false, tagFilter === 'forum')
               }}
               disabled={loadingFeedBriefing}
             >
@@ -658,7 +662,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 onCloseFeedAIMoreMenu()
                 void onGenerateFeedBriefing(false, true)
               }}
-              title="汇总最近 24 小时收录的论坛热门帖，查看讨论焦点、主要观点和原帖"
+              title="分析近三天高讨论帖子，查看样本倾向、不同意见和原帖"
             >
               论坛讨论简报
             </Button>
@@ -688,7 +692,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                     onSelect={(event) => {
                       event.preventDefault()
                       onCloseFeedAIMoreMenu()
-                      void onGenerateFeedBriefing(true)
+                      void onGenerateFeedBriefing(true, tagFilter === 'forum')
                     }}
                   >
                     <RotateCcw aria-hidden="true" />
@@ -731,7 +735,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             </div>
           </div>
           <div className="feed-priority-toggle" role="group" aria-label="阅读重点">
-            {(['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
+            {tagFilter !== 'forum' && (['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
           </div>
           <div className="feed-read-actions">
             <div className="feed-read-toggle" role="group" aria-label="文章可见范围">
@@ -800,7 +804,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
 
       {feedMode === 'important' && <p className="feed-highlight-hint">来自最近 72 小时 AI 速览的优先阅读推荐 · 最多 15 条，每源最多 3 条 · 未生成速览的来源可能未覆盖</p>}
 
-      <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
+      {tagFilter !== 'forum' && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
         <div className="feed-catch-up-status">
           <Clock3 aria-hidden="true" />
           <span>
@@ -845,7 +849,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       <div className="feed-filter-toggle-row">
         <Button type="button" variant={showFeedSearch || hasActiveFilters ? 'outline' : 'ghost'} size="sm" onClick={onToggleFeedSearch}>
@@ -869,7 +873,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             readerSources={readerSources}
             sourceFilterSelectValue={sourceFilterSelectValue}
             sourceFilterChipLabel={sourceFilterChipLabel}
-            onApplyFilters={onApplyFilters}
+            onApplyFilters={() => onApplyFilters()}
             onToggleAdvancedFilters={onToggleAdvancedFilters}
             onChangeKeyword={onChangeKeyword}
             onChangeTagFilter={onChangeTagFilter}

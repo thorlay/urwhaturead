@@ -165,6 +165,7 @@ export async function refreshSource(sourceID: number): Promise<{ ok: boolean }> 
 }
 
 export async function listFeed(params: {
+  channel?: 'news' | 'forum' | 'all'
   mode?: 'all' | 'important'
   limit?: number
   cursor?: string
@@ -178,6 +179,7 @@ export async function listFeed(params: {
   query.set('limit', String(params.limit ?? 20))
   if (params.mode === 'important') query.set('mode', 'important')
   if (params.cursor) query.set('cursor', params.cursor)
+  if (params.channel) query.set('channel', params.channel)
   if (params.tag) query.set('tag', params.tag)
   if (params.sourceID) query.set('source_ids', params.sourceID)
   if (params.keyword) query.set('q', params.keyword)

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"quick/internal/feedextract"
 	"quick/internal/models"
@@ -57,6 +59,9 @@ func buildBriefingSelectionPrompt(rows []feedItem) string {
 			textclean.NormalizeInline(row.Title),
 			briefingSnippet(row),
 		))
+		if row.ReplyCount != nil {
+			fmt.Fprintf(&builder, "抓取时回复数: %d（讨论量不等于质量）\n", *row.ReplyCount)
+		}
 		if _, nga := feedextract.NGAThreadID(row.Link); nga {
 			if row.Content != nil && strings.Contains(*row.Content, "\n楼层作者：") {
 				builder.WriteString("回复证据: 已抓取部分回复，优先考虑其中有观点差异或实用经验的帖子。\n")
@@ -143,6 +148,7 @@ func (h *FeedHandler) enrichBriefingRowsFromCache(ctx context.Context, rows []fe
 	for index := range rows {
 		// Preserve feed-provided reply boundaries and avoid mixing external articles into forum evidence.
 		if rows[index].SourceTag == "forum" || feedextract.IsForumThread(rows[index].Link) {
+			h.enrichForumBriefingEvidence(ctx, &rows[index], byArticleID[rows[index].ID])
 			continue
 		}
 		chunks := make([]string, 0, 3)
@@ -200,4 +206,67 @@ func feedItemIDs(rows []feedItem) []uint64 {
 		}
 	}
 	return ids
+}
+
+// Include popular replies alongside evenly spaced replies so low-vote dissent is retained.
+func (h *FeedHandler) enrichForumBriefingEvidence(ctx context.Context, row *feedItem, cached models.ArticleEnrichment) {
+	var thread *articleThread
+	if len(cached.Thread) > 0 {
+		var value articleThread
+		if json.Unmarshal(cached.Thread, &value) == nil && len(value.Comments) > 0 {
+			thread = &value
+		}
+	}
+	if h.forumContentSvc != nil && thread == nil {
+		bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+		value, ok := h.forumContentSvc.fetchThreadForTopic(bounded, row.Link)
+		cancel()
+		if ok && value != nil && len(value.Comments) > 0 {
+			thread = value
+		}
+	}
+	if thread == nil {
+		return
+	}
+	order := make([]int, len(thread.Comments))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := thread.Comments[order[i]].Upvotes, thread.Comments[order[j]].Upvotes
+		return a != nil && (b == nil || *a > *b)
+	})
+	indices := []int{}
+	add := func(i int) {
+		for _, old := range indices {
+			if old == i {
+				return
+			}
+		}
+		indices = append(indices, i)
+	}
+	for i := 0; i < len(order) && i < 2; i++ {
+		add(order[i])
+	}
+	for i := 0; i < 6; i++ {
+		add(i * (len(order) - 1) / 5)
+	}
+	var b strings.Builder
+	b.WriteString("[回复样本：高赞与按楼层间隔抽样，非完整讨论，不能计算社区立场占比]\n")
+	for _, i := range indices {
+		comment := thread.Comments[i]
+		fmt.Fprintf(&b, "作者：%s", textclean.NormalizeInline(comment.Author))
+		if comment.Upvotes != nil {
+			fmt.Fprintf(&b, "；赞数：%d", *comment.Upvotes)
+		}
+		fmt.Fprintf(&b, "\n%s\n%s\n", comment.Link, truncateFeedText(textclean.NormalizeFromHTMLBlock(comment.Content), 280))
+	}
+	original := ""
+	if row.Content != nil {
+		original = *row.Content
+	} else if row.Summary != nil {
+		original = *row.Summary
+	}
+	content := b.String() + "\n[主帖/原始材料节选]\n" + truncateFeedText(textclean.NormalizeFromHTMLBlock(original), 500)
+	row.Content = &content
 }

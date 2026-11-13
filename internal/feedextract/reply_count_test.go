@@ -51,3 +51,17 @@ func TestReplyCountFromRaw(t *testing.T) {
 		t.Fatalf("ReplyCountFromRaw()=%v, want 27", value)
 	}
 }
+
+func TestForumCountsRejectProseAndURLs(t *testing.T) {
+	for _, body := range []string{"Comments URL: https://news.ycombinator.com/item?id=50468888", "2026-11-13 someone says other comments were wrong", "我读了 99 条评论"} {
+		item := &gofeed.Item{Link: "https://nga.178.com/read.php?tid=123", Description: body}
+		if ReplyCountFromFeedItem(item) != nil {
+			t.Fatalf("untrusted body became metadata: %s", body)
+		}
+	}
+	item := &gofeed.Item{GUID: "https://news.ycombinator.com/item?id=123", Link: "https://example.com", Description: `<p>Comments URL: https://news.ycombinator.com/item?id=123</p><p>Points: 500</p><p># Comments: 119</p>`}
+	got := ReplyCountFromFeedItem(item)
+	if got == nil || *got != 119 {
+		t.Fatalf("HN explicit count: %v", got)
+	}
+}

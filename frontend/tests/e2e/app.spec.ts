@@ -623,7 +623,7 @@ test('forum briefing explains empty evidence without generating a report', async
   await page.route('**/api/v1/feed/briefing', (route) => { if (!route.request().postDataJSON()?.cache_only) generations += 1; return json(route, { error: 'cache not found' }, 404) })
   await page.goto('/')
   await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
-  await expect(page.getByText('最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。')).toBeVisible()
+  await expect(page.getByText('近三天暂无至少 20 条回复的论坛帖子。')).toBeVisible()
   expect(generations).toBe(0)
 })
 
@@ -862,4 +862,22 @@ test('comment vote sorting is stable and does not mutate chronological replies',
   const ranked = sortThreadCommentsByUpvotes(comments)
   expect(ranked).toEqual([comments[2], comments[3], comments[1], comments[0], comments[4]])
   expect(comments[0].upvotes).toBeUndefined()
+})
+
+
+test('forum observation is separate from news and switches its applied query', async ({ page }) => {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', route => {
+    const channel = new URL(route.request().url()).searchParams.get('channel')
+    return json(route, {data: [{ id: channel === 'forum' ? 920 : 921, source_id: 1, source_name: 'Test', source_tag: channel === 'forum' ? 'forum' : 'tech', title: channel === 'forum' ? '有争议的高讨论帖子' : '独立的资讯文章', link: 'https://example.com/test', reply_count: 80, created_at: new Date().toISOString(), duplicate_count: 1 }], meta: {next_cursor: ''}})
+  })
+  await page.goto('/')
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toBeVisible()
+  await page.getByRole('button', {name:'论坛观察', exact:true}).click()
+  await expect(page.getByRole('heading', {name:'论坛观察',exact:true})).toBeVisible()
+  await expect(page.getByText('有争议的高讨论帖子', {exact:true})).toBeVisible()
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toHaveCount(0)
+  await page.getByRole('button', {name:'资讯',exact:true}).click()
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toBeVisible()
+  await expect(page.getByText('有争议的高讨论帖子', {exact:true})).toHaveCount(0)
 })

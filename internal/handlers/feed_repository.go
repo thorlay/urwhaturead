@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"quick/internal/models"
@@ -14,6 +15,8 @@ type feedRepository struct {
 }
 
 type feedListParams struct {
+	channel       string
+	minReplies    int
 	important     bool
 	limit         int
 	dedupe        bool
@@ -42,9 +45,7 @@ func newFeedRepository(db *gorm.DB) *feedRepository {
 }
 
 func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedListResult, *feedRepositoryError) {
-	query := r.db.WithContext(ctx).
-		Table("articles AS a").
-		Select(`
+	columns := `
 			a.id,
 			a.source_id,
 			a.cluster_id,
@@ -60,13 +61,20 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 			COALESCE(ec.article_count, 1) AS duplicate_count,
 			a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
-		`).
+		`
+	if params.channel == "forum" {
+		columns = strings.Replace(columns, "a.link,", forumTopicLinkSelect, 1)
+	}
+	query := r.db.WithContext(ctx).
+		Table("articles AS a").
+		Select(columns).
 		Joins("JOIN sources AS s ON s.id = a.source_id").
 		Joins("LEFT JOIN event_clusters AS ec ON ec.id = a.cluster_id")
+	query = filterFeedChannel(query, params.channel)
 	if !params.includeHidden {
 		query = query.Where("s.hidden_in_sidebar = ? AND s.kind <> ?", false, "thread")
 	}
-	if params.tag != "" {
+	if params.tag != "" && params.tag != "forum" {
 		query = query.Where("s.tags @> ?::text[]", models.StringArray{params.tag})
 	}
 	if len(params.sourceIDs) > 0 {
@@ -81,6 +89,9 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 	}
 	if params.since != nil {
 		query = query.Where("a.created_at > ?", *params.since)
+	}
+	if params.channel == "forum" && !params.important {
+		return r.listForumDiscussions(ctx, query, params)
 	}
 	if params.important {
 		return r.listImportant(ctx, query, params)
@@ -172,6 +183,32 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 		}
 	}
 	result.queryElapsed = time.Since(queryStartedAt)
+	return result, nil
+}
+
+func (r *feedRepository) listForumDiscussions(ctx context.Context, query *gorm.DB, params feedListParams) (feedListResult, *feedRepositoryError) {
+	started := time.Now()
+	query = query.Where("COALESCE(a.published_at,a.created_at) >= ? AND a.reply_count >= ?", forumRankingWindow(), params.minReplies)
+	// Collapse the same topic subscribed through multiple feeds before pagination.
+	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", query).Select(`candidates.*, ROW_NUMBER() OVER (PARTITION BY regexp_replace(candidates.link, '^https?://(www\.)?', '') ORDER BY candidates.reply_count DESC,candidates.sort_time DESC,candidates.id DESC) AS forum_rank`)
+	query = r.db.WithContext(ctx).Table("(?) AS ranked", ranked).Where("forum_rank=1")
+	result := feedListResult{}
+	if params.since != nil {
+		if err := query.Session(&gorm.Session{}).Select("COUNT(*)").Scan(&result.totalCount).Error; err != nil {
+			return result, &feedRepositoryError{"count forum discussions failed", err}
+		}
+	}
+	if params.cursor != nil {
+		if params.cursor.Replies == nil {
+			return result, &feedRepositoryError{"invalid forum discussion cursor", nil}
+		}
+		query = query.Where("(reply_count,sort_time,id) < (?,?,?)", *params.cursor.Replies, params.cursor.SortTime, params.cursor.ID)
+	}
+	err := query.Order("reply_count DESC").Order("sort_time DESC").Order("id DESC").Limit(params.limit + 1).Scan(&result.rows).Error
+	result.queryElapsed = time.Since(started)
+	if err != nil {
+		return result, &feedRepositoryError{"query forum discussions failed", err}
+	}
 	return result, nil
 }
 

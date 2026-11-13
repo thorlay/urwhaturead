@@ -31,6 +31,9 @@ func ReplyCountFromFeedItem(item *gofeed.Item) *int {
 	if item == nil {
 		return nil
 	}
+	if IsForumThread(item.Link) || IsForumThread(item.GUID) {
+		return ForumReplyCount(item)
+	}
 	if value, ok := replyCountFromExtensions(item.Extensions); ok {
 		return intPtr(value)
 	}
@@ -45,11 +48,14 @@ func ReplyCountFromRaw(raw []byte) *int {
 		return nil
 	}
 
-	var item rawItem
+	var item gofeed.Item
 	if err := json.Unmarshal(raw, &item); err != nil {
 		return nil
 	}
 
+	if IsForumThread(item.Link) || IsForumThread(item.GUID) {
+		return ForumReplyCount(&item)
+	}
 	if value, ok := replyCountFromExtensions(item.Extensions); ok {
 		return intPtr(value)
 	}
@@ -147,6 +153,9 @@ func hasReplyCountHint(raw string) bool {
 func parseReplyCountNumber(raw string) (int, bool) {
 	value := strings.TrimSpace(strings.ReplaceAll(raw, ",", ""))
 	if value == "" {
+		return 0, false
+	}
+	if strings.Contains(value, "://") {
 		return 0, false
 	}
 	value = strings.Trim(value, "\"'")

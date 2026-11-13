@@ -43,6 +43,7 @@ type feedItem struct {
 }
 
 type feedCursor struct {
+	Replies  *int
 	SortTime time.Time
 	ID       uint64
 }
@@ -64,14 +65,25 @@ func (h *FeedHandler) List(c *gin.Context) {
 	nextCursor := ""
 	if len(result.rows) > params.limit && !params.important {
 		last := result.rows[params.limit-1]
-		nextCursor = encodeFeedCursor(feedCursor{SortTime: last.SortTime, ID: last.ID})
+		cursor := feedCursor{SortTime: last.SortTime, ID: last.ID}
+		if params.channel == "forum" {
+			cursor.Replies = last.ReplyCount
+		}
+		nextCursor = encodeFeedCursor(cursor)
 		result.rows = result.rows[:params.limit]
 	}
 	sanitizeStartedAt := time.Now()
+	if params.channel == "forum" {
+		for i := range result.rows {
+			result.rows[i].SourceTag = "forum"
+		}
+	}
 	sanitizeFeedItems(result.rows)
 	sanitizeElapsed := time.Since(sanitizeStartedAt)
 
 	meta := gin.H{
+		"channel":                params.channel,
+		"min_replies":            params.minReplies,
 		"mode":                   c.DefaultQuery("mode", "all"),
 		"limit":                  params.limit,
 		"count":                  len(result.rows),
@@ -123,10 +135,37 @@ func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 			return params, err
 		}
 	}
+	params.channel = strings.TrimSpace(c.Query("channel"))
+	if params.channel == "" {
+		params.channel = "news"
+		if len(params.sourceIDs) > 0 {
+			params.channel = "all"
+		}
+		if params.tag == "forum" {
+			params.channel = "forum"
+		}
+	}
+	if params.channel != "news" && params.channel != "forum" && params.channel != "all" {
+		return params, fmt.Errorf("channel must be news, forum or all")
+	}
+	if params.channel == "forum" {
+		params.important = false
+	}
+	params.minReplies = 20
+	if raw := c.Query("min_replies"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 1000000 {
+			return params, fmt.Errorf("min_replies must be between 0 and 1000000")
+		}
+		params.minReplies = value
+	}
 	if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
 		cursor, err := decodeFeedCursor(cursorRaw)
 		if err != nil {
 			return params, fmt.Errorf("invalid cursor")
+		}
+		if params.channel == "forum" && cursor.Replies == nil {
+			return params, fmt.Errorf("invalid forum cursor")
 		}
 		params.cursor = &cursor
 	}
@@ -218,6 +257,9 @@ func truncateFeedText(value string, maxRunes int) string {
 
 func encodeFeedCursor(cursor feedCursor) string {
 	payload := fmt.Sprintf("%d:%d", cursor.SortTime.UTC().UnixNano(), cursor.ID)
+	if cursor.Replies != nil {
+		payload += fmt.Sprintf(":%d", *cursor.Replies)
+	}
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
@@ -227,7 +269,7 @@ func decodeFeedCursor(raw string) (feedCursor, error) {
 		return feedCursor{}, err
 	}
 	parts := strings.Split(string(decoded), ":")
-	if len(parts) != 2 {
+	if len(parts) != 2 && len(parts) != 3 {
 		return feedCursor{}, fmt.Errorf("invalid format")
 	}
 
@@ -240,8 +282,16 @@ func decodeFeedCursor(raw string) (feedCursor, error) {
 		return feedCursor{}, err
 	}
 
-	return feedCursor{
+	result := feedCursor{
 		SortTime: time.Unix(0, unixNano).UTC(),
 		ID:       id,
-	}, nil
+	}
+	if len(parts) == 3 {
+		value, err := strconv.Atoi(parts[2])
+		if err != nil || value < 0 {
+			return feedCursor{}, fmt.Errorf("invalid reply cursor")
+		}
+		result.Replies = &value
+	}
+	return result, nil
 }

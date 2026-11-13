@@ -34,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	w := worker.NewRSSWorker(db, worker.RSSWorkerOptions{RequestRetries: 1})
+	w := worker.NewRSSWorker(db, worker.RSSWorkerOptions{RequestRetries: 1, NGAPassportUID: cfg.NGAPassportUID, NGAPassportCID: cfg.NGAPassportCID})
 	failed := false
 	for _, source := range sources {
 		log.Printf("Subscribed: %s (id=%d)", source.Name, source.ID)

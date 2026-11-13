@@ -34,14 +34,16 @@ type FeedHandler struct {
 	briefingCooldown *briefingCooldownStore
 	briefingTasks    *feedBriefingTaskService
 	briefingLocation *time.Location
+	forumContentSvc  *ArticleContentService
 }
 
 const (
-	feedBriefingPromptVersion = "v6-forum"
+	feedBriefingPromptVersion = "v7-forum-observation"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
 type FeedHandlerOptions struct {
+	ArticleOptions   ArticleHandlerOptions
 	Timezone         string
 	AdminAuthEnabled bool
 	AdminToken       string
@@ -61,6 +63,7 @@ func NewFeedHandler(db *gorm.DB, summarizer *aisummary.Client, options FeedHandl
 
 	location, _ := parseBriefingSchedule(options.Timezone, "")
 	handler := &FeedHandler{
+		forumContentSvc:  NewArticleContentService(options.ArticleOptions),
 		briefingLocation: location,
 		db:               db,
 		feedRepository:   newFeedRepository(db),
@@ -732,9 +735,7 @@ func (h *FeedHandler) queryBriefingFeedRows(
 	sourceIDs []uint64,
 	articleIDs []uint64,
 ) ([]feedItem, error) {
-	query := h.db.WithContext(ctx).
-		Table("articles AS a").
-		Select(`
+	columns := `
 			a.id,
 			a.source_id,
 			a.cluster_id,
@@ -751,7 +752,13 @@ func (h *FeedHandler) queryBriefingFeedRows(
 			 a.content_hash,
 			 a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
-		`).
+		`
+	if tag == "forum" {
+		columns = strings.Replace(columns, "a.link,", forumTopicLinkSelect, 1)
+	}
+	query := h.db.WithContext(ctx).
+		Table("articles AS a").
+		Select(columns).
 		Joins("JOIN sources AS s ON s.id = a.source_id")
 	if len(sourceIDs) == 0 && len(articleIDs) == 0 {
 		query = query.Where("s.hidden_in_sidebar = ? AND s.kind <> ?", false, "thread")
@@ -760,7 +767,12 @@ func (h *FeedHandler) queryBriefingFeedRows(
 	if len(articleIDs) > 0 {
 		query = query.Where("a.id IN ?", uniqueSortedUint64(articleIDs))
 	}
-	if tag != "" {
+	if tag == "forum" {
+		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) >= ? AND a.reply_count >= ?", forumRankingWindow(), 20).Order("a.reply_count DESC")
+	} else if len(sourceIDs) == 0 && len(articleIDs) == 0 {
+		query = filterFeedChannel(query, "news")
+	}
+	if tag != "" && tag != "forum" {
 		query = query.Where("s.tags @> ?::text[]", models.StringArray{tag})
 	}
 	if len(sourceIDs) > 0 {
@@ -778,6 +790,11 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		Limit(limit).
 		Scan(&rows).Error; err != nil {
 		return nil, err
+	}
+	if tag == "forum" {
+		for i := range rows {
+			rows[i].SourceTag = "forum"
+		}
 	}
 	return rows, nil
 }
