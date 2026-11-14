@@ -188,7 +188,7 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 
 func (r *feedRepository) listForumDiscussions(ctx context.Context, query *gorm.DB, params feedListParams) (feedListResult, *feedRepositoryError) {
 	started := time.Now()
-	query = query.Where("COALESCE(a.published_at,a.created_at) >= ? AND a.reply_count >= ?", forumRankingWindow(), params.minReplies)
+	query = query.Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), params.minReplies)
 	// Collapse the same topic subscribed through multiple feeds before pagination.
 	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", query).Select(`candidates.*, ROW_NUMBER() OVER (PARTITION BY regexp_replace(candidates.link, '^https?://(www\.)?', '') ORDER BY candidates.reply_count DESC,candidates.sort_time DESC,candidates.id DESC) AS forum_rank`)
 	query = r.db.WithContext(ctx).Table("(?) AS ranked", ranked).Where("forum_rank=1")

@@ -45,8 +45,8 @@ func (w *RSSWorker) enrichNGAFeedDiscussions(ctx context.Context, source models.
 	items := append([]*gofeed.Item(nil), feed.Items...)
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := items[i].PublishedParsed, items[j].PublishedParsed
-		recentA := a != nil && a.After(time.Now().Add(-72*time.Hour))
-		recentB := b != nil && b.After(time.Now().Add(-72*time.Hour))
+		recentA := a != nil && a.After(time.Now().Add(-24*time.Hour))
+		recentB := b != nil && b.After(time.Now().Add(-24*time.Hour))
 		if recentA != recentB {
 			return recentA
 		}

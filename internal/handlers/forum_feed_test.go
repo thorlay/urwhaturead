@@ -62,7 +62,7 @@ func TestForumRankingAndNewsIsolation(t *testing.T) {
 		`CREATE TABLE articles(id bigint,source_id bigint,cluster_id bigint,title text,link text,raw jsonb,summary text,author text,published_at timestamptz,image_url text,reply_count int,created_at timestamptz default now())`,
 		`CREATE TABLE event_clusters(id bigint,article_count int)`,
 		`INSERT INTO sources(id,name,tags,site_key,rss_url) VALUES(1,'news',ARRAY['tech'],'news','https://example.com/feed'),(2,'old forum',ARRAY['tech'],'v2ex','rsshub://v2ex/tab/hot')`,
-		`INSERT INTO articles(id,source_id,title,link,published_at,reply_count) VALUES(1,1,'news','https://example.com',now(),100),(2,2,'popular','https://v2ex.com/t/2',now()-interval '1 hour',100),(3,2,'second','https://v2ex.com/t/3',now(),50),(4,2,'quiet','https://v2ex.com/t/4',now(),19),(5,2,'old','https://v2ex.com/t/5',now()-interval '4 days',900),(6,2,'unknown','https://v2ex.com/t/6',now(),NULL),(7,2,'duplicate','https://www.v2ex.com/t/2',now(),99)`,
+		`INSERT INTO articles(id,source_id,title,link,published_at,reply_count) VALUES(1,1,'news','https://example.com',now(),100),(2,2,'popular','https://v2ex.com/t/2',now()-interval '1 hour',100),(3,2,'second','https://v2ex.com/t/3',now(),50),(4,2,'quiet','https://v2ex.com/t/4',now(),19),(5,2,'old','https://v2ex.com/t/5',now()-interval '25 hours',900),(6,2,'unknown','https://v2ex.com/t/6',now(),NULL),(7,2,'duplicate','https://www.v2ex.com/t/2',now(),99),(9,2,'future','https://v2ex.com/t/9',now()+interval '1 hour',9999)`,
 	} {
 		if err := db.Exec(q).Error; err != nil {
 			t.Fatal(err)

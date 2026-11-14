@@ -256,7 +256,7 @@ export function useReaderFeatureActions({
           return true
         }).slice(0, 40)
         if (articles.length === 0) {
-          setNotice({ kind: 'info', text: '近三天暂无至少 20 条回复的论坛帖子。' })
+          setNotice({ kind: 'info', text: '过去24小时暂无至少 20 条回复的新论坛帖子。' })
           return
         }
         await loadFeed(false, {channel: 'forum', tag: 'forum', sourceID: '', keyword: '', mode: 'all'})

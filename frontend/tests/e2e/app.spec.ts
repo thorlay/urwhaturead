@@ -623,7 +623,7 @@ test('forum briefing explains empty evidence without generating a report', async
   await page.route('**/api/v1/feed/briefing', (route) => { if (!route.request().postDataJSON()?.cache_only) generations += 1; return json(route, { error: 'cache not found' }, 404) })
   await page.goto('/')
   await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
-  await expect(page.getByText('近三天暂无至少 20 条回复的论坛帖子。')).toBeVisible()
+  await expect(page.getByText('过去24小时暂无至少 20 条回复的新论坛帖子。')).toBeVisible()
   expect(generations).toBe(0)
 })
 

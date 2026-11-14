@@ -38,7 +38,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v8-forum-observation"
+	feedBriefingPromptVersion = "v9-forum-24h"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -768,7 +768,7 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		query = query.Where("a.id IN ?", uniqueSortedUint64(articleIDs))
 	}
 	if tag == "forum" {
-		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) >= ? AND a.reply_count >= ?", forumRankingWindow(), 20).Order("a.reply_count DESC")
+		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), 20).Order("a.reply_count DESC")
 	} else if len(sourceIDs) == 0 && len(articleIDs) == 0 {
 		query = filterFeedChannel(query, "news")
 	}

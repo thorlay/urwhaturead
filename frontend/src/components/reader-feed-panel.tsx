@@ -632,7 +632,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
       <div className="feed-header">
         <div className="feed-header-title">
           <h2>{tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
-          <p className="hint">{tagFilter === 'forum' ? '近 3 天发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
+          <p className="hint">{tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
           <div role="group" aria-label="阅读频道">
             <Button size="sm" variant={tagFilter !== 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter !== 'forum'} onClick={() => onApplyFilters('news')}>资讯</Button>
             <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
@@ -662,7 +662,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 onCloseFeedAIMoreMenu()
                 void onGenerateFeedBriefing(false, true)
               }}
-              title="分析近三天高讨论帖子，查看样本倾向、不同意见和原帖"
+              title="分析过去24小时新发的高讨论帖子，查看样本倾向、不同意见和原帖"
             >
               论坛讨论简报
             </Button>

@@ -22,4 +22,4 @@ func filterFeedChannel(query *gorm.DB, channel string) *gorm.DB {
 	}
 }
 
-func forumRankingWindow() time.Time { return time.Now().UTC().Add(-72 * time.Hour) }
+func forumRankingWindow() time.Time { return time.Now().UTC().Add(-24 * time.Hour) }

@@ -112,16 +112,29 @@ export function createFeedQuery(fetchFeed: FetchFeed) {
   const refresh = () => state.scope ? replace(state.scope) : Promise.resolve(null)
   const checkUpdates = (): Promise<void> => {
     if (probe) return probe
-    if (active || !state.scope || state.items.length === 0 || state.error) return Promise.resolve()
+    if (active || !state.scope || state.error) return Promise.resolve()
     const requestID = generation
     const scope = state.scope
     const task = Promise.resolve().then(async () => {
       try {
         const response = await fetchFeed({ ...scope, limit: Math.min(Math.max(state.items.length, 20), 60) })
         if (requestID !== generation) return
-        const currentIDs = new Set(state.items.map((item) => item.id))
-        const pendingCount = uniqueItems(scopedItems(response.data, scope)).filter((item) => !currentIDs.has(item.id)).length
-        publish({ pendingCount })
+        const currentItems = new Map(state.items.map((item) => [item.id, item]))
+        const incoming = uniqueItems(scopedItems(response.data, scope))
+        const changed = new Set(incoming.filter((item) => !currentItems.has(item.id)).map((item) => item.id))
+        if (scope.channel === 'forum' || scope.tag === 'forum') {
+          const incomingIDs = new Set(incoming.map((item) => item.id))
+          for (const item of incoming) {
+            const previous = currentItems.get(item.id)
+            if (previous && (previous.reply_count !== item.reply_count || previous.summary !== item.summary)) changed.add(item.id)
+          }
+          // Only compare the sampled prefix; loaded later pages are outside this probe.
+          const sampleSize = Math.min(Math.max(state.items.length, 20), 60)
+          for (const item of state.items.slice(0, sampleSize)) {
+            if (!incomingIDs.has(item.id)) changed.add(item.id)
+          }
+        }
+        publish({ pendingCount: changed.size })
       } catch {
         // Background checking must not interrupt reading or clear existing rows.
       } finally {
