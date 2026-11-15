@@ -1,10 +1,12 @@
-import { useCallback, useReducer, useRef } from 'react'
+import { useCallback, useLayoutEffect, useReducer, useRef } from 'react'
 import type { ArticleDetail } from '../types'
 import type { SetStateAction } from 'react'
 import { readerReducer, type ReaderState } from '../lib/reader-state'
 
 export function useReaderState() {
   const streamScrollYRef = useRef<number | null>(null)
+  const streamListScrollRef = useRef<number | null>(null)
+  const restoreListScrollRef = useRef(false)
   const articleRequestSeqRef = useRef(0)
   const summaryRequestSeqRef = useRef(0)
   const invalidateReaderRequests = useCallback(() => {
@@ -21,16 +23,19 @@ export function useReaderState() {
   }))
   const openReaderArticle = useCallback((id: number) => {
     if (state.mode === 'list') streamScrollYRef.current = window.scrollY
+    streamListScrollRef.current = null
     invalidateReaderRequests()
     dispatch({ type: 'open-article', id })
   }, [invalidateReaderRequests, state.mode])
   const openReaderBriefing = useCallback((mode: 'split' | 'immersive' = 'split') => {
     if (state.mode === 'list') streamScrollYRef.current = window.scrollY
+    streamListScrollRef.current = mode === 'immersive' ? document.querySelector('.feed-list')?.scrollTop ?? null : null
     invalidateReaderRequests()
     dispatch({ type: 'open-briefing', mode })
   }, [invalidateReaderRequests, state.mode])
   const closeReader = useCallback(() => {
     invalidateReaderRequests()
+    restoreListScrollRef.current = state.mode === 'immersive'
     dispatch({ type: 'close' })
     const scrollY = streamScrollYRef.current
     if (state.mode !== 'list' && scrollY !== null) {
@@ -39,7 +44,14 @@ export function useReaderState() {
   }, [invalidateReaderRequests, state.mode])
   const enterImmersiveReader = useCallback(() => {
     if (state.mode === 'list') streamScrollYRef.current = window.scrollY
+    streamListScrollRef.current = document.querySelector('.feed-list')?.scrollTop ?? null
     dispatch({ type: 'immerse' })
+  }, [state.mode])
+  useLayoutEffect(() => {
+    if (state.mode !== 'list' || !restoreListScrollRef.current) return
+    const list = document.querySelector('.feed-list')
+    if (list && streamListScrollRef.current !== null) list.scrollTop = streamListScrollRef.current
+    restoreListScrollRef.current = false
   }, [state.mode])
   const setShowSubscriptionSidebar = useCallback((open: SetStateAction<boolean>) => dispatch({ type: 'sidebar', open }), [])
   // Selection-only operations are used when filters or cached briefing data change.

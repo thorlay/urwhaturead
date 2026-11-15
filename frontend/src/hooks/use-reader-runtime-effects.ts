@@ -95,8 +95,8 @@ export function useReaderRuntimeEffects({
       if (target && panel.contains(target)) {
         return
       }
-      // The detail menu is portaled outside the panel, but belongs to the reader.
-      if (target instanceof Element && target.closest('.detail-more-menu')) return
+      // Keep feed targets in place until their click switches the selected article.
+      if (target instanceof Element && target.closest('.detail-more-menu, .feed-item')) return
       closeFloatingReader()
     }
 
