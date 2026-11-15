@@ -13,6 +13,7 @@ import {
 } from 'react'
 import { Check, Clock3, MoreHorizontal, RefreshCw, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
@@ -221,6 +222,7 @@ const FeedBriefingListItem = memo(function FeedBriefingListItem(props: FeedBrief
 })
 
 type FeedArticleListItemProps = {
+  hideSourceName: boolean
   item: FeedItem
   isActive: boolean
   isRead: boolean
@@ -243,6 +245,7 @@ type FeedArticleListItemProps = {
 const FeedArticleListItem = memo(
   function FeedArticleListItem(props: FeedArticleListItemProps) {
     const {
+      hideSourceName,
       item,
       isActive,
       isRead,
@@ -314,7 +317,7 @@ const FeedArticleListItem = memo(
           <div className="feed-item-content">
             {feedTitleOnlyMode ? (
               <div className="feed-item-compact-row">
-                <h3 className={cn('feed-item-title', item.highlight_reason && 'has-highlight')}>
+                <h3 className={cn('feed-item-title', item.highlight_reason && 'has-highlight')} title={item.title}>
                   <span className="feed-item-inline-title">{compactTitleParts.title || item.title}</span>
                   {(item.highlight_reason || compactTitleParts.summary) && (
                     <>
@@ -328,7 +331,7 @@ const FeedArticleListItem = memo(
                 </h3>
                 <div className="feed-item-compact-meta">
                   <span className="feed-item-compact-time">{compactPublishedLabel}</span>
-                  <span className="feed-item-compact-source">{item.source_name}</span>
+                  {!hideSourceName && <span className="feed-item-compact-source">{item.source_name}</span>}
                   <button
                     type="button"
                     className={cn('feed-favorite-toggle', isFavorite && 'active')}
@@ -357,7 +360,7 @@ const FeedArticleListItem = memo(
             ) : (
               <>
                 <div className="feed-topline">
-                  <span className="feed-source">{item.source_name}</span>
+                  {!hideSourceName && <span className="feed-source">{item.source_name}</span>}
                   <button
                     type="button"
                     className={cn('feed-favorite-toggle', 'feed-favorite-mark', isFavorite && 'active')}
@@ -631,9 +634,9 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     >
       <div className="feed-header">
         <div className="feed-header-title">
-          <h2>{tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
+          <h2 className="sr-only">{tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
           <p className="hint">{tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
-          <div role="group" aria-label="阅读频道">
+          <div className="feed-channel-tabs" role="group" aria-label="阅读频道">
             <Button size="sm" variant={tagFilter !== 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter !== 'forum'} onClick={() => onApplyFilters('news')}>资讯</Button>
             <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
           </div>
@@ -644,6 +647,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               type="button"
               variant="outline"
               size="sm"
+              aria-label={loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛讨论简报' : 'AI 速览'}
               onClick={() => {
                 onCloseFeedAIMoreMenu()
                 void onGenerateFeedBriefing(false, tagFilter === 'forum')
@@ -651,20 +655,10 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               disabled={loadingFeedBriefing}
             >
               <Sparkles aria-hidden="true" />
-              {loadingFeedBriefing ? '生成中...' : 'AI 速览'}
+              <span className="feed-ai-label">{loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛简报' : 'AI 速览'}</span>
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={loadingFeedBriefing}
-              onClick={() => {
-                onCloseFeedAIMoreMenu()
-                void onGenerateFeedBriefing(false, true)
-              }}
-              title="分析过去24小时新发的高讨论帖子，查看样本倾向、不同意见和原帖"
-            >
-              论坛讨论简报
+            <Button type="button" variant="ghost" size="icon" aria-label={showFeedSearch ? '收起搜索与筛选' : '打开搜索与筛选'} title="搜索与筛选" aria-expanded={showFeedSearch} onClick={onToggleFeedSearch}>
+              <Search aria-hidden="true" />
             </Button>
             <div ref={feedAIMoreRef} className="feed-ai-more">
               <DropdownMenu
@@ -682,7 +676,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                 <DropdownMenuTrigger asChild disabled={loadingFeedBriefing}>
                   <Button type="button" variant="ghost" size="sm" aria-expanded={showFeedAIMoreMenu}>
                     <MoreHorizontal aria-hidden="true" />
-                    <span>更多</span>
+                    <span className="sr-only">更多</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="feed-ai-more-menu" aria-label="AI 速览更多操作">
@@ -734,77 +728,30 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               </DropdownMenu>
             </div>
           </div>
+        </div>
+        <div className="feed-view-controls">
           <div className="feed-priority-toggle" role="group" aria-label="阅读重点">
             {tagFilter !== 'forum' && (['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
           </div>
-          <div className="feed-read-actions">
-            <div className="feed-read-toggle" role="group" aria-label="文章可见范围">
-              <Button
-                type="button"
-                variant={!unreadOnly && !favoriteOnly ? 'default' : 'ghost'}
-                size="sm"
-                aria-pressed={!unreadOnly && !favoriteOnly}
-                onClick={() => {
-                  onSetUnreadOnly(false)
-                  onSetFavoriteOnly(false)
-                }}
-              >
-                不限已读
-              </Button>
-              <Button
-                type="button"
-                variant={unreadOnly ? 'default' : 'ghost'}
-                size="sm"
-                aria-pressed={unreadOnly}
-                onClick={() => {
-                  onSetUnreadOnly(true)
-                  onSetFavoriteOnly(false)
-                }}
-              >
-                未读 {unreadVisibleCount}
-              </Button>
-              <Button
-                type="button"
-                variant={favoriteOnly ? 'default' : 'ghost'}
-                size="sm"
-                aria-pressed={favoriteOnly}
-                onClick={() => {
-                  onSetFavoriteOnly(true)
-                  onSetUnreadOnly(false)
-                }}
-              >
-                收藏 {favoriteVisibleCount}
-              </Button>
-            </div>
-          </div>
-          <div className="feed-density-actions" role="group" aria-label="信息密度">
-            <Button
-              type="button"
-              variant={feedTitleOnlyMode ? 'default' : 'ghost'}
-              size="sm"
-              aria-pressed={feedTitleOnlyMode}
-              onClick={onToggleFeedTitleOnlyMode}
-            >
-              {feedTitleOnlyMode ? '仅标题' : '标准'}
-            </Button>
-            {!feedTitleOnlyMode && (
-              <Button
-                type="button"
-                variant={showFeedImages ? 'default' : 'ghost'}
-                size="sm"
-                aria-pressed={showFeedImages}
-                onClick={onToggleFeedImages}
-              >
-                图片
-              </Button>
-            )}
-          </div>
+          <Select
+            className="feed-read-select"
+            aria-label="文章可见范围"
+            value={favoriteOnly ? 'favorite' : unreadOnly ? 'unread' : 'all'}
+            onChange={(event) => {
+              onSetUnreadOnly(event.target.value === 'unread')
+              onSetFavoriteOnly(event.target.value === 'favorite')
+            }}
+          >
+            <option value="all">全部阅读状态</option>
+            <option value="unread">未读 {unreadVisibleCount}</option>
+            <option value="favorite">收藏 {favoriteVisibleCount}</option>
+          </Select>
         </div>
       </div>
 
       {feedMode === 'important' && <p className="feed-highlight-hint">来自最近 72 小时 AI 速览的优先阅读推荐 · 最多 15 条，每源最多 3 条 · 未生成速览的来源可能未覆盖</p>}
 
-      {tagFilter !== 'forum' && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
+      {tagFilter !== 'forum' && (catchUpCount > 0 || catchUpError) && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
         <div className="feed-catch-up-status">
           <Clock3 aria-hidden="true" />
           <span>
@@ -816,7 +763,6 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                   ? `上次处理后新增 ${catchUpCount} 篇`
                   : `已处理至 ${formatTimeAgo(catchUpCheckpoint)}`}
           </span>
-          {!catchUpLoading && catchUpCount > 30 && <small>速览选取最新 30 篇</small>}
         </div>
         <div className="feed-catch-up-actions">
           <Button
@@ -834,17 +780,17 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             <>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                aria-label="生成补课速览"
+                title="生成补课速览（最多选取最新 30 篇）"
                 disabled={catchUpLoading || loadingFeedBriefing}
                 onClick={() => void onGenerateCatchUpBriefing()}
               >
                 <Sparkles aria-hidden="true" />
-                生成补课速览
               </Button>
-              <Button type="button" variant="ghost" size="sm" disabled={catchUpLoading} onClick={onMarkCaughtUp}>
+              <Button type="button" variant="ghost" size="icon" aria-label="处理完成" title="标记为处理完成" disabled={catchUpLoading} onClick={onMarkCaughtUp}>
                 <Check aria-hidden="true" />
-                处理完成
               </Button>
             </>
           )}
@@ -939,6 +885,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             <FeedArticleListItem
               key={row.key}
               item={row.item}
+              hideSourceName={/^\d+$/.test(sourceFilter)}
               isActive={selectedArticleID === row.item.id && !selectedFeedBriefing}
               isRead={readArticleIDSet.has(row.item.id)}
               isFavorite={favoriteArticleIDSet.has(row.item.id)}
