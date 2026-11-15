@@ -126,3 +126,26 @@ test('feed query: an unchanged pagination cursor terminates automatic loading', 
   await query.loadMore()
   expect(query.getSnapshot().cursor).toBe('')
 })
+
+test('forum query: reply changes and expired topics prompt an update without replacing reading rows', async () => {
+  let calls = 0
+  const original = [{...item(1),reply_count:30},{...item(2),reply_count:40}]
+  const updated = [{...item(1),reply_count:35}]
+  const query = createFeedQuery(async () => ++calls === 1 ? page(original) : page(updated))
+  await query.replace({...scope,channel:'forum',tag:'forum'})
+  const before = query.getSnapshot().items
+  await query.checkUpdates()
+  expect(query.getSnapshot().items).toBe(before)
+  expect(query.getSnapshot().pendingCount).toBe(2)
+  await query.refresh()
+  expect(query.getSnapshot().items).toEqual(updated)
+  expect(query.getSnapshot().pendingCount).toBe(0)
+})
+
+test('forum query: an empty discussion list still checks for newly eligible topics', async () => {
+  let calls = 0
+  const query = createFeedQuery(async () => ++calls === 1 ? page([]) : page([{...item(1),reply_count:20}]))
+  await query.replace({...scope,channel:'forum',tag:'forum'})
+  await query.checkUpdates()
+  expect(query.getSnapshot().pendingCount).toBe(1)
+})

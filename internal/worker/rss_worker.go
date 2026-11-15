@@ -39,6 +39,8 @@ type Refresher interface {
 }
 
 type RSSWorkerOptions struct {
+	NGAPassportUID   string
+	NGAPassportCID   string
 	TickSec          int
 	FetchConcurrency int
 	RequestRetries   int
@@ -50,6 +52,9 @@ type RSSWorkerOptions struct {
 }
 
 type RSSWorker struct {
+	ngaPassportUID   string
+	ngaPassportCID   string
+	ngaTopicEndpoint string
 	db               *gorm.DB
 	tick             time.Duration
 	httpClient       *http.Client
@@ -116,6 +121,9 @@ func NewRSSWorker(db *gorm.DB, options RSSWorkerOptions) *RSSWorker {
 	}
 
 	return &RSSWorker{
+		ngaPassportUID:   options.NGAPassportUID,
+		ngaPassportCID:   options.NGAPassportCID,
+		ngaTopicEndpoint: "https://ngabbs.com/app_api.php?__lib=subject&__act=list",
 		db:               db,
 		tick:             time.Duration(options.TickSec) * time.Second,
 		fetchConcurrency: options.FetchConcurrency,
@@ -385,11 +393,18 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 	}
 
 	inserted := 0
+	w.enrichPublicForumMetrics(ctx, feed)
 	w.enrichNGAFeedDiscussions(ctx, source, feed)
 	for _, item := range feed.Items {
 		article, ok := mapFeedItemToArticle(source.ID, item)
 		if !ok {
 			continue
+		}
+		for _, tag := range source.Tags {
+			if tag == "forum" {
+				article.ReplyCount = feedextract.ForumReplyCount(item)
+				break
+			}
 		}
 		saved, saveErr := w.saveArticleIfNew(ctx, article)
 		if saveErr != nil {
@@ -954,8 +969,10 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 	if imageURL != nil {
 		article.ImageURL = imageURL
 	}
-	if replyCount := feedextract.ReplyCountFromFeedItem(item); replyCount != nil {
-		article.ReplyCount = replyCount
+	if feedextract.IsForumThread(item.Link) || feedextract.IsForumThread(item.GUID) {
+		article.ReplyCount = feedextract.ForumReplyCount(item)
+	} else {
+		article.ReplyCount = feedextract.ReplyCountFromFeedItem(item)
 	}
 
 	return article, true

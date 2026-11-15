@@ -38,6 +38,8 @@ type ArticleHandler struct {
 
 type ArticleHandlerOptions struct {
 	RSSHubBaseURL             string
+	NGAPassportUID            string
+	NGAPassportCID            string
 	ExternalFetchEnabled      bool
 	ExternalFetchEnabledSet   bool
 	ExternalFetchAllowedHosts []string
@@ -85,6 +87,7 @@ func (h *ArticleHandler) RegisterWriteRoutes(group *gin.RouterGroup) {
 }
 
 type articleThreadComment struct {
+	Upvotes     *int       `json:"upvotes,omitempty"`
 	PostNumber  int        `json:"post_number"`
 	Author      string     `json:"author"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
@@ -93,14 +96,15 @@ type articleThreadComment struct {
 }
 
 type articleThread struct {
-	TopicURL     string                 `json:"topic_url"`
-	FeedURL      string                 `json:"feed_url"`
-	TopicTitle   string                 `json:"topic_title"`
-	ExternalLink *string                `json:"external_link,omitempty"`
-	FullContent  string                 `json:"full_content"`
-	Comments     []articleThreadComment `json:"comments"`
-	TotalPosts   int                    `json:"total_posts"`
-	Truncated    bool                   `json:"truncated"`
+	VoteMetadataVersion int                    `json:"vote_metadata_version,omitempty"`
+	TopicURL            string                 `json:"topic_url"`
+	FeedURL             string                 `json:"feed_url"`
+	TopicTitle          string                 `json:"topic_title"`
+	ExternalLink        *string                `json:"external_link,omitempty"`
+	FullContent         string                 `json:"full_content"`
+	Comments            []articleThreadComment `json:"comments"`
+	TotalPosts          int                    `json:"total_posts"`
+	Truncated           bool                   `json:"truncated"`
 }
 
 type articleExternalContent struct {
@@ -586,6 +590,7 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 	if contentHTML := feedextract.ContentHTMLFromRaw(article.Raw); contentHTML != "" {
 		article.ContentHTML = &contentHTML
 	}
+	article.Thread = ngaSavedDiscussion(article)
 	if article.ImageURL == nil {
 		if fallback := feedextract.ImageFromRaw(article.Raw, article.Link); fallback != "" {
 			article.ImageURL = &fallback
@@ -600,7 +605,7 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 	cached, fetchedAt, found, err := h.loadPersistedEnrichment(ctx, article.ID)
 	if err != nil {
 		log.Printf("load article enrichment cache article_id=%d: %v", article.ID, err)
-	} else if found {
+	} else if found && !needsNGAThreadEnrichment(article.Link, cached) {
 		article.Thread = cached.Thread
 		article.External = cached.External
 		if time.Since(fetchedAt) >= articleEnrichmentCacheTTL {

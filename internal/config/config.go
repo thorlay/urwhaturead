@@ -10,6 +10,8 @@ type Config struct {
 	ServerPort                      string
 	MCPAPIKey                       string
 	RSSHubBaseURL                   string
+	NGAPassportUID                  string
+	NGAPassportCID                  string
 	AdminAuthEnabled                bool
 	AdminToken                      string
 	AdminUsername                   string
@@ -71,6 +73,8 @@ func Load() Config {
 		ServerPort:                      envOrDefault("SERVER_PORT", "8080"),
 		MCPAPIKey:                       strings.TrimSpace(os.Getenv("MCP_API_KEY")),
 		RSSHubBaseURL:                   envOrDefault("RSSHUB_BASE_URL", "http://127.0.0.1:1200"),
+		NGAPassportUID:                  strings.TrimSpace(os.Getenv("NGA_PASSPORT_UID")),
+		NGAPassportCID:                  strings.TrimSpace(os.Getenv("NGA_PASSPORT_CID")),
 		AdminAuthEnabled:                envOrDefaultBool("ADMIN_AUTH_ENABLED", strings.TrimSpace(adminToken) != ""),
 		AdminToken:                      adminToken,
 		AdminUsername:                   envOrDefault("ADMIN_USERNAME", "admin"),

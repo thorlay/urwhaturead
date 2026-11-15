@@ -57,13 +57,24 @@ export function useReaderFilterControls({
   setArticleSummaryError,
   setNotice,
 }: UseReaderFilterControlsParams) {
-  const applyFilters = useCallback(() => {
+  const applyFilters = useCallback((requestedChannel?: 'news' | 'forum') => {
+    const channel = requestedChannel === 'news' || requestedChannel === 'forum' ? requestedChannel : undefined
     cancelSidebarTagFeedReload()
     resetFeedBriefingState()
     setSelectedArticle(null)
     setSelectedArticleID(null)
-    void loadFeed(false)
+    if (channel) {
+      setTagFilter(channel === 'forum' ? 'forum' : '')
+      setSourceFilter('')
+      setKeyword('')
+      setSourceGroupFilter(null)
+      setSidebarTagFilters([])
+      setUnreadOnly(false)
+      setFavoriteOnly(false)
+    }
+    void loadFeed(false, channel ? { channel, tag: channel === 'forum' ? 'forum' : '', sourceID: '', keyword: '', mode: 'all' } : undefined)
   }, [
+    setTagFilter, setSourceFilter, setKeyword, setSourceGroupFilter, setSidebarTagFilters, setUnreadOnly, setFavoriteOnly,
     cancelSidebarTagFeedReload,
     loadFeed,
     resetFeedBriefingState,

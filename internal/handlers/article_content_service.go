@@ -43,11 +43,10 @@ const (
 )
 
 var (
-	uscardTopicLinkPattern = regexp.MustCompile(`^https?://www\.uscardforum\.com/t/topic/(\d+)(?:/\d+)?/?$`)
-	uscardPostLinkPattern  = regexp.MustCompile(`/t/topic/\d+/(\d+)$`)
-	v2exReplyLinkPattern   = regexp.MustCompile(`#reply(\d+)$`)
-	redditIDPattern        = regexp.MustCompile(`^[a-z0-9]{5,10}$`)
-	httpURLPattern         = regexp.MustCompile(`https?://[^\s"'<>]+`)
+	uscardPostLinkPattern = regexp.MustCompile(`/t/topic/\d+/(\d+)$`)
+	v2exReplyLinkPattern  = regexp.MustCompile(`#reply(\d+)$`)
+	redditIDPattern       = regexp.MustCompile(`^[a-z0-9]{5,10}$`)
+	httpURLPattern        = regexp.MustCompile(`https?://[^\s"'<>]+`)
 )
 
 type cachedThread struct {
@@ -77,6 +76,9 @@ type forumThreadTarget struct {
 }
 
 type ArticleContentService struct {
+	ngaPassportUID   string
+	ngaPassportCID   string
+	ngaVoteEndpoint  string
 	rssHubBaseURL    string
 	threadFailures   map[string]time.Time
 	httpClient       *http.Client
@@ -133,6 +135,9 @@ func NewArticleContentService(options ArticleHandlerOptions) *ArticleContentServ
 	}
 
 	return &ArticleContentService{
+		ngaPassportUID:       strings.TrimSpace(options.NGAPassportUID),
+		ngaPassportCID:       strings.TrimSpace(options.NGAPassportCID),
+		ngaVoteEndpoint:      "https://ngabbs.com/app_api.php?__lib=post&__act=list",
 		rssHubBaseURL:        strings.TrimRight(strings.TrimSpace(options.RSSHubBaseURL), "/"),
 		threadFailures:       make(map[string]time.Time),
 		httpClient:           newHandlerHTTPClient(12*time.Second, false),
@@ -170,6 +175,9 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 	if _, topicURL, isV2EX := v2exTopicRSSURLs(topicLink); isV2EX && s.rssHubBaseURL != "" {
 		target.FeedURLs = []string{s.rssHubBaseURL + "/v2ex/post/" + strings.TrimPrefix(topicURL, "https://www.v2ex.com/t/")}
 	}
+	if tid, nga := feedextract.NGAThreadID(topicLink); nga {
+		target.FeedURLs = []string{normalizeRSSHubBaseURL(s.rssHubBaseURL) + "/nga/post/" + tid}
+	}
 	for _, feedURL := range target.FeedURLs {
 		if cached, ok := s.getCachedThread(feedURL, time.Now().UTC()); ok {
 			return &cached, true
@@ -194,6 +202,9 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 			continue
 		}
 
+		if tid, nga := feedextract.NGAThreadID(topicLink); nga {
+			s.enrichNGAVotes(ctx, tid, thread)
+		}
 		s.setCachedThread(feedURL, *thread, time.Now().UTC().Add(threadCacheTTL))
 		return thread, true
 	}
@@ -202,6 +213,19 @@ func (s *ArticleContentService) fetchThreadForTopic(ctx context.Context, topicLi
 }
 
 func forumThreadTargetFromLink(rawLink string) (forumThreadTarget, bool) {
+	if tid, nga := feedextract.NGAThreadID(rawLink); nga {
+		return forumThreadTarget{
+			FeedURLs:     []string{defaultRSSHubBaseURL + "/nga/post/" + tid},
+			TopicURL:     "https://nga.178.com/read.php?tid=" + tid,
+			DefaultTitle: "NGA 讨论",
+			PostNumberFromItemFn: func(link string) int {
+				if strings.HasSuffix(link, "#postcontent0") {
+					return 1
+				}
+				return 0
+			},
+		}, true
+	}
 	feedURL, topicURL, ok := uscardTopicRSSURL(rawLink)
 	if ok {
 		return forumThreadTarget{
@@ -236,13 +260,10 @@ func forumThreadTargetFromLink(rawLink string) (forumThreadTarget, bool) {
 }
 
 func uscardTopicRSSURL(rawLink string) (feedURL string, topicURL string, ok bool) {
-	link := strings.TrimSpace(rawLink)
-	match := uscardTopicLinkPattern.FindStringSubmatch(link)
-	if len(match) < 2 {
+	topicURL, ok = feedextract.USCardTopicURL(rawLink)
+	if !ok {
 		return "", "", false
 	}
-	topicID := match[1]
-	topicURL = "https://www.uscardforum.com/t/topic/" + topicID
 	return topicURL + ".rss", topicURL, true
 }
 

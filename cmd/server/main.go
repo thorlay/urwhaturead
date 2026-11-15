@@ -51,6 +51,8 @@ func main() {
 	}
 
 	rssWorker := worker.NewRSSWorker(db, worker.RSSWorkerOptions{
+		NGAPassportUID:   cfg.NGAPassportUID,
+		NGAPassportCID:   cfg.NGAPassportCID,
 		TickSec:          cfg.WorkerTickSec,
 		FetchConcurrency: cfg.WorkerFetchConcurrency,
 		RequestRetries:   cfg.WorkerRequestRetries,
@@ -96,6 +98,8 @@ func main() {
 
 	articleOptions := handlers.ArticleHandlerOptions{
 		RSSHubBaseURL:             cfg.RSSHubBaseURL,
+		NGAPassportUID:            cfg.NGAPassportUID,
+		NGAPassportCID:            cfg.NGAPassportCID,
 		ExternalFetchEnabled:      cfg.ExternalFetchEnabled,
 		ExternalFetchEnabledSet:   true,
 		ExternalFetchAllowedHosts: cfg.ExternalFetchAllowedHosts,

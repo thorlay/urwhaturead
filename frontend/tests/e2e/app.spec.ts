@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { sortThreadCommentsByUpvotes } from '../../src/lib/thread-comment-sort'
 
 const generatedAt = new Date().toISOString()
 
@@ -622,7 +623,7 @@ test('forum briefing explains empty evidence without generating a report', async
   await page.route('**/api/v1/feed/briefing', (route) => { if (!route.request().postDataJSON()?.cache_only) generations += 1; return json(route, { error: 'cache not found' }, 404) })
   await page.goto('/')
   await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
-  await expect(page.getByText('最近 24 小时暂无论坛讨论。请检查 V2EX、HN 订阅的抓取状态。')).toBeVisible()
+  await expect(page.getByText('过去24小时暂无至少 20 条回复的新论坛帖子。')).toBeVisible()
   expect(generations).toBe(0)
 })
 
@@ -803,4 +804,80 @@ test('feed UI: automatic pagination stops after an error until manually retried'
   await page.locator('.feed-load-more-button').click()
   await expect(page.getByText('Recovered automatic page', { exact: true })).toBeVisible()
   expect(pageCalls).toBe(2)
+})
+
+test('NGA reader displays replies separately below the main post', async ({ page }) => {
+  await mockAPI(page)
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => {
+    if (!['/api/v1/articles/101', '/api/v1/articles/101/enrichment'].includes(new URL(route.request().url()).pathname)) return route.fallback()
+    return json(route, { ...feedItem, link: 'https://nga.178.com/read.php?tid=123', content_html: '<p>NGA original HTML</p>', thread: {
+      topic_url: 'https://nga.178.com/read.php?tid=123', feed_url: 'http://rsshub:1200/nga/post/123', topic_title: 'NGA discussion', full_content: 'NGA main post', total_posts: 2, truncated: false,
+      comments: [{ post_number: 0, author: 'Alice', link: 'https://nga.178.com/read.php?tid=123#postcontent456', content: 'NGA reply with a different opinion' }],
+    } })
+  })
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  await expect(page.getByRole('heading', { name: '讨论 · 1 条回复' })).toBeVisible()
+  await expect(page.getByText('NGA reply with a different opinion', { exact: true })).toBeVisible()
+  await expect(page.getByText('NGA main post', { exact: true })).toHaveCount(1)
+  await expect(page.getByText('这里展示已获取的部分回复，完整讨论可打开原帖查看。')).toBeVisible()
+})
+
+
+test('NGA likes sort all loaded replies before previewing and preserve floor labels', async ({ page }) => {
+  await mockAPI(page)
+  const comments = [
+    { author: 'Unknown', content: 'Unknown votes', upvotes: undefined },
+    { author: 'Zero', content: 'Zero votes', upvotes: 0 },
+    { author: 'Low', content: 'One vote', upvotes: 1 },
+    { author: 'Top', content: 'Top voted reply', upvotes: 36 },
+    { author: 'Tied', content: 'Another top reply', upvotes: 36 },
+  ].map((comment, index) => ({ ...comment, post_number: index + 2, link: `https://nga.178.com/read.php?tid=123#postcontent${index + 1}` }))
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) => json(route, {
+    ...feedItem, link: 'https://nga.178.com/read.php?tid=123', thread: {
+      topic_url: 'https://nga.178.com/read.php?tid=123', feed_url: 'http://rsshub/nga/post/123', topic_title: 'Thread', full_content: 'Main', total_posts: 6, truncated: false, comments,
+    },
+  }))
+  await page.goto('/')
+  await page.getByText(feedItem.title, { exact: true }).click()
+  await expect(page.getByText('Top voted reply', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('赞数 0', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '按赞数排序', exact: true }).click()
+  const replies = page.locator('.thread-comment')
+  await expect(replies).toHaveCount(3)
+  await expect(replies.nth(0)).toContainText('Top voted reply')
+  await expect(replies.nth(0)).toContainText('#5')
+  await expect(replies.nth(1)).toContainText('Another top reply')
+  await expect(replies.nth(2)).toContainText('One vote')
+  await page.getByRole('button', { name: '查看全部评论（5）' }).click()
+  await expect(replies.last()).toContainText('Unknown votes')
+  await expect(replies.last().getByLabel(/赞数/)).toHaveCount(0)
+  await page.getByRole('button', { name: '最早在前', exact: true }).click()
+  await expect(replies.first()).toContainText('Unknown votes')
+  await expect(page.getByRole('button', { name: '按赞数排序', exact: true })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('comment vote sorting is stable and does not mutate chronological replies', () => {
+  const comments = [{ upvotes: undefined }, { upvotes: 0 }, { upvotes: 9 }, { upvotes: 9 }, { upvotes: null }]
+  const ranked = sortThreadCommentsByUpvotes(comments)
+  expect(ranked).toEqual([comments[2], comments[3], comments[1], comments[0], comments[4]])
+  expect(comments[0].upvotes).toBeUndefined()
+})
+
+
+test('forum observation is separate from news and switches its applied query', async ({ page }) => {
+  await mockAPI(page)
+  await page.route('**/api/v1/feed?**', route => {
+    const channel = new URL(route.request().url()).searchParams.get('channel')
+    return json(route, {data: [{ id: channel === 'forum' ? 920 : 921, source_id: 1, source_name: 'Test', source_tag: channel === 'forum' ? 'forum' : 'tech', title: channel === 'forum' ? '有争议的高讨论帖子' : '独立的资讯文章', link: 'https://example.com/test', reply_count: 80, created_at: new Date().toISOString(), duplicate_count: 1 }], meta: {next_cursor: ''}})
+  })
+  await page.goto('/')
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toBeVisible()
+  await page.getByRole('button', {name:'论坛观察', exact:true}).click()
+  await expect(page.getByRole('heading', {name:'论坛观察',exact:true})).toBeVisible()
+  await expect(page.getByText('有争议的高讨论帖子', {exact:true})).toBeVisible()
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toHaveCount(0)
+  await page.getByRole('button', {name:'资讯',exact:true}).click()
+  await expect(page.getByText('独立的资讯文章', {exact:true})).toBeVisible()
+  await expect(page.getByText('有争议的高讨论帖子', {exact:true})).toHaveCount(0)
 })

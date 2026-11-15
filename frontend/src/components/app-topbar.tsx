@@ -102,7 +102,7 @@ export function AppTopbar(props: AppTopbarProps) {
             <div className={`topbar-feed-update${pendingFeedCount > 0 ? ' has-pending' : checkingFeedUpdates ? ' is-checking' : ''}`}>
               <span className="topbar-status-dot" aria-hidden="true" />
               <span className="topbar-feed-status">
-                {pendingFeedCount > 0 ? `新消息 ${pendingFeedCount} 条` : checkingFeedUpdates ? '检查新消息中...' : '已是最新'}
+                {pendingFeedCount > 0 ? `有 ${pendingFeedCount} 条更新` : checkingFeedUpdates ? '检查更新中...' : '每分钟检查更新'}
               </span>
               {pendingFeedCount > 0 && (
                 <Button type="button" variant="secondary" size="sm" onClick={onApplyPendingFeedUpdates} disabled={loadingFeed}>

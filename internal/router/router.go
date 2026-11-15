@@ -60,6 +60,7 @@ func New(
 		timezone = briefingTimezone[0]
 	}
 	feedHandler := handlers.NewFeedHandler(db, summaryClient, handlers.FeedHandlerOptions{
+		ArticleOptions:   articleOptions,
 		Timezone:         timezone,
 		AdminAuthEnabled: adminAuthEnabled,
 		AdminToken:       adminToken,

@@ -20,3 +20,14 @@ func TestForumDescriptionBecomesPersistentDiscussionContent(t *testing.T) {
 		t.Fatal("ordinary article bodies must not be replaced on repeated fetches")
 	}
 }
+
+func TestUSCardRSSRetainsThreadBodyAndReplyCount(t *testing.T) {
+	item := &gofeed.Item{GUID: "www.uscardforum.com-topic-123", Link: "https://www.uscardforum.com/t/topic/123", Description: `<p>原帖问题</p><p><small>31 个帖子 - 9 位参与者</small></p><p><a href="https://www.uscardforum.com/t/topic/123">阅读完整话题</a></p>`}
+	article, ok := mapFeedItemToArticle(1, item)
+	if !ok || article.Content == nil || article.ReplyCount == nil || *article.ReplyCount != 30 {
+		t.Fatalf("missing source body or reliable count: %+v", article)
+	}
+	if existingArticleDiscussionUpdates(article)["content"] == nil {
+		t.Fatal("repeated topics must refresh their discussion material")
+	}
+}
