@@ -1,8 +1,9 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { ArrowLeft, ChevronDown, ChevronUp, CircleAlert, ExternalLink, LoaderCircle, Maximize2, MoreHorizontal, RotateCcw, Sparkles, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
+import { readingBodyHasImages } from '@/lib/reading-images'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
 
 type ThreadComment = {
@@ -209,6 +210,12 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
   const hasAIArticleSummary = Boolean(articleSummary.trim())
   const shouldShowAIInspector = hasAIArticleSummary || loadingArticleSummary || Boolean(articleSummaryError || selectedSummaryTask?.error)
   const hasCapturedExternal = Boolean(selectedArticle?.external?.content)
+  const bodyHasImages = useMemo(() => {
+    if (isThreadArticle && threadPrimaryBody) return readingBodyHasImages(threadPrimaryBody)
+    if (selectedArticle?.external?.content) return readingBodyHasImages(selectedArticle.external.content)
+    if (selectedArticle?.content_html) return readingBodyHasImages(selectedArticle.content_html, true, selectedArticle.link)
+    return readingBodyHasImages(selectedArticle?.content || selectedArticle?.summary)
+  }, [selectedArticle, isThreadArticle, threadPrimaryBody])
   const readingPreferenceClassName =
     readerView === 'detail'
       ? `detail-font-${readingPreferences.fontSize} detail-width-${readingPreferences.width} detail-line-${readingPreferences.lineHeight}`
@@ -520,7 +527,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               附加内容暂时无法加载，当前正文仍可阅读。
             </p>
           )}
-          {selectedArticleImageURL && (
+          {selectedArticleImageURL && !bodyHasImages && (
             <figure className="detail-hero-image">
               <img
                 src={selectedArticleImageURL}

@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { CircleAlert, ExternalLink, LoaderCircle, Star, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import { normalizeImageURL } from '../../lib/app-utils'
+import { readingBodyHasImages } from '@/lib/reading-images'
 import type { ArticleDetail } from '../../types'
 
 type AIArticleReaderProps = {
@@ -18,6 +20,12 @@ export function AIArticleReader(props: AIArticleReaderProps) {
   const { article, loading, error, formatTimeAgo, onClose, isFavorite, onToggleFavorite } = props
   const imageURL = normalizeImageURL(article?.image_url)
   const hasExternal = Boolean(article?.external?.content?.trim())
+  const bodyHasImages = useMemo(() => {
+    if (article?.thread?.full_content?.trim()) return readingBodyHasImages(article.thread.full_content)
+    if (hasExternal) return readingBodyHasImages(article?.external?.content)
+    if (article?.content_html) return readingBodyHasImages(article.content_html, true, article.link)
+    return readingBodyHasImages(article?.content || article?.summary)
+  }, [article, hasExternal])
   const threadComments = article?.thread?.comments ?? []
 
   if (!loading && !error && !article) return null
@@ -90,7 +98,7 @@ export function AIArticleReader(props: AIArticleReaderProps) {
               </p>
             )}
 
-            {imageURL && (
+            {imageURL && !bodyHasImages && (
               <figure className="ai-article-reader-image">
                 <img src={imageURL} alt="" loading="eager" decoding="async" referrerPolicy="no-referrer" />
               </figure>

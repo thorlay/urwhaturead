@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import { containsRenderableHTMLTag, normalizeImageURL, plainTextParagraphs, sanitizeRichHTML } from '@/lib/app-utils'
+import { readingImageURL, readingParagraphParts } from '@/lib/reading-images'
 
 function ReadingImage({ url }: { url: string }) {
   const [failed, setFailed] = useState(false)
@@ -15,10 +16,6 @@ function ReadingImage({ url }: { url: string }) {
   )
 }
 
-function readingParagraphParts(paragraph: string) {
-  return paragraph.split(/(^\s*(?:#\d+\s+)?https?:\/\/[^\s]+\.(?:png|jpe?g|webp|gif|avif)(?:\?[^\s]*)?\s*$)/gim).filter((part) => part.trim())
-}
-
 export function PlainTextBlock(props: { content?: string; className?: string }) {
   const paragraphs = useMemo(() => plainTextParagraphs(props.content), [props.content])
   if (paragraphs.length === 0) return null
@@ -26,8 +23,8 @@ export function PlainTextBlock(props: { content?: string; className?: string }) 
   return (
     <div className={props.className ? `plain-text-block ${props.className}` : 'plain-text-block'}>
       {paragraphs.flatMap(readingParagraphParts).map((paragraph, index) => {
-        const url = paragraph.trim().replace(/^#\d+\s+/, '')
-        if (/^https?:\/\/\S+\.(?:png|jpe?g|webp|gif|avif)(?:\?\S*)?$/i.test(url)) {
+        const url = readingImageURL(paragraph)
+        if (url) {
           return <ReadingImage key={`${index}-${url}`} url={url} />
         }
         return <p key={`plain-text-paragraph-${index}`} className="plain-text-paragraph">{paragraph}</p>
