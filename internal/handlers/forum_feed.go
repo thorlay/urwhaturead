@@ -14,7 +14,9 @@ const forumSourcePredicate = `COALESCE(s.tags @> ARRAY['forum']::text[] OR s.sit
 func filterFeedChannel(query *gorm.DB, channel string) *gorm.DB {
 	switch channel {
 	case "news":
-		return query.Where("NOT (" + forumSourcePredicate + ")")
+		return query.Where("NOT (" + forumSourcePredicate + ") AND NOT (" + paperSourcePredicate + ")")
+	case "papers":
+		return query.Where(paperSourcePredicate)
 	case "forum":
 		return query.Where(forumSourcePredicate)
 	default:

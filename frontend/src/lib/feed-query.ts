@@ -1,7 +1,7 @@
 import type { FeedItem, FeedResponse } from '../types'
 
 export type FeedScope = {
-  channel?: 'news' | 'forum' | 'all'
+  channel?: 'news' | 'forum' | 'papers' | 'all'
   mode: 'all' | 'important'
   tag: string
   sourceID: string
@@ -122,11 +122,11 @@ export function createFeedQuery(fetchFeed: FetchFeed) {
         const currentItems = new Map(state.items.map((item) => [item.id, item]))
         const incoming = uniqueItems(scopedItems(response.data, scope))
         const changed = new Set(incoming.filter((item) => !currentItems.has(item.id)).map((item) => item.id))
-        if (scope.channel === 'forum' || scope.tag === 'forum') {
+        if (scope.channel === 'forum' || scope.tag === 'forum' || scope.channel === 'papers' || scope.tag === 'papers') {
           const incomingIDs = new Set(incoming.map((item) => item.id))
           for (const item of incoming) {
             const previous = currentItems.get(item.id)
-            if (previous && (previous.reply_count !== item.reply_count || previous.summary !== item.summary)) changed.add(item.id)
+            if (previous && (previous.reply_count !== item.reply_count || previous.paper_votes !== item.paper_votes || previous.summary !== item.summary)) changed.add(item.id)
           }
           // Only compare the sampled prefix; loaded later pages are outside this probe.
           const sampleSize = Math.min(Math.max(state.items.length, 20), 60)

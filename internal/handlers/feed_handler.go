@@ -38,7 +38,7 @@ type FeedHandler struct {
 }
 
 const (
-	feedBriefingPromptVersion = "v9-forum-24h"
+	feedBriefingPromptVersion = "v10-paper-digest"
 	feedBriefingSystemPrompt  = "你是一个中文个人信息判断助手。输出要好读，也要保留足够的信息和推理。不要把所有条目都当新闻；先识别内容更像新闻事件、长文论点、论坛讨论、工具资源还是混合内容，再按价值提炼。对多源报道先提炼共同事实，但必须保留各来源独有的新增信息、解读角度和分歧。按重要性输出，优先保留真正新增、多源确认、讨论升温、论点质量高、经验信息密度高或影响较大的内容。"
 )
 
@@ -162,6 +162,9 @@ func (h *FeedHandler) ListBriefings(c *gin.Context) {
 	query := h.db.WithContext(c.Request.Context()).
 		Model(&models.FeedBriefing{})
 
+	if tag := normalizeSourceTag(c.Query("tag")); tag != "" {
+		query = query.Where("tag = ?", tag)
+	}
 	if keyword := strings.TrimSpace(c.Query("q")); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("(summary ILIKE ? OR tag ILIKE ? OR keyword ILIKE ?)", like, like, like)
@@ -281,6 +284,10 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 
 	digestKey, articleIDs := buildFeedBriefingDigest(limit, tag, keyword, effectiveModel, req.SourceIDs, promptRows)
 	inputDigest := digestKey
+	dailyPaper := tag == "papers" && len(req.SourceIDs) == 0 && keyword == ""
+	if dailyPaper {
+		digestKey = dailyPaperDigest(time.Now())
+	}
 	dailySource := len(uniqueSortedUint64(req.SourceIDs)) == 1 && tag == "" && keyword == ""
 	if dailySource {
 		digestKey = dailyBriefingDigest(req.SourceIDs[0], time.Now(), h.briefingLocation)
@@ -345,6 +352,7 @@ func (h *FeedHandler) Briefing(c *gin.Context) {
 	}
 
 	taskInput := feedBriefingTaskInput{
+		DailyPaper:  dailyPaper,
 		DailySource: dailySource,
 		InputDigest: inputDigest,
 		DigestKey:   digestKey,
@@ -489,6 +497,9 @@ func (h *FeedHandler) generateAndSaveFeedBriefing(
 	rows []feedItem,
 	inputItems []feedBriefingInputItem,
 ) (feedBriefingPayload, error) {
+	if input.DailyPaper {
+		return h.generateDailyPaper(ctx, input, rows)
+	}
 	if input.DailySource {
 		var payload feedBriefingPayload
 		err := h.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -529,6 +540,9 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 	inputItems = buildFeedBriefingInputItems(rows, maxBriefingInputItems)
 
 	prompt := buildFeedBriefingPrompt(rows)
+	if isPaperBriefing(rows) {
+		prompt = buildPaperBriefingPrompt(rows, h.summarizer.InputByteLimit())
+	}
 	if isForumBriefing(rows) {
 		prompt = buildForumBriefingPromptWithBudget(rows, h.summarizer.InputByteLimit())
 		if len(prompt) > h.summarizer.InputByteLimit() {
@@ -540,6 +554,20 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 		return feedBriefingPayload{}, err
 	}
 
+	if isPaperBriefing(rows) && (result.Truncated || result.StopReason == "length" || result.StopReason == "max_tokens") {
+		retryHeader := "严格压缩：全篇正文不超过1000汉字，每篇各栏仅1句话，必须完整输出所有论文。\n"
+		retryPrompt := retryHeader + buildPaperBriefingPrompt(rows, h.summarizer.InputByteLimit()-len(retryHeader))
+		result, err = h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, retryPrompt, input.Model)
+		if err != nil {
+			return feedBriefingPayload{}, err
+		}
+		if result.Truncated || result.StopReason == "length" || result.StopReason == "max_tokens" {
+			return feedBriefingPayload{}, errors.New("paper briefing was truncated; no incomplete daily report was saved")
+		}
+	}
+	if isPaperBriefing(rows) {
+		result.Summary = appendPaperResourceLinks(result.Summary, rows)
+	}
 	record := models.FeedBriefing{
 		DigestKey:   input.DigestKey,
 		Tag:         input.Tag,
@@ -558,6 +586,7 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 	if err := h.db.WithContext(ctx).
 		Where("digest_key = ?", input.DigestKey).
 		Assign(record).
+		Assign(map[string]any{"truncated": record.Truncated}).
 		FirstOrCreate(&record).Error; err != nil {
 		return feedBriefingPayload{}, fmt.Errorf("save feed briefing cache: %w", err)
 	}
@@ -767,12 +796,26 @@ func (h *FeedHandler) queryBriefingFeedRows(
 	if len(articleIDs) > 0 {
 		query = query.Where("a.id IN ?", uniqueSortedUint64(articleIDs))
 	}
+	if tag == "papers" {
+		ids, err := activePaperSourceIDs(ctx, h.db)
+		if err != nil {
+			return nil, err
+		}
+		excluded, err := h.previouslyFeaturedPapers(ctx, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		query = filterFeedChannel(query, "papers").Where("a.source_id IN ?", ids).Where("s.enabled = true").Where(paperActivePredicate, time.Now().Add(-8*24*time.Hour)).Order(paperVotesSQL + " DESC NULLS LAST")
+		if len(excluded) > 0 {
+			query = query.Where("regexp_replace(a.link,'v[0-9]+$','') NOT IN ?", excluded)
+		}
+	}
 	if tag == "forum" {
 		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), 20).Order("a.reply_count DESC")
-	} else if len(sourceIDs) == 0 && len(articleIDs) == 0 {
+	} else if tag != "papers" && len(sourceIDs) == 0 && len(articleIDs) == 0 {
 		query = filterFeedChannel(query, "news")
 	}
-	if tag != "" && tag != "forum" {
+	if tag != "" && tag != "forum" && tag != "papers" {
 		query = query.Where("s.tags @> ?::text[]", models.StringArray{tag})
 	}
 	if len(sourceIDs) > 0 {
@@ -790,6 +833,12 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		Limit(limit).
 		Scan(&rows).Error; err != nil {
 		return nil, err
+	}
+	if tag == "papers" {
+		rows = uniquePaperRows(rows)
+		for i := range rows {
+			rows[i].SourceTag = "papers"
+		}
 	}
 	if tag == "forum" {
 		for i := range rows {
@@ -854,6 +903,9 @@ func resolveFeedBriefingModel(requestedModel string, summarizer *aisummary.Clien
 }
 
 func buildFeedBriefingScopeLabel(tag string, keyword string, sourceIDsCSV string, sourceNameByID map[uint64]string) string {
+	if strings.TrimSpace(tag) == "papers" {
+		return "论文精选"
+	}
 	if strings.TrimSpace(tag) == "forum" && strings.TrimSpace(sourceIDsCSV) == "" && strings.TrimSpace(keyword) == "" {
 		return "论坛讨论简报"
 	}
@@ -1036,6 +1088,9 @@ func parseCSVUint64OrderedLoose(raw string) []uint64 {
 }
 
 func buildFeedBriefingPrompt(items []feedItem) string {
+	if isPaperBriefing(items) {
+		return buildPaperBriefingPrompt(items, 12000)
+	}
 	if isForumBriefing(items) {
 		return buildForumBriefingPrompt(items)
 	}

@@ -241,7 +241,24 @@ export function useReaderFeatureActions({
     toErrorMessage,
   })
 
-  const onGenerateFeedBriefing = useCallback(async (refresh = false, forum = false) => {
+  const onGenerateFeedBriefing = useCallback(async (refresh = false, forum = false, papers = tagFilter === 'papers') => {
+    if (papers) {
+      try {
+        setLoadingFeedBriefing(true)
+        const response = await listFeed({limit:30,tag:'papers',channel:'papers'})
+        if (!response.data.length) {setNotice({kind:'info',text:'论文榜单暂未抓到可用材料，请稍后重试。'});return}
+        await loadFeed(false,{channel:'papers',tag:'papers',sourceID:'',keyword:'',mode:'all'})
+        setSourceFilter('');setSourceGroupFilter(null);setSidebarTagFilters([]);setTagFilter('papers');setKeyword('');setUnreadOnly(false);setFavoriteOnly(false)
+        const succeeded = await generateFeedBriefing({
+          articleIDs:response.data.map(item=>item.id),scopeLabel:'论文精选',title:'每日论文精选',tag:'papers',
+          taskKey:buildFeedBriefingTaskKey({model:aiModel,sourceIDs:[],tag:'papers',keyword:'',unreadOnly:false,mutedSiteKeys:[...sourcesIndex.mutedSiteSet].sort()}),
+          refresh,selectOnSuccess:true,
+        })
+        if(succeeded)openFeedBriefing()
+      } catch(error) {setNotice({kind:'error',text:`加载论文精选失败：${toErrorMessage(error)}`})}
+      finally {setLoadingFeedBriefing(false)}
+      return
+    }
     if (forum) {
       try {
         setLoadingFeedBriefing(true)

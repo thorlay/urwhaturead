@@ -22,6 +22,7 @@ const (
 )
 
 type feedBriefingTaskInput struct {
+	DailyPaper  bool     `json:"daily_paper,omitempty"`
 	DailySource bool     `json:"daily_source,omitempty"`
 	InputDigest string   `json:"input_digest,omitempty"`
 	DigestKey   string   `json:"digest_key"`

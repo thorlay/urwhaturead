@@ -72,6 +72,7 @@ export type FeedItem = {
   author?: string
   published_at?: string
   image_url?: string
+  paper_votes?: number
   reply_count?: number
   duplicate_count?: number
   created_at: string

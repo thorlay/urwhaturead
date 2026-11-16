@@ -62,6 +62,9 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 			a.created_at,
 			COALESCE(a.published_at, a.created_at) AS sort_time
 		`
+	if params.channel == "papers" {
+		columns += ", " + paperVotesSQL + " AS paper_votes"
+	}
 	if params.channel == "forum" {
 		columns = strings.Replace(columns, "a.link,", forumTopicLinkSelect, 1)
 	}
@@ -74,7 +77,7 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 	if !params.includeHidden {
 		query = query.Where("s.hidden_in_sidebar = ? AND s.kind <> ?", false, "thread")
 	}
-	if params.tag != "" && params.tag != "forum" {
+	if params.tag != "" && params.tag != "forum" && params.tag != "papers" {
 		query = query.Where("s.tags @> ?::text[]", models.StringArray{params.tag})
 	}
 	if len(params.sourceIDs) > 0 {
@@ -89,6 +92,9 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 	}
 	if params.since != nil {
 		query = query.Where("a.created_at > ?", *params.since)
+	}
+	if params.channel == "papers" {
+		return r.listPapers(ctx, query, params)
 	}
 	if params.channel == "forum" && !params.important {
 		return r.listForumDiscussions(ctx, query, params)

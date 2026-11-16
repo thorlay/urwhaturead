@@ -91,7 +91,7 @@ export type ReaderFeedPanelProps = {
   catchUpCount: number
   catchUpLoading: boolean
   catchUpError: string | null
-  onGenerateFeedBriefing: (refresh: boolean, forum?: boolean) => Promise<void>
+  onGenerateFeedBriefing: (refresh: boolean, forum?: boolean, papers?: boolean) => Promise<void>
   onRefreshCatchUp: () => Promise<void>
   onGenerateCatchUpBriefing: () => Promise<void>
   onMarkCaughtUp: () => void
@@ -102,7 +102,7 @@ export type ReaderFeedPanelProps = {
   onToggleFeedTitleOnlyMode: () => void
   onToggleFeedImages: () => void
   onToggleFeedSearch: () => void
-  onApplyFilters: (channel?: 'news' | 'forum') => void
+  onApplyFilters: (channel?: 'news' | 'forum' | 'papers') => void
   onToggleAdvancedFilters: () => void
   onChangeKeyword: (value: string) => void
   onChangeTagFilter: (value: string) => void
@@ -274,7 +274,7 @@ const FeedArticleListItem = memo(
       () => formatTimeAgoCompact(item.published_at ?? item.created_at),
       [formatTimeAgoCompact, item.created_at, item.published_at],
     )
-    const replyCountText = useMemo(() => formatReplyCount(item.reply_count), [formatReplyCount, item.reply_count])
+    const replyCountText = useMemo(() => item.paper_votes != null ? `社区赞 ${item.paper_votes}` : formatReplyCount(item.reply_count), [formatReplyCount, item.paper_votes, item.reply_count])
     const plainSummaryText = useMemo(() => plainText(item.summary), [item.summary, plainText])
     const compactPreviewText = useMemo(() => {
       if (item.highlight_reason) return `入选理由：${item.highlight_reason}`
@@ -634,11 +634,12 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
     >
       <div className="feed-header">
         <div className="feed-header-title">
-          <h2 className="sr-only">{tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
-          <p className="hint">{tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
+          <h2 className="sr-only">{tagFilter === 'papers' ? '论文精选' : tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
+          <p className="hint">{tagFilter === 'papers' ? 'Hugging Face 日榜与周榜去重 · 每日约 4 篇 · 方法、证据与局限 · 洛杉矶时间每天 08:00 生成' : tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
           <div className="feed-channel-tabs" role="group" aria-label="阅读频道">
-            <Button size="sm" variant={tagFilter !== 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter !== 'forum'} onClick={() => onApplyFilters('news')}>资讯</Button>
+            <Button size="sm" variant={!['forum','papers'].includes(tagFilter) ? 'default' : 'ghost'} aria-pressed={!['forum','papers'].includes(tagFilter)} onClick={() => onApplyFilters('news')}>资讯</Button>
             <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
+            <Button size="sm" variant={tagFilter === 'papers' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'papers'} onClick={() => {onApplyFilters('papers'); void onGenerateFeedBriefing(false,false,true)}}>论文精选</Button>
           </div>
         </div>
         <div className="feed-header-tools">
@@ -647,8 +648,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               type="button"
               variant="outline"
               size="sm"
-              aria-label={loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛讨论简报' : 'AI 速览'}
-              title={tagFilter === 'forum' ? '生成论坛讨论简报' : '生成 AI 速览'}
+              aria-label={loadingFeedBriefing ? '生成中...' : tagFilter === 'papers' ? '今日论文精选' : tagFilter === 'forum' ? '论坛讨论简报' : 'AI 速览'}
+              title={tagFilter === 'papers' ? '打开今日论文精选' : tagFilter === 'forum' ? '生成论坛讨论简报' : '生成 AI 速览'}
               onClick={() => {
                 onCloseFeedAIMoreMenu()
                 void onGenerateFeedBriefing(false, tagFilter === 'forum')
@@ -656,7 +657,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               disabled={loadingFeedBriefing}
             >
               <Sparkles aria-hidden="true" />
-              <span className="feed-ai-label">{loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛简报' : 'AI 速览'}</span>
+              <span className="feed-ai-label">{loadingFeedBriefing ? '生成中...' : tagFilter === 'papers' ? '论文精选' : tagFilter === 'forum' ? '论坛简报' : 'AI 速览'}</span>
               <span className="feed-ai-compact-label" aria-hidden="true">{loadingFeedBriefing ? '生成中' : '简报'}</span>
             </Button>
             <Button type="button" variant="ghost" size="icon" aria-label={showFeedSearch ? '收起搜索与筛选' : '打开搜索与筛选'} title="搜索与筛选" aria-expanded={showFeedSearch} onClick={onToggleFeedSearch}>
@@ -691,7 +692,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                     <DropdownMenuRadioItem className="feed-ai-more-item" value="unread">未读 {unreadVisibleCount}</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem className="feed-ai-more-item" value="favorite">收藏 {favoriteVisibleCount}</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
-                  {tagFilter !== 'forum' && <>
+                  {!['forum','papers'].includes(tagFilter) && <>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel>资讯范围</DropdownMenuLabel>
                     <DropdownMenuRadioGroup value={feedMode} onValueChange={(value) => onChangeFeedMode(value as 'all' | 'important')}>
@@ -755,7 +756,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         </div>
         <div className="feed-view-controls">
           <div className="feed-priority-toggle" role="group" aria-label="阅读重点">
-            {tagFilter !== 'forum' && (['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
+            {!['forum','papers'].includes(tagFilter) && (['important', 'all'] as const).map((mode) => <Button key={mode} type="button" size="sm" variant={feedMode === mode ? 'default' : 'ghost'} aria-pressed={feedMode === mode} onClick={() => onChangeFeedMode(mode)}>{mode === 'important' ? '重点' : '全部'}</Button>)}
           </div>
           <Select
             className="feed-read-select"
@@ -773,14 +774,14 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         </div>
       </div>
 
-      {(unreadOnly || favoriteOnly || (feedMode === 'important' && tagFilter !== 'forum')) && <div className="feed-active-reading-filter">
-        {feedMode === 'important' && tagFilter !== 'forum' && <button type="button" className="chip" onClick={() => onChangeFeedMode('all')}>重点阅读 ×</button>}
+      {(unreadOnly || favoriteOnly || (feedMode === 'important' && !['forum','papers'].includes(tagFilter))) && <div className="feed-active-reading-filter">
+        {feedMode === 'important' && !['forum','papers'].includes(tagFilter) && <button type="button" className="chip" onClick={() => onChangeFeedMode('all')}>重点阅读 ×</button>}
         {(unreadOnly || favoriteOnly) && <button type="button" className="chip" onClick={() => { onSetUnreadOnly(false); onSetFavoriteOnly(false) }}>{favoriteOnly ? '仅收藏' : '仅未读'} ×</button>}
       </div>}
 
       {feedMode === 'important' && <p className="feed-highlight-hint">来自最近 72 小时 AI 速览的优先阅读推荐 · 最多 15 条，每源最多 3 条 · 未生成速览的来源可能未覆盖</p>}
 
-      {tagFilter !== 'forum' && (catchUpCount > 0 || catchUpError) && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
+      {!['forum','papers'].includes(tagFilter) && (catchUpCount > 0 || catchUpError) && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
         <div className="feed-catch-up-status">
           <Clock3 aria-hidden="true" />
           <span>
