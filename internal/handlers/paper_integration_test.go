@@ -124,6 +124,19 @@ func TestPaperFeedsDailyDigestAndChannelIsolation(t *testing.T) {
 	if err != nil || report.ArticleCount != 4 || !strings.Contains(report.Summary, "https://github.com/lab/method") {
 		t.Fatalf("daily report: %+v %v", report, err)
 	}
+	if err := db.Model(&models.FeedBriefing{}).Where("digest_key=?", input.DigestKey).Update("truncated", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	input.Refresh = true
+	if _, err := h.generateAndSaveFeedBriefing(context.Background(), input, rows, nil); err != nil {
+		t.Fatal(err)
+	}
+	var repaired models.FeedBriefing
+	db.Where("digest_key=?", input.DigestKey).First(&repaired)
+	if repaired.Truncated {
+		t.Fatal("a complete regeneration must clear an old truncation flag")
+	}
+	input.Refresh = false
 	before := calls.Load()
 	cached, err := h.generateAndSaveFeedBriefing(context.Background(), input, rows, nil)
 	if err != nil || !cached.CacheHit || calls.Load() != before {

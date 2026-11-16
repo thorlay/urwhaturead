@@ -586,6 +586,7 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 	if err := h.db.WithContext(ctx).
 		Where("digest_key = ?", input.DigestKey).
 		Assign(record).
+		Assign(map[string]any{"truncated": record.Truncated}).
 		FirstOrCreate(&record).Error; err != nil {
 		return feedBriefingPayload{}, fmt.Errorf("save feed briefing cache: %w", err)
 	}
