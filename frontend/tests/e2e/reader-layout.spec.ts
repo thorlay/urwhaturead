@@ -10,13 +10,13 @@ const sources = [
   { id: 3, name: 'HN 首页', rss_url: 'https://hnrss.org/frontpage', site_key: 'hnrss.org', tags: ['tech'], enabled: true, kind: 'feed', new_articles_24h: 4 },
 ]
 
-async function mockReader(page: Page) {
+async function mockReader(page: Page, admin = false) {
   await page.route('**/api/v1/**', (route) => {
     const request = route.request()
     const url = new URL(request.url())
     const path = url.pathname
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-    if (path === '/api/v1/admin/session') return json({ data: { enabled: true, configured: true, authenticated: false, ai_model: 'test' } })
+    if (path === '/api/v1/admin/session') return json({ data: { enabled: true, configured: true, authenticated: admin, ai_model: 'test' } })
     if (path === '/api/v1/sources') return json({ data: sources, meta: { count: sources.length } })
     if (path === '/api/v1/feed') {
       const selected = url.searchParams.get('source_ids')
@@ -125,11 +125,50 @@ test('compact toolbar remains usable on narrow screens and keyboard', async ({ p
   await expect(page.getByRole('menuitem', { name: '切换到标准模式', exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('menu')).toHaveCount(0)
-  expect((await page.locator('.feed-catch-up').boundingBox())!.height).toBeLessThan(44)
+  await expect(page.locator('.feed-catch-up')).toBeHidden()
   await page.screenshot({ path: '/tmp/quick-reader-layout-mobile.png', fullPage: true })
   await header.getByRole('button', { name: '论坛观察', exact: true }).click()
   await expect(header.getByRole('button', { name: '论坛讨论简报', exact: true })).toBeVisible()
   await expect.poll(() => header.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+})
+
+test('reader chrome maximizes list height without hiding navigation or refresh', async ({ page }, testInfo) => {
+  await mockReader(page, true)
+  await page.setViewportSize({ width: testInfo.project.name.startsWith('mobile-') ? 320 : 1440, height: 800 })
+  await page.goto('/')
+  const topbar = page.locator('.topbar-reading')
+  await expect(topbar).toBeVisible()
+  expect((await topbar.boundingBox())!.height).toBeLessThan(48)
+  await expect(page.getByRole('tab', { name: '阅读流', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'AI', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /管理/ })).toBeVisible()
+  await expect(page.locator('.feed-catch-up')).toBeHidden()
+  const list = await page.locator('.feed-list').boundingBox()
+  expect(list!.y).toBeLessThan(testInfo.project.name.startsWith('mobile-') ? 140 : 100)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  if (testInfo.project.name.startsWith('mobile-')) {
+    const options = page.getByRole('button', { name: '阅读器选项', exact: true })
+    await options.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByText('模型：test', { exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '退出管理', exact: true })).toBeVisible()
+    const refresh = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/v1/sources')
+    await page.getByRole('menuitem', { name: '刷新当前视图', exact: true }).click()
+    await refresh
+  } else {
+    await expect(topbar.getByRole('button', { name: '刷新', exact: true })).toBeVisible()
+    await expect(page.locator('.feed-list')).toHaveCSS('overflow-y', 'auto')
+    await topbar.getByRole('button', { name: '刷新', exact: true }).click()
+  }
+  await expect(page.locator('.notice')).toBeVisible()
+  await expect(page.getByRole('button', { name: '关闭通知', exact: true })).toBeVisible()
+  expect((await page.locator('.feed-list').boundingBox())!.y).toBe(list!.y)
+  await page.screenshot({ path: `/tmp/quick-reader-top-aligned-${testInfo.project.name}.png`, fullPage: true })
+  await page.getByRole('tab', { name: 'AI', exact: true }).click()
+  await expect(page.locator('.topbar-reading')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '每日 AI 简报', exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: '阅读流', exact: true }).click()
+  await expect(page.locator('.topbar-reading')).toBeVisible()
 })
 
 test('split forum keeps one operation row and exposes reading states in its menu', async ({ page }, testInfo) => {

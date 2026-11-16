@@ -698,6 +698,8 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                       <DropdownMenuRadioItem className="feed-ai-more-item" value="all">全部资讯</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem className="feed-ai-more-item" value="important">重点阅读</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
+                    <DropdownMenuLabel>{catchUpError ? '新增检查暂不可用' : catchUpLoading ? '正在检查新增内容…' : `上次处理后新增 ${catchUpCount} 篇`}</DropdownMenuLabel>
+                    <DropdownMenuItem className="feed-ai-more-item" disabled={catchUpLoading} onSelect={() => void onRefreshCatchUp()}>重新检查新增内容</DropdownMenuItem>
                     {catchUpCount > 0 && !catchUpError && <DropdownMenuItem className="feed-ai-more-item" disabled={catchUpLoading || loadingFeedBriefing} onSelect={() => void onGenerateCatchUpBriefing()}>补课速览（{catchUpCount} 篇新增）</DropdownMenuItem>}
                     {catchUpCount > 0 && !catchUpError && <DropdownMenuItem className="feed-ai-more-item" disabled={catchUpLoading} onSelect={onMarkCaughtUp}>标记新增为已处理</DropdownMenuItem>}
                   </>}

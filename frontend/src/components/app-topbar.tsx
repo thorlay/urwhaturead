@@ -1,7 +1,8 @@
 import { Fragment } from 'react'
-import { ArrowDown, BookOpenText, LogOut, RefreshCw, Settings2, Sparkles } from 'lucide-react'
+import { ArrowDown, BookOpenText, LogOut, MoreHorizontal, RefreshCw, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 type AppTopbarProps = {
   activeTab: 'reader' | 'ai' | 'sources'
@@ -42,7 +43,7 @@ export function AppTopbar(props: AppTopbarProps) {
 
   return (
     <Fragment>
-      <header className="topbar">
+      <header className={`topbar${activeTab === 'reader' ? ' topbar-reading' : ''}`}>
         <div className="topbar-brand">
           <span className="topbar-brand-mark" aria-hidden="true">
             <img src="/urwhaturead.svg?v=swimming-fish" alt="" width="32" height="32" />
@@ -118,6 +119,20 @@ export function AppTopbar(props: AppTopbarProps) {
             </Button>
           )}
         </div>
+        {activeTab === 'reader' && <div className="topbar-reading-menu">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" aria-label="阅读器选项" title="阅读器选项"><MoreHorizontal aria-hidden="true" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent aria-label="阅读器选项">
+              <DropdownMenuLabel>模型：{aiModel || '-'}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={loadingSources || loadingFeed} onSelect={onRefreshAll}><RefreshCw aria-hidden="true" />刷新当前视图</DropdownMenuItem>
+              {pendingFeedCount > 0 && <DropdownMenuItem disabled={loadingFeed} onSelect={onApplyPendingFeedUpdates}><ArrowDown aria-hidden="true" />查看 {pendingFeedCount} 条更新</DropdownMenuItem>}
+              {showAdminLogout && <DropdownMenuItem onSelect={onAdminLogout}><LogOut aria-hidden="true" />退出管理</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>}
       </header>
 
       {activeTab === 'reader' && pendingFeedCount > 0 && (

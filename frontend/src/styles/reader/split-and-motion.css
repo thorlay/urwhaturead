@@ -1,3 +1,114 @@
+.app-shell:has(.reader-layout) {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-shell:has(.reader-layout) > .notice {
+  position: fixed;
+  z-index: 60;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+  width: min(26rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  background: var(--surface-solid);
+  box-shadow: 0 3px 16px rgb(0 0 0 / 8%);
+  font-size: 0.78rem;
+}
+
+.topbar-reading {
+  min-height: 40px;
+  margin-bottom: 0;
+  padding-block: 0.2rem;
+  border-top: none;
+}
+
+.topbar-reading .eyebrow {
+  display: none;
+}
+
+.topbar-reading h1 {
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.topbar-reading .topbar-brand-mark {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.topbar-reading-menu {
+  display: none;
+}
+
+.reader-stack .feed {
+  padding-top: 0.25rem;
+  gap: 0.3rem;
+}
+
+.reader-stack .feed-catch-up {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .app-shell:has(.reader-layout) {
+    padding-bottom: calc(max(0.54rem, env(safe-area-inset-bottom)) + 3.4rem);
+  }
+
+  .app-shell:has(.reader-layout) > .notice {
+    bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 6rem);
+  }
+
+  .topbar-reading {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0;
+  }
+
+  .topbar-reading .topbar-brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .topbar-reading .topbar-brand-copy {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .topbar-reading .topbar-navigation {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .topbar-reading .view-tabs {
+    width: auto;
+    max-width: 100%;
+  }
+
+  .topbar-reading .view-tab {
+    min-height: 1.9rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.75rem;
+    gap: 0.25rem;
+  }
+
+  .topbar-reading .topbar-actions {
+    display: none;
+  }
+
+  .topbar-reading-menu {
+    display: block;
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
 .reader-stack .feed-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
