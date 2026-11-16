@@ -93,7 +93,7 @@ func (h *FeedHandler) generateDailyPaper(ctx context.Context, input feedBriefing
 			if err != nil {
 				return err
 			}
-			payload = feedBriefingPayload{DigestKey: record.DigestKey, Summary: record.Summary, Model: record.Model, Provider: record.Provider, GeneratedAt: record.GeneratedAt, CacheHit: true, ArticleCount: countCSVEntries(record.ArticleIDs), InputItems: refs[record.DigestKey]}
+			payload = feedBriefingPayload{DigestKey: record.DigestKey, Summary: record.Summary, Model: record.Model, Provider: record.Provider, InputChars: record.InputChars, Truncated: record.Truncated, StopReason: record.StopReason, GeneratedAt: record.GeneratedAt, CacheHit: true, ArticleCount: countCSVEntries(record.ArticleIDs), InputItems: refs[record.DigestKey]}
 			return nil
 		}
 		var err error

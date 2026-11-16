@@ -92,6 +92,7 @@ func TestPaperFeedsDailyDigestAndChannelIsolation(t *testing.T) {
 		t.Fatal("papers must be separate from news", e)
 	}
 	var calls atomic.Int32
+	var truncate atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
@@ -105,7 +106,11 @@ func TestPaperFeedsDailyDigestAndChannelIsolation(t *testing.T) {
 		if len(request.Messages) > 0 && strings.Contains(request.Messages[0].Content, "选稿助手") {
 			content = `{\"ids\":[\"A01\",\"A02\",\"A03\",\"A04\"]}`
 		}
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":"%s"},"finish_reason":"stop"}]}`, content)
+		finish := "stop"
+		if truncate.Load() && !strings.Contains(request.Messages[0].Content, "选稿助手") {
+			finish = "length"
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"%s"},"finish_reason":"%s"}]}`, content, finish)
 	}))
 	defer server.Close()
 	client := aisummary.NewClient(aisummary.Options{BaseURL: server.URL + "/v1/chat/completions", APIKey: "test", Model: "test", APIStyle: "openai_chat"})
@@ -131,4 +136,15 @@ func TestPaperFeedsDailyDigestAndChannelIsolation(t *testing.T) {
 	if err != nil || len(fresh) != 2 {
 		t.Fatalf("next-day shortlist must skip already featured papers across both boards: %d %v", len(fresh), err)
 	}
+	truncate.Store(true)
+	input.Refresh = true
+	if _, err := h.generateAndSaveFeedBriefing(context.Background(), input, rows, nil); err == nil {
+		t.Fatal("truncated paper output must not be published after retry")
+	}
+	var retained models.FeedBriefing
+	db.First(&retained, stored.ID)
+	if retained.Summary != stored.Summary {
+		t.Fatal("failed regeneration must preserve the existing complete report")
+	}
+
 }

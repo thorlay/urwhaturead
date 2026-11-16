@@ -554,6 +554,15 @@ func (h *FeedHandler) saveGeneratedFeedBriefing(ctx context.Context, input feedB
 		return feedBriefingPayload{}, err
 	}
 
+	if isPaperBriefing(rows) && (result.Truncated || result.StopReason == "length" || result.StopReason == "max_tokens") {
+		result, err = h.summarizer.CompleteWithModel(ctx, feedBriefingSystemPrompt, "严格压缩：全篇正文不超过1000汉字，每篇各栏仅1句话，必须完整输出所有论文。\n"+prompt, input.Model)
+		if err != nil {
+			return feedBriefingPayload{}, err
+		}
+		if result.Truncated || result.StopReason == "length" || result.StopReason == "max_tokens" {
+			return feedBriefingPayload{}, errors.New("paper briefing was truncated; no incomplete daily report was saved")
+		}
+	}
 	if isPaperBriefing(rows) {
 		result.Summary = appendPaperResourceLinks(result.Summary, rows)
 	}
