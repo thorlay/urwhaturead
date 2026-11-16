@@ -5,6 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { MarkdownBlock, PlainTextBlock, SafeHTMLBlock } from '@/components/rich-content-blocks'
 import { readingBodyHasImages } from '@/lib/reading-images'
 import type { ArticleDetail, FeedBriefingInputItem } from '../types'
+import { DiscussionAnalysisPanel } from './discussion-analysis-panel'
 import { sortThreadCommentsByUpvotes } from '../lib/thread-comment-sort'
 
 type ThreadComment = {
@@ -617,6 +618,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
             </details>
           )}
 
+          {selectedArticle && <DiscussionAnalysisPanel article={selectedArticle} />}
           <>
               {shouldShowAIInspector && (
                 <section className="ai-summary-card detail-section">

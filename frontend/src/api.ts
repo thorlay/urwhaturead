@@ -415,3 +415,11 @@ export async function getAdminSession(): Promise<AdminSessionResponse> {
   }
   return (await response.json()) as AdminSessionResponse
 }
+
+export async function analyzeDiscussion(articleID: number, refresh = false, signal?: AbortSignal) {
+  return request<import('./types').DiscussionAnalysisResponse>(`/api/v1/articles/${articleID}/discussion-analysis${refresh ? '?refresh=1' : ''}`, {method:'POST', signal})
+}
+export async function getDiscussionAnalysis(articleID: number, taskKey: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({task_key:taskKey})
+  return request<import('./types').DiscussionAnalysisResponse>(`/api/v1/articles/${articleID}/discussion-analysis?${query}`, {signal})
+}

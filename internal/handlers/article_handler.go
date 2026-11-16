@@ -33,6 +33,7 @@ type ArticleHandler struct {
 	db         *gorm.DB
 	summarySvc *articlesummary.Service
 	contentSvc *ArticleContentService
+	discussion *discussionAnalysisService
 	enrichment singleflight.Group
 }
 
@@ -62,6 +63,7 @@ func NewArticleHandlerWithOptions(db *gorm.DB, summarizer *aisummary.Client, opt
 		db:         db,
 		contentSvc: NewArticleContentService(options),
 	}
+	handler.discussion = newDiscussionAnalysisService(db, summarizer)
 	handler.summarySvc = articlesummary.NewService(db, summarizer, handler.loadSummaryInput)
 	return handler
 }
@@ -79,6 +81,8 @@ func (h *ArticleHandler) RegisterReadRoutes(group *gin.RouterGroup) {
 	group.GET("/:id/cluster-diagnosis", h.GetClusterDiagnosis)
 	group.GET("/:id/summary", h.GetSummary)
 	group.GET("/:id/summary/status", h.GetSummaryStatus)
+	group.POST("/:id/discussion-analysis", h.AnalyzeDiscussion)
+	group.GET("/:id/discussion-analysis", h.GetDiscussionAnalysis)
 }
 
 func (h *ArticleHandler) RegisterWriteRoutes(group *gin.RouterGroup) {

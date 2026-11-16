@@ -107,6 +107,7 @@ func registeredSchemaMigrations() []schemaMigration {
 		{Version: 2, Name: "article_highlights", Up: func(db *gorm.DB) error {
 			return db.AutoMigrate(&models.ArticleHighlight{})
 		}},
+		{Version: 3, Name: "discussion_analyses", Up: func(db *gorm.DB) error { return db.AutoMigrate(&models.DiscussionAnalysis{}) }},
 	}
 }
 
