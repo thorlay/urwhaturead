@@ -61,7 +61,7 @@ export function useReaderDataController({
     )
 
     return {
-      channel: overrides?.channel ?? (activeTag === 'forum' ? 'forum' as const : filteredSourceIDs.length > 0 ? 'all' as const : 'news' as const),
+      channel: overrides?.channel ?? (activeTag === 'papers' ? 'papers' as const : activeTag === 'forum' ? 'forum' as const : filteredSourceIDs.length > 0 ? 'all' as const : 'news' as const),
       tag: activeTag,
       sourceID: activeSourceID,
       keyword: activeKeyword,

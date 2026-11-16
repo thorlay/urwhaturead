@@ -393,6 +393,7 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 	}
 
 	inserted := 0
+	w.enrichPaperFeed(ctx, source, feed)
 	w.enrichPublicForumMetrics(ctx, feed)
 	w.enrichNGAFeedDiscussions(ctx, source, feed)
 	for _, item := range feed.Items {
@@ -493,11 +494,11 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 		req.Header.Set("Accept", "application/atom+xml,application/rss+xml,text/xml;q=0.9,*/*;q=0.8")
 	}
 
-	// NGA board RSS contains main posts only; unchanged main posts can still have new replies.
-	if !isNGABoardFeed(source.RSSURL) && source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
+	// Reply totals and paper upvotes can change even when the serialized RSS is unchanged.
+	if !isNGABoardFeed(source.RSSURL) && !strings.Contains(source.RSSURL, "/huggingface/daily-papers") && source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
 		req.Header.Set("If-None-Match", *source.ETag)
 	}
-	if !isNGABoardFeed(source.RSSURL) && source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
+	if !isNGABoardFeed(source.RSSURL) && !strings.Contains(source.RSSURL, "/huggingface/daily-papers") && source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
 		req.Header.Set("If-Modified-Since", *source.LastModified)
 	}
 	if w.shouldDebugURL(source.RSSURL) {
@@ -902,7 +903,7 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 		textclean.NormalizeFromHTML(item.Content),
 	)
 	content := textclean.NormalizeFromHTMLBlock(item.Content)
-	if content == "" && feedextract.IsForumThread(link) {
+	if content == "" && (feedextract.IsForumThread(link) || isPaperLink(link)) {
 		// RSSHub often places the complete discussion in description instead of content:encoded.
 		content = textclean.NormalizeFromHTMLBlock(item.Description)
 	}
@@ -937,7 +938,7 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 		strings.ToLower(link),
 		formatTime(publishedAt),
 	}
-	if feedextract.IsForumThread(link) {
+	if feedextract.IsForumThread(link) || isPaperLink(link) {
 		hashParts = append(hashParts, content)
 	}
 	hashInput := strings.Join(hashParts, "|")
@@ -1112,7 +1113,7 @@ func existingArticleDiscussionUpdates(article models.Article) map[string]any {
 		// A transient reply-fetch failure must not replace a previously enriched thread with only its main post.
 		return updates
 	}
-	if feedextract.IsForumThread(article.Link) && article.Content != nil && strings.TrimSpace(*article.Content) != "" {
+	if (feedextract.IsForumThread(article.Link) || isPaperLink(article.Link)) && article.Content != nil && strings.TrimSpace(*article.Content) != "" {
 		updates["content"] = *article.Content
 		updates["summary"] = article.Summary
 		updates["raw"] = article.Raw
@@ -1120,3 +1121,5 @@ func existingArticleDiscussionUpdates(article models.Article) map[string]any {
 	}
 	return updates
 }
+
+func isPaperLink(link string) bool { _, ok := feedextract.ArxivID(link); return ok }

@@ -133,6 +133,7 @@ func (s *FeedBriefingScheduler) Start(ctx context.Context) {
 
 func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 	now := time.Now().UTC()
+	s.runDailyPapers(ctx, now)
 	if briefingScheduleBlocked(now, s.scheduleLocation, s.blockedWindows) {
 		return
 	}
@@ -142,6 +143,7 @@ func (s *FeedBriefingScheduler) runDueSources(ctx context.Context) {
 	var sources []models.Source
 	if err := s.db.WithContext(ctx).
 		Where("enabled = ? AND ai_briefing_enabled = ?", true, true).
+		Where("NOT (tags @> ARRAY['papers']::text[])").
 		Where("ai_briefing_last_generated_at IS NULL OR ai_briefing_last_generated_at < ?", dayStart).
 		Where("ai_briefing_last_run_at IS NULL OR ai_briefing_last_run_at <= ?", now.Add(-10*time.Minute)).
 		Order("ai_briefing_last_run_at ASC NULLS FIRST").

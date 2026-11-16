@@ -30,14 +30,19 @@ func (h *FeedHandler) prepareBriefingRows(ctx context.Context, rows []feedItem, 
 	if isForumBriefing(rows) {
 		rows = forumEvidenceCandidates(rows)
 	}
+	deepReads := maxBriefingDeepReads
+	if isPaperBriefing(rows) {
+		rows = uniquePaperRows(rows)
+		deepReads = 4
+	}
 	selected := rows
-	if len(rows) > maxBriefingDeepReads {
+	if len(rows) > deepReads {
 		result, err := h.summarizer.CompleteWithModel(ctx, briefingSelectionSystemPrompt, buildBriefingSelectionPrompt(rows), model)
 		if err != nil {
 			log.Printf("ai briefing candidate selection failed; using newest candidates: %v", err)
-			selected = selectBriefingRows(rows, nil, maxBriefingDeepReads)
+			selected = selectBriefingRows(rows, nil, deepReads)
 		} else {
-			selected = selectBriefingRows(rows, parseBriefingSelection(result.Summary), maxBriefingDeepReads)
+			selected = selectBriefingRows(rows, parseBriefingSelection(result.Summary), deepReads)
 		}
 	}
 	if err := h.enrichBriefingRowsFromCache(ctx, selected); err != nil {
@@ -48,7 +53,9 @@ func (h *FeedHandler) prepareBriefingRows(ctx context.Context, rows []feedItem, 
 
 func buildBriefingSelectionPrompt(rows []feedItem) string {
 	var builder strings.Builder
-	if isForumBriefing(rows) {
+	if isPaperBriefing(rows) {
+		builder.WriteString("从日榜与周榜候选中选择最多4篇值得精读的论文，兼顾不同研究问题、方法新意和证据可核验性。热度不等于研究质量，跳过纯宣传和重复论文。\n")
+	} else if isForumBriefing(rows) {
 		builder.WriteString("选择 6 个有实质讨论、观点差异或具体经验的帖子，兼顾不同论坛与话题；不只按时间或标题判断，不把争吵等同于信息价值。\n")
 	} else {
 		builder.WriteString("从候选中选择 6 篇用于最终速览。不要只按时间排序，也不要选择纯重复转载。候选如下：\n")
@@ -149,6 +156,10 @@ func (h *FeedHandler) enrichBriefingRowsFromCache(ctx context.Context, rows []fe
 		byArticleID[enrichment.ArticleID] = enrichment
 	}
 	for index := range rows {
+		if rows[index].SourceTag == "papers" {
+			h.enrichPaperEvidence(ctx, &rows[index], byArticleID[rows[index].ID])
+			continue
+		}
 		// Preserve feed-provided reply boundaries and avoid mixing external articles into forum evidence.
 		if rows[index].SourceTag == "forum" || feedextract.IsForumThread(rows[index].Link) {
 			h.enrichForumBriefingEvidence(ctx, &rows[index], byArticleID[rows[index].ID])

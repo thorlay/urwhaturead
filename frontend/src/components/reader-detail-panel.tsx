@@ -330,7 +330,7 @@ export function ReaderDetailPanel(props: ReaderDetailPanelProps) {
               {feedBriefingScopeLabel ? ` · ${feedBriefingScopeLabel}` : ''}
               {feedBriefingFreshnessLabel ? ` · ${feedBriefingFreshnessLabel}` : ''}
             </p>
-            <h3 className="detail-title">{feedBriefingScopeLabel === '论坛讨论简报' ? '论坛讨论简报' : 'AI 聚合速览'}</h3>
+            <h3 className="detail-title">{feedBriefingScopeLabel === '论文精选' ? '论文精选' : feedBriefingScopeLabel === '论坛讨论简报' ? '论坛讨论简报' : 'AI 聚合速览'}</h3>
           </header>
 
           <div className="detail-toolbar detail-toolbar-sticky">

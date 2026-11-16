@@ -876,3 +876,28 @@ test('forum observation is separate from news and switches its applied query', a
   await expect(page.getByText('独立的资讯文章', {exact:true})).toBeVisible()
   await expect(page.getByText('有争议的高讨论帖子', {exact:true})).toHaveCount(0)
 })
+
+test('paper picks has its own channel and explains methods evidence limitations with source and code links', async ({ page }) => {
+  await mockAPI(page)
+  const paper = {...feedItem,id:930,source_id:2,source_name:'HF 日榜',source_tag:'papers',title:'A verifiable paper',link:'https://arxiv.org/abs/2611.12345',paper_votes:42}
+  await page.route('**/api/v1/feed?**',route=> {
+    if(new URL(route.request().url()).searchParams.get('channel')==='papers')return json(route,{data:[paper],meta:{next_cursor:''}})
+    return route.fallback()
+  })
+  await page.route('**/api/v1/feed/briefing',route=>json(route,{data:{
+    digest_key:'paper-test',summary:'# 论文精选\n\n### 检索方法\n\n- 关键方法：使用检索减少重复计算。\n- 证据：有对照实验，尚未独立复现。\n- 局限：仅英语数据。\n- 阅读依据：正文部分章节。\n- 原文：[A01]\n- [文中代码](https://github.com/test-lab/research)',
+    model:'test',provider:'test',generated_at:generatedAt,article_count:1,input_items:[paper],cache_hit:true,
+  }}))
+  await page.goto('/')
+  const request=page.waitForRequest(r=>new URL(r.url()).pathname==='/api/v1/feed/briefing'&&r.method()==='POST')
+  await page.getByRole('button',{name:'论文精选',exact:true}).click()
+  expect((await request).postDataJSON()).toMatchObject({tag:'papers',article_ids:[930]})
+  await expect(page.locator('.feed-header-title h2')).toHaveText('论文精选')
+  await expect(page.locator('.detail-title')).toHaveText('论文精选')
+  await expect(page.getByRole('heading',{name:'检索方法',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'文中代码',exact:true})).toHaveAttribute('href','https://github.com/test-lab/research')
+  await expect(page.getByRole('link',{name:'原文 1',exact:true})).toHaveAttribute('href',paper.link)
+  await page.getByRole('button',{name:'关闭',exact:true}).click()
+  await page.getByRole('button',{name:'资讯',exact:true}).click()
+  await expect(page.locator('.feed-header-title h2')).toHaveText('聚合流')
+})

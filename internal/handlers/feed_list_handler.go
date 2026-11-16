@@ -34,6 +34,7 @@ type feedItem struct {
 	Author          *string        `json:"author,omitempty"`
 	PublishedAt     *time.Time     `json:"published_at,omitempty"`
 	ImageURL        *string        `json:"image_url,omitempty"`
+	PaperVotes      *int           `json:"paper_votes,omitempty"`
 	ReplyCount      *int           `json:"reply_count,omitempty"`
 	ContentHash     string         `json:"-" gorm:"column:content_hash"`
 	DuplicateCount  int            `json:"duplicate_count"`
@@ -68,6 +69,13 @@ func (h *FeedHandler) List(c *gin.Context) {
 		cursor := feedCursor{SortTime: last.SortTime, ID: last.ID}
 		if params.channel == "forum" {
 			cursor.Replies = last.ReplyCount
+		}
+		if params.channel == "papers" {
+			cursor.Replies = last.PaperVotes
+			if cursor.Replies == nil {
+				zero := 0
+				cursor.Replies = &zero
+			}
 		}
 		nextCursor = encodeFeedCursor(cursor)
 		result.rows = result.rows[:params.limit]
@@ -141,14 +149,17 @@ func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 		if len(params.sourceIDs) > 0 {
 			params.channel = "all"
 		}
+		if params.tag == "papers" {
+			params.channel = "papers"
+		}
 		if params.tag == "forum" {
 			params.channel = "forum"
 		}
 	}
-	if params.channel != "news" && params.channel != "forum" && params.channel != "all" {
-		return params, fmt.Errorf("channel must be news, forum or all")
+	if params.channel != "news" && params.channel != "forum" && params.channel != "all" && params.channel != "papers" {
+		return params, fmt.Errorf("channel must be news, forum, papers or all")
 	}
-	if params.channel == "forum" {
+	if params.channel == "forum" || params.channel == "papers" {
 		params.important = false
 	}
 	params.minReplies = 20
@@ -164,7 +175,7 @@ func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 		if err != nil {
 			return params, fmt.Errorf("invalid cursor")
 		}
-		if params.channel == "forum" && cursor.Replies == nil {
+		if (params.channel == "forum" || params.channel == "papers") && cursor.Replies == nil {
 			return params, fmt.Errorf("invalid forum cursor")
 		}
 		params.cursor = &cursor

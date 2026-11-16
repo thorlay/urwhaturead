@@ -165,7 +165,7 @@ export async function refreshSource(sourceID: number): Promise<{ ok: boolean }> 
 }
 
 export async function listFeed(params: {
-  channel?: 'news' | 'forum' | 'all'
+  channel?: 'news' | 'forum' | 'papers' | 'all'
   mode?: 'all' | 'important'
   limit?: number
   cursor?: string
