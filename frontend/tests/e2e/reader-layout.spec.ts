@@ -46,6 +46,9 @@ test('split reading gives titles space and bounds desktop reading measure', asyn
   const queueRow = await page.locator('.feed-item-compact-row').first().boundingBox()
   const queueTitle = await page.locator('.feed-item-inline-title').first().boundingBox()
   expect(queueTitle!.width / queueRow!.width).toBeGreaterThan(0.7)
+  const meta = await page.locator('.feed-item-compact-meta').first().boundingBox()
+  expect(meta!.y).toBeGreaterThanOrEqual(queueTitle!.y + queueTitle!.height)
+  expect(Math.abs(meta!.x - queueTitle!.x)).toBeLessThan(2)
   expect((await page.locator('.feed-item').first().boundingBox())!.height).toBeLessThan(100)
   await expect(page.locator('.feed-item-inline-summary').first()).toBeHidden()
   const body = detail.locator('.html-block')
@@ -59,6 +62,70 @@ test('split reading gives titles space and bounds desktop reading measure', asyn
   expect(gap).toBeGreaterThan(12)
   expect(gap).toBeLessThan(18)
   await page.screenshot({ path: '/tmp/quick-reader-layout-desktop.png', fullPage: true })
+})
+
+test('task queue stays in the topbar and opens without moving the feed', async ({ page }) => {
+  await mockReader(page, true)
+  await page.goto('/')
+  const trigger = page.getByRole('button', { name: /^AI 任务队列/ })
+  await expect(trigger).toBeVisible()
+  const initialY = (await page.locator('.feed-list').boundingBox())!.y
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: 'AI 任务队列' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText(/暂无任务/)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await page.locator('.feed-item').first().click()
+  await page.route('**/api/v1/articles/101/summary**', (route) => route.fulfill({
+    status: 202, contentType: 'application/json', body: JSON.stringify({ data: { status: 'queued', model: 'test', updated_at: now } }),
+  }))
+  await page.locator('.detail-floating').getByRole('button', { name: '更多', exact: true }).click()
+  await page.getByRole('menuitem', { name: '生成 AI 摘要', exact: true }).click()
+  await expect(trigger).toHaveAccessibleName(/1 个进行中/)
+  await expect(page.locator('.app-shell > .ai-task-strip')).toHaveCount(0)
+  await trigger.click()
+  await expect(dialog.locator('.ai-task-title')).toHaveText(title)
+  await expect(dialog.locator('.ai-task-status')).toHaveText('排队中')
+  await dialog.locator('.ai-task-open').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.locator('.detail-floating')).toBeVisible()
+  await trigger.click()
+  await dialog.getByRole('button', { name: '隐藏', exact: true }).click()
+  await expect(dialog.getByText(/暂无任务/)).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.locator('.detail-floating').getByRole('button', { name: '关闭', exact: true }).click()
+  expect((await page.locator('.feed-list').boundingBox())!.y).toBe(initialY)
+})
+
+test('split queue scroll stays below the toolbar and reveals selected rows', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop independent queue scroll')
+  await page.setViewportSize({ width: 1440, height: 800 })
+  await mockReader(page)
+  await page.route(/\/api\/v1\/articles\/\d+(?:\/enrichment)?$/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...rows[0], id: Number(new URL(route.request().url()).pathname.split('/')[4]), content_html: `<p>${paragraph}</p>` }) }))
+  await page.route('**/api/v1/feed?**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    data: Array.from({ length: 40 }, (_, index) => ({ ...rows[0], id: 101 + index, title: `${title} ${index}` })), meta: { next_cursor: '' },
+  }) }))
+  await page.goto('/')
+  await page.locator('.feed-item').first().click()
+  const list = page.locator('.feed-list')
+  const header = page.locator('.feed-header')
+  const headerBefore = await header.boundingBox()
+  await list.evaluate((el) => { el.scrollTop = 157 })
+  expect((await header.boundingBox())!.y).toBe(headerBefore!.y)
+  const bounds = (await list.boundingBox())!
+  expect(bounds.y).toBeGreaterThanOrEqual(headerBefore!.y + headerBefore!.height)
+  await expect(list).toHaveCSS('clip-path', 'inset(0px)')
+  expect(await header.evaluate((el) => {
+    const box = el.getBoundingClientRect()
+    return el.contains(document.elementFromPoint(box.x + 10, box.bottom - 2))
+  })).toBe(true)
+  await page.locator('.feed-item').filter({ hasText: `${title} 4` }).click()
+  const selected = (await page.locator('.feed-item.active').boundingBox())!
+  expect(selected.y).toBeGreaterThanOrEqual(bounds.y - 1)
+  expect(selected.y + selected.height).toBeLessThanOrEqual(bounds.y + bounds.height + 1)
+  await page.screenshot({ path: '/tmp/quick-reader-queue-scroll.png', fullPage: true })
 })
 
 test('wide feed uses one toolbar row and consistent sidebar sources', async ({ page }, testInfo) => {

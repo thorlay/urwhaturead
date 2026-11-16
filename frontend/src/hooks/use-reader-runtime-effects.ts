@@ -96,7 +96,8 @@ export function useReaderRuntimeEffects({
         return
       }
       // Reader controls and portaled menus must not collapse the split before their click.
-      if (target instanceof Element && target.closest('.detail-more-menu, .feed, .feed-ai-more-menu')) return
+      if (document.querySelector('.task-queue-dialog[data-state="open"]')) return
+      if (target instanceof Element && target.closest('.detail-more-menu, .feed, .feed-ai-more-menu, .topbar-task-trigger')) return
       closeFloatingReader()
     }
 

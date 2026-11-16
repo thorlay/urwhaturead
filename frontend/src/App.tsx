@@ -1,6 +1,9 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { AppTopbar } from '@/components/app-topbar'
 import { NoticeBanner } from '@/components/notice-banner'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { ListTodo } from 'lucide-react'
 import { ReaderWorkspace } from '@/components/reader-workspace'
 import { SourceOverlaysStack } from '@/components/source-overlays-stack'
 import { useAdminAccess } from './hooks/use-admin-access'
@@ -60,6 +63,8 @@ const AILibraryPanel = lazy(async () => {
 function App() {
   const { refs, data, request, ui } = useAppState()
   const [canReturnToAILibrary, setCanReturnToAILibrary] = useState(false)
+  const [taskQueueOpen, setTaskQueueOpen] = useState(false)
+  const taskQueueTriggerRef = useRef<HTMLButtonElement>(null)
 
   const {
     sourceSelectAllRef,
@@ -463,6 +468,11 @@ function App() {
   return (
     <div className="app-shell">
       <AppTopbar
+        taskControl={<Button asChild variant="ghost" size="sm" className="topbar-task-trigger"><button ref={taskQueueTriggerRef} type="button" aria-label={`AI 任务队列，${summaryTaskStats.running + summaryTaskStats.queued} 个进行中，${summaryTaskStats.failed} 个失败`} aria-haspopup="dialog" aria-expanded={taskQueueOpen} onClick={() => setTaskQueueOpen(true)}>
+          <ListTodo aria-hidden="true" />
+          <span className="topbar-task-label">任务</span>
+          <span>{summaryTaskStats.running + summaryTaskStats.queued || summaryTaskStats.failed || visibleSummaryTasks.length}</span>
+        </button></Button>}
         activeTab={activeTab}
         sourcesCount={sources.length}
         aiModel={aiModel}
@@ -482,20 +492,25 @@ function App() {
 
       <NoticeBanner notice={notice} onClose={() => setNotice(null)} />
 
-      {visibleSummaryTasks.length > 0 && (
+      <Dialog open={taskQueueOpen} onOpenChange={setTaskQueueOpen}>
+        <DialogContent className="task-queue-dialog" onEscapeKeyDown={(event) => event.stopPropagation()} onCloseAutoFocus={(event) => { event.preventDefault(); taskQueueTriggerRef.current?.focus() }}>
+          <DialogTitle>AI 任务队列</DialogTitle>
+          <DialogDescription>查看生成进度，或点击任务继续阅读。</DialogDescription>
+          {visibleSummaryTasks.length === 0 && <p className="hint">暂无任务。生成文章摘要或速览后，可在这里查看进度。</p>}
         <Suspense fallback={null}>
           <SummaryTaskStripPanel
             tasks={visibleSummaryTasks}
             stats={summaryTaskStats}
             onClearCompleted={clearCompletedSummaryTasks}
-            onOpenTask={onOpenSummaryTask}
+            onOpenTask={(task) => { setTaskQueueOpen(false); onOpenSummaryTask(task) }}
             onDismissTask={onDismissSummaryTask}
             summaryTaskKindLabel={summaryTaskKindLabel}
             summaryTaskStatusLabel={summaryTaskStatusLabel}
             formatTimeAgo={formatTimeAgo}
           />
         </Suspense>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {activeTab === 'reader' && <ReaderWorkspace {...readerWorkspaceProps} />}
 

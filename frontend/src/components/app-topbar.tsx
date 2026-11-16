@@ -1,10 +1,11 @@
-import { Fragment } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { ArrowDown, BookOpenText, LogOut, MoreHorizontal, RefreshCw, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 type AppTopbarProps = {
+  taskControl?: ReactNode
   activeTab: 'reader' | 'ai' | 'sources'
   sourcesCount: number
   aiModel: string
@@ -80,6 +81,7 @@ export function AppTopbar(props: AppTopbarProps) {
               )}
             </TabsList>
           </Tabs>
+          {props.taskControl}
         </nav>
         <div className="topbar-actions">
           <span className="topbar-model-chip" title={`当前 AI 模型：${aiModel || '-'}`}>
