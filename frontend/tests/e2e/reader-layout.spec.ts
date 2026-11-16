@@ -4,6 +4,11 @@ const now = new Date().toISOString()
 const title = '芯片股刚刚创下四月以来最大单周涨幅，对冲基金却又选择逢高减持，市场分歧为何加剧？'
 const paragraph = '芯片股强劲反弹，对冲基金却选择加码做空。这一反常信号，正在成为市场能否持续走高的核心悬念。研究者需要结合资金流向、产业基本面与估值变化判断，不能只看一天的价格波动。'
 const rows = [101, 102].map((id) => ({ id, source_id: 1, source_name: '华尔街见闻 · 最新文章', title: id === 101 ? title : '另一篇值得阅读的文章', link: `https://example.com/articles/${id}`, summary: '这是信息流预览，不应在分屏中挤占标题。', published_at: now, created_at: now }))
+const sources = [
+  { id: 1, name: rows[0].source_name, rss_url: 'https://example.com/feed', site_key: 'example.com', tags: ['finance'], enabled: true, kind: 'feed', new_articles_24h: 2 },
+  { id: 2, name: 'HN 精选', rss_url: 'https://hnrss.org/best', site_key: 'hnrss.org', tags: ['tech'], enabled: true, kind: 'feed', new_articles_24h: 3 },
+  { id: 3, name: 'HN 首页', rss_url: 'https://hnrss.org/frontpage', site_key: 'hnrss.org', tags: ['tech'], enabled: true, kind: 'feed', new_articles_24h: 4 },
+]
 
 async function mockReader(page: Page) {
   await page.route('**/api/v1/**', (route) => {
@@ -12,8 +17,12 @@ async function mockReader(page: Page) {
     const path = url.pathname
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (path === '/api/v1/admin/session') return json({ data: { enabled: true, configured: true, authenticated: false, ai_model: 'test' } })
-    if (path === '/api/v1/sources') return json({ data: [{ id: 1, name: rows[0].source_name, rss_url: 'https://example.com/feed', site_key: 'example.com', tags: ['finance'], enabled: true, kind: 'feed', new_articles_24h: 2 }], meta: { count: 1 } })
-    if (path === '/api/v1/feed') return json({ data: rows, meta: { next_cursor: '', total_count: url.searchParams.has('since') ? 279 : undefined } })
+    if (path === '/api/v1/sources') return json({ data: sources, meta: { count: sources.length } })
+    if (path === '/api/v1/feed') {
+      const selected = url.searchParams.get('source_ids')
+      const data = selected && selected !== '1' ? [{ ...rows[0], id: 201, source_id: 2, source_name: 'HN 精选' }] : rows
+      return json({ data, meta: { next_cursor: '', total_count: url.searchParams.has('since') ? 279 : undefined } })
+    }
     if (/\/articles\/10[12](?:\/enrichment)?$/.test(path)) return json({ ...rows[path.includes('102') ? 1 : 0], content_html: `<p>${paragraph}</p><p>${paragraph}</p><h2>逢高做空，而非逢低买入</h2><p>${paragraph}</p>` })
     if (path.endsWith('/view')) return route.fulfill({ status: 204 })
     if (path === '/api/v1/articles/summaries' || path === '/api/v1/feed/briefings') return json({ data: [], meta: { count: 0 } })
@@ -49,6 +58,48 @@ test('split reading gives titles space and bounds desktop reading measure', asyn
   expect(gap).toBeGreaterThan(12)
   expect(gap).toBeLessThan(18)
   await page.screenshot({ path: '/tmp/quick-reader-layout-desktop.png', fullPage: true })
+})
+
+test('wide feed uses one toolbar row and consistent sidebar sources', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop sidebar layout')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockReader(page)
+  await page.goto('/')
+  const header = page.locator('.feed-header')
+  await expect(header).toBeVisible()
+  expect((await header.boundingBox())!.height).toBeLessThan(40)
+  const channels = await page.locator('.feed-channel-tabs').boundingBox()
+  const filters = await page.locator('.feed-view-controls').boundingBox()
+  const actions = await page.locator('.feed-header-tools').boundingBox()
+  expect(filters!.x).toBeGreaterThan(channels!.x + channels!.width)
+  expect(actions!.x).toBeGreaterThan(filters!.x + filters!.width)
+  expect(Math.abs(filters!.y - channels!.y)).toBeLessThan(2)
+  expect(Math.abs(actions!.y - channels!.y)).toBeLessThan(2)
+
+  const source = page.locator('.subscription-item').filter({ hasText: rows[0].source_name })
+  const group = page.locator('.subscription-group-title')
+  const rowStyle = (el: Element) => {
+    const style = getComputedStyle(el)
+    return { height: style.height, background: style.backgroundColor, weight: style.fontWeight, radius: style.borderRadius, font: style.fontSize }
+  }
+  expect(await group.evaluate(rowStyle)).toEqual(await source.evaluate(rowStyle))
+  const expand = page.getByRole('button', { name: '展开 hnrss.org 的订阅源', exact: true })
+  await expand.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: '收起 hnrss.org 的订阅源', exact: true })).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('.subscription-group-items')).toBeVisible()
+  await group.click()
+  await expect(group).toHaveAttribute('aria-pressed', 'true')
+  const groupActive = await group.evaluate(rowStyle)
+  await source.click()
+  await expect(source).toHaveAttribute('aria-pressed', 'true')
+  expect(await source.evaluate(rowStyle)).toEqual(groupActive)
+  await page.getByRole('button', { name: '全部来源 3', exact: true }).click()
+
+  const summary = page.locator('.feed-item-inline-summary').first()
+  const sizes = await summary.evaluate((el) => ({ summary: Number.parseFloat(getComputedStyle(el).fontSize), title: Number.parseFloat(getComputedStyle(el.closest('h3')!).fontSize) }))
+  expect(sizes.summary).toBeLessThan(sizes.title * 0.9)
+  await page.screenshot({ path: '/tmp/quick-reader-wide-toolbar.png', fullPage: true })
 })
 
 test('compact toolbar remains usable on narrow screens and keyboard', async ({ page }) => {

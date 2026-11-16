@@ -65,6 +65,8 @@
 }
 
 .reader-stack .feed {
+  container-type: inline-size;
+  container-name: reader-feed;
   height: 100%;
   min-height: 0;
   gap: 0.48rem;

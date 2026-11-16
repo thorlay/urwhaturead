@@ -136,6 +136,7 @@ const SubscriptionSourceRow = memo(function SubscriptionSourceRow(props: Subscri
         variant="ghost"
         size="sm"
         className={`subscription-item ${active ? 'active' : ''}`}
+        aria-pressed={active}
         onClick={handleSelect}
         onContextMenu={handleContextMenu}
       >
@@ -345,6 +346,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
             variant="ghost"
             size="sm"
             className={`subscription-item all ${!sourceFilter ? 'active' : ''}`}
+            aria-pressed={!sourceFilter}
             onClick={() => onApplySourceFilterFromSidebar('')}
           >
             全部来源
@@ -460,6 +462,7 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                           variant="ghost"
                           size="sm"
                           className="subscription-group-title"
+                          aria-pressed={active}
                           onClick={() =>
                             onApplySourceGroupFilterFromSidebar({
                               key: group.key,
@@ -470,8 +473,8 @@ export function ReaderSubscriptionSidebar(props: ReaderSubscriptionSidebarProps)
                         >
                           <span className="subscription-group-name">{group.label}</span>
                           <span className="subscription-group-meta">
-                            {group.sources.length} 源
-                            {group.newCount > 0 ? ` · ${group.newCount}/24h` : ''}
+                            <span>{group.sources.length} 源</span>
+                            {group.newCount > 0 && <span className="subscription-item-state fresh">{group.newCount} / 24h</span>}
                           </span>
                         </Button>
                         <button

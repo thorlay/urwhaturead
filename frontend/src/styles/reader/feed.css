@@ -572,16 +572,21 @@
 }
 
 .feed-item-inline-sep {
-  color: #b1b1b1;
+  color: var(--border-subtle);
+  margin-inline: 0.22em;
 }
 
 .feed-item-inline-summary {
-  color: var(--muted);
+  color: var(--foreground-tertiary);
   font-weight: 400;
 }
 
+.feed-item-inline-summary:not(.feed-highlight-reason) {
+  font-size: 0.86em;
+}
+
 .feed-item.read .feed-item-inline-summary {
-  color: #808080;
+  color: var(--foreground-tertiary);
 }
 
 .feed-title-only .feed-item.read .feed-item-compact-meta {
