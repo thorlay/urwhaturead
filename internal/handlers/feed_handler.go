@@ -785,7 +785,18 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		query = query.Where("a.id IN ?", uniqueSortedUint64(articleIDs))
 	}
 	if tag == "papers" {
-		query = filterFeedChannel(query, "papers").Where("s.enabled = true").Where(paperActivePredicate, time.Now().Add(-8*24*time.Hour)).Where(`NOT EXISTS (SELECT 1 FROM feed_briefings pb JOIN articles pa ON pa.id::text = ANY(string_to_array(pb.article_ids, ',')) WHERE pb.tag='papers' AND pb.generated_at >= ? AND pb.generated_at < ? AND regexp_replace(pa.link,'v[0-9]+$','')=regexp_replace(a.link,'v[0-9]+$',''))`, time.Now().Add(-7*24*time.Hour), paperDayStart(time.Now())).Order(paperVotesSQL + " DESC NULLS LAST")
+		ids, err := activePaperSourceIDs(ctx, h.db)
+		if err != nil {
+			return nil, err
+		}
+		excluded, err := h.previouslyFeaturedPapers(ctx, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		query = filterFeedChannel(query, "papers").Where("a.source_id IN ?", ids).Where("s.enabled = true").Where(paperActivePredicate, time.Now().Add(-8*24*time.Hour)).Order(paperVotesSQL + " DESC NULLS LAST")
+		if len(excluded) > 0 {
+			query = query.Where("regexp_replace(a.link,'v[0-9]+$','') NOT IN ?", excluded)
+		}
 	}
 	if tag == "forum" {
 		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), 20).Order("a.reply_count DESC")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"quick/internal/feedextract"
 	"time"
 
 	"gorm.io/gorm"
@@ -106,4 +107,30 @@ func paperDayStart(now time.Time) time.Time {
 	loc, _ := paperSchedule()
 	day := now.In(loc)
 	return time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+}
+
+// Resolve a small set of covered article IDs with the primary-key index. Casting
+// the entire article table to text for a coverage join is prohibitively slow.
+func (h *FeedHandler) previouslyFeaturedPapers(ctx context.Context, now time.Time) ([]string, error) {
+	var reports []string
+	if err := h.db.WithContext(ctx).Model(&models.FeedBriefing{}).Where("tag='papers' AND generated_at >= ? AND generated_at < ?", now.Add(-7*24*time.Hour), paperDayStart(now)).Limit(500).Pluck("article_ids", &reports).Error; err != nil {
+		return nil, err
+	}
+	var ids []uint64
+	for _, report := range reports {
+		ids = append(ids, parseCSVUint64Loose(report)...)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var links []string
+	if err := h.db.WithContext(ctx).Model(&models.Article{}).Where("id IN ?", uniqueSortedUint64(ids)).Pluck("link", &links).Error; err != nil {
+		return nil, err
+	}
+	for i := range links {
+		if id, ok := feedextract.ArxivID(links[i]); ok {
+			links[i] = "https://arxiv.org/abs/" + id
+		}
+	}
+	return links, nil
 }

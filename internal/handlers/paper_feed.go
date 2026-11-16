@@ -12,6 +12,11 @@ const paperActivePredicate = `COALESCE(NULLIF(a.raw #>> '{extensions,quick,paper
 
 func (r *feedRepository) listPapers(ctx context.Context, query *gorm.DB, params feedListParams) (feedListResult, *feedRepositoryError) {
 	started := time.Now()
+	ids, err := activePaperSourceIDs(ctx, r.db)
+	if err != nil {
+		return feedListResult{}, &feedRepositoryError{"load paper sources failed", err}
+	}
+	query = query.Where("a.source_id IN ?", ids)
 	query = query.Where("s.enabled = true").Where(paperActivePredicate, time.Now().Add(-8*24*time.Hour))
 	// The two boards often feature the same arXiv paper; dedupe before LIMIT/cursor.
 	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", query).Select(`candidates.*,ROW_NUMBER() OVER (PARTITION BY regexp_replace(candidates.link,'v[0-9]+$','') ORDER BY COALESCE(candidates.paper_votes,0) DESC,candidates.sort_time DESC,candidates.id DESC) AS paper_rank`)
@@ -25,10 +30,16 @@ func (r *feedRepository) listPapers(ctx context.Context, query *gorm.DB, params 
 	if params.cursor != nil {
 		query = query.Where("(COALESCE(paper_votes,0),sort_time,id)<(?,?,?)", *params.cursor.Replies, params.cursor.SortTime, params.cursor.ID)
 	}
-	err := query.Order("COALESCE(paper_votes,0) DESC,sort_time DESC,id DESC").Limit(params.limit + 1).Scan(&result.rows).Error
+	err = query.Order("COALESCE(paper_votes,0) DESC,sort_time DESC,id DESC").Limit(params.limit + 1).Scan(&result.rows).Error
 	result.queryElapsed = time.Since(started)
 	if err != nil {
 		return result, &feedRepositoryError{"query paper feed failed", err}
 	}
 	return result, nil
+}
+
+func activePaperSourceIDs(ctx context.Context, db *gorm.DB) ([]uint64, error) {
+	ids := []uint64{}
+	err := db.WithContext(ctx).Table("sources s").Where(paperSourcePredicate).Where("s.enabled=true").Pluck("s.id", &ids).Error
+	return ids, err
 }
