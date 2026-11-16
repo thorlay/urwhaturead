@@ -95,13 +95,13 @@ export function useReaderRuntimeEffects({
       if (target && panel.contains(target)) {
         return
       }
-      // Keep feed targets in place until their click switches the selected article.
-      if (target instanceof Element && target.closest('.detail-more-menu, .feed-item')) return
+      // Reader controls and portaled menus must not collapse the split before their click.
+      if (target instanceof Element && target.closest('.detail-more-menu, .feed, .feed-ai-more-menu')) return
       closeFloatingReader()
     }
 
     function handleEscKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
         closeFloatingReader()
       }
     }

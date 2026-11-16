@@ -14,7 +14,7 @@ import {
 import { Check, Clock3, MoreHorizontal, RefreshCw, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { FeedBriefingInputItem, FeedItem, Source } from '../types'
 
@@ -648,6 +648,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
               variant="outline"
               size="sm"
               aria-label={loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛讨论简报' : 'AI 速览'}
+              title={tagFilter === 'forum' ? '生成论坛讨论简报' : '生成 AI 速览'}
               onClick={() => {
                 onCloseFeedAIMoreMenu()
                 void onGenerateFeedBriefing(false, tagFilter === 'forum')
@@ -656,6 +657,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             >
               <Sparkles aria-hidden="true" />
               <span className="feed-ai-label">{loadingFeedBriefing ? '生成中...' : tagFilter === 'forum' ? '论坛简报' : 'AI 速览'}</span>
+              <span className="feed-ai-compact-label" aria-hidden="true">{loadingFeedBriefing ? '生成中' : '简报'}</span>
             </Button>
             <Button type="button" variant="ghost" size="icon" aria-label={showFeedSearch ? '收起搜索与筛选' : '打开搜索与筛选'} title="搜索与筛选" aria-expanded={showFeedSearch} onClick={onToggleFeedSearch}>
               <Search aria-hidden="true" />
@@ -673,13 +675,33 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
                   onCloseFeedAIMoreMenu()
                 }}
               >
-                <DropdownMenuTrigger asChild disabled={loadingFeedBriefing}>
+                <DropdownMenuTrigger asChild>
                   <Button type="button" variant="ghost" size="sm" aria-expanded={showFeedAIMoreMenu}>
                     <MoreHorizontal aria-hidden="true" />
                     <span className="sr-only">更多</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="feed-ai-more-menu" aria-label="AI 速览更多操作">
+                <DropdownMenuContent className="feed-ai-more-menu" aria-label="阅读流更多操作">
+                  <DropdownMenuLabel>阅读状态</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup value={favoriteOnly ? 'favorite' : unreadOnly ? 'unread' : 'all'} onValueChange={(value) => {
+                    onSetUnreadOnly(value === 'unread')
+                    onSetFavoriteOnly(value === 'favorite')
+                  }}>
+                    <DropdownMenuRadioItem className="feed-ai-more-item" value="all">全部阅读状态</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem className="feed-ai-more-item" value="unread">未读 {unreadVisibleCount}</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem className="feed-ai-more-item" value="favorite">收藏 {favoriteVisibleCount}</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  {tagFilter !== 'forum' && <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>资讯范围</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup value={feedMode} onValueChange={(value) => onChangeFeedMode(value as 'all' | 'important')}>
+                      <DropdownMenuRadioItem className="feed-ai-more-item" value="all">全部资讯</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem className="feed-ai-more-item" value="important">重点阅读</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    {catchUpCount > 0 && !catchUpError && <DropdownMenuItem className="feed-ai-more-item" disabled={catchUpLoading || loadingFeedBriefing} onSelect={() => void onGenerateCatchUpBriefing()}>补课速览（{catchUpCount} 篇新增）</DropdownMenuItem>}
+                    {catchUpCount > 0 && !catchUpError && <DropdownMenuItem className="feed-ai-more-item" disabled={catchUpLoading} onSelect={onMarkCaughtUp}>标记新增为已处理</DropdownMenuItem>}
+                  </>}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="feed-ai-more-item"
                     disabled={loadingFeedBriefing}
@@ -749,6 +771,11 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         </div>
       </div>
 
+      {(unreadOnly || favoriteOnly || (feedMode === 'important' && tagFilter !== 'forum')) && <div className="feed-active-reading-filter">
+        {feedMode === 'important' && tagFilter !== 'forum' && <button type="button" className="chip" onClick={() => onChangeFeedMode('all')}>重点阅读 ×</button>}
+        {(unreadOnly || favoriteOnly) && <button type="button" className="chip" onClick={() => { onSetUnreadOnly(false); onSetFavoriteOnly(false) }}>{favoriteOnly ? '仅收藏' : '仅未读'} ×</button>}
+      </div>}
+
       {feedMode === 'important' && <p className="feed-highlight-hint">来自最近 72 小时 AI 速览的优先阅读推荐 · 最多 15 条，每源最多 3 条 · 未生成速览的来源可能未覆盖</p>}
 
       {tagFilter !== 'forum' && (catchUpCount > 0 || catchUpError) && <div className={cn('feed-catch-up', catchUpError && 'is-error')}>
@@ -810,7 +837,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           <ReaderFeedFilters
             showFeedSearch={showFeedSearch}
             showAdvancedFilters={showAdvancedFilters}
-            hasActiveFilters={hasActiveFilters}
+            compact={showFloatingReader && readerView === 'stream'}
             keyword={keyword}
             tagFilter={tagFilter}
             sourceFilter={sourceFilter}
@@ -831,8 +858,6 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
           />
         </Suspense>
       )}
-
-      <div className="module-divider" aria-hidden="true" />
 
       <p className="feed-shortcuts">快捷键: `j` / `k` 切换，`o` 打开原文，`esc` 关闭浮窗</p>
 

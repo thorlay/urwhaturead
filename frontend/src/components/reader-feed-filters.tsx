@@ -6,7 +6,7 @@ import type { Source } from '../types'
 type ReaderFeedFiltersProps = {
   showFeedSearch: boolean
   showAdvancedFilters: boolean
-  hasActiveFilters: boolean
+  compact?: boolean
   keyword: string
   tagFilter: string
   sourceFilter: string
@@ -30,7 +30,7 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
   const {
     showFeedSearch,
     showAdvancedFilters,
-    hasActiveFilters,
+    compact = false,
     keyword,
     tagFilter,
     sourceFilter,
@@ -49,6 +49,7 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
     unreadOnly,
     favoriteOnly,
   } = props
+  const hasVisibleChips = Boolean(keyword.trim() || (tagFilter && tagFilter !== 'forum') || sourceFilter || mutedSiteKeys.length || (!compact && (unreadOnly || favoriteOnly)))
 
   return (
     <>
@@ -102,14 +103,14 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
         </>
       )}
 
-      {hasActiveFilters && (
+      {hasVisibleChips && (
         <div className="filter-chips">
           {keyword.trim() && (
             <button type="button" className="chip" onClick={() => onRemoveFilter('keyword')}>
               关键词: {keyword.trim()} ×
             </button>
           )}
-          {tagFilter && (
+          {tagFilter && tagFilter !== 'forum' && (
             <button type="button" className="chip" onClick={() => onRemoveFilter('tag')}>
               标签: {tagFilter} ×
             </button>
@@ -119,12 +120,12 @@ export function ReaderFeedFilters(props: ReaderFeedFiltersProps) {
               {sourceFilterChipLabel} ×
             </button>
           )}
-          {unreadOnly && (
+          {unreadOnly && !compact && (
             <button type="button" className="chip" onClick={() => onRemoveFilter('unread')}>
               仅未读 ×
             </button>
           )}
-          {favoriteOnly && (
+          {favoriteOnly && !compact && (
             <button type="button" className="chip" onClick={() => onRemoveFilter('favorite')}>
               仅收藏 ×
             </button>

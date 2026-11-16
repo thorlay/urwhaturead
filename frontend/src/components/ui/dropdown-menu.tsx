@@ -1,4 +1,5 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { Check } from 'lucide-react'
 import type { ComponentProps } from 'react'
 
 import { cn } from '@/lib/utils'
@@ -51,4 +52,20 @@ function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof Dr
   return <DropdownMenuPrimitive.Separator data-slot="dropdown-menu-separator" className={cn('-mx-1 my-1 h-px bg-border', className)} {...props} />
 }
 
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger }
+const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
+
+function DropdownMenuRadioItem({ className, children, ...props }: ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      className={cn('relative flex cursor-default select-none items-center gap-2 px-2 py-1.5 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 focus:bg-secondary focus:text-secondary-foreground', className)}
+      {...props}
+    >
+      <span className="inline-flex size-4 shrink-0 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator><Check className="size-4" aria-hidden="true" /></DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
+  )
+}
+
+export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger }

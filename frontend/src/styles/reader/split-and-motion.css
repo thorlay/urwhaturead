@@ -53,6 +53,11 @@
   min-width: 0;
 }
 
+.feed-active-reading-filter,
+.feed-ai-compact-label {
+  display: none;
+}
+
 .feed-view-controls .feed-priority-toggle {
   border: 0;
   padding: 0;
@@ -144,6 +149,23 @@
 @media (min-width: 981px) {
   .reader-layout-split {
     grid-template-columns: minmax(420px, 500px) minmax(0, 1fr);
+  }
+
+  .reader-layout-split .feed-view-controls,
+  .reader-layout-split .feed-catch-up,
+  .reader-layout-split .feed-highlight-hint,
+  .reader-layout-split .feed-ai-label {
+    display: none;
+  }
+
+  .reader-layout-split .feed-ai-compact-label {
+    display: inline;
+  }
+
+  .reader-layout-split .feed-active-reading-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
 
   .reader-layout-split .feed-item-compact-row {
