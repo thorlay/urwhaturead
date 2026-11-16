@@ -44,6 +44,7 @@ import { summaryTaskKindLabel, summaryTaskStatusLabel } from './lib/summary-task
 import type { FeedBriefingLibraryItem } from './types'
 import './App.css'
 import './styles/ai-library.css'
+import './styles/workspace-ui.css'
 
 const SourceManagementPanel = lazy(async () => {
   const module = await import('@/components/source-management-panel')

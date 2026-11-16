@@ -44,7 +44,7 @@ export function AppTopbar(props: AppTopbarProps) {
 
   return (
     <Fragment>
-      <header className={`topbar${activeTab === 'reader' ? ' topbar-reading' : ''}`}>
+      <header className="topbar topbar-unified">
         <div className="topbar-brand">
           <span className="topbar-brand-mark" aria-hidden="true">
             <img src="/urwhaturead.svg?v=swimming-fish" alt="" width="32" height="32" />
@@ -121,20 +121,20 @@ export function AppTopbar(props: AppTopbarProps) {
             </Button>
           )}
         </div>
-        {activeTab === 'reader' && <div className="topbar-reading-menu">
+        <div className="topbar-mobile-menu">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" aria-label="阅读器选项" title="阅读器选项"><MoreHorizontal aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="页面选项" title="页面选项"><MoreHorizontal aria-hidden="true" /></Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent aria-label="阅读器选项">
+            <DropdownMenuContent aria-label="页面选项">
               <DropdownMenuLabel>模型：{aiModel || '-'}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={loadingSources || loadingFeed} onSelect={onRefreshAll}><RefreshCw aria-hidden="true" />刷新当前视图</DropdownMenuItem>
-              {pendingFeedCount > 0 && <DropdownMenuItem disabled={loadingFeed} onSelect={onApplyPendingFeedUpdates}><ArrowDown aria-hidden="true" />查看 {pendingFeedCount} 条更新</DropdownMenuItem>}
+              {activeTab === 'reader' && pendingFeedCount > 0 && <DropdownMenuItem disabled={loadingFeed} onSelect={onApplyPendingFeedUpdates}><ArrowDown aria-hidden="true" />查看 {pendingFeedCount} 条更新</DropdownMenuItem>}
               {showAdminLogout && <DropdownMenuItem onSelect={onAdminLogout}><LogOut aria-hidden="true" />退出管理</DropdownMenuItem>}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>}
+        </div>
       </header>
 
       {activeTab === 'reader' && pendingFeedCount > 0 && (

@@ -13,6 +13,7 @@ import {
 } from 'react'
 import { Check, Clock3, MoreHorizontal, RefreshCw, RotateCcw, Search, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { WorkspaceToolbar } from '@/components/workspace-toolbar'
 import { Select } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -632,17 +633,17 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
         feedTitleOnlyMode && 'feed-title-only',
       )}
     >
-      <div className="feed-header">
+      <WorkspaceToolbar className="feed-header">
         <div className="feed-header-title">
           <h2 className="sr-only">{tagFilter === 'papers' ? '论文精选' : tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
           <p className="hint">{tagFilter === 'papers' ? 'Hugging Face 日榜与周榜去重 · 每日约 4 篇 · 方法、证据与局限 · 洛杉矶时间每天 08:00 生成' : tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
-          <div className="feed-channel-tabs" role="group" aria-label="阅读频道">
+          <div className="feed-channel-tabs workspace-tabs" role="group" aria-label="阅读频道">
             <Button size="sm" variant={!['forum','papers'].includes(tagFilter) ? 'default' : 'ghost'} aria-pressed={!['forum','papers'].includes(tagFilter)} onClick={() => onApplyFilters('news')}>资讯</Button>
             <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
             <Button size="sm" variant={tagFilter === 'papers' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'papers'} onClick={() => {onApplyFilters('papers'); void onGenerateFeedBriefing(false,false,true)}}>论文精选</Button>
           </div>
         </div>
-        <div className="feed-header-tools">
+        <div className="feed-header-tools workspace-toolbar-actions">
           <div className="feed-ai-actions">
             <Button
               type="button"
@@ -772,7 +773,7 @@ export function ReaderFeedPanel(props: ReaderFeedPanelProps) {
             <option value="favorite">收藏 {favoriteVisibleCount}</option>
           </Select>
         </div>
-      </div>
+      </WorkspaceToolbar>
 
       {(unreadOnly || favoriteOnly || (feedMode === 'important' && !['forum','papers'].includes(tagFilter))) && <div className="feed-active-reading-filter">
         {feedMode === 'important' && !['forum','papers'].includes(tagFilter) && <button type="button" className="chip" onClick={() => onChangeFeedMode('all')}>重点阅读 ×</button>}

@@ -18,6 +18,7 @@ async function mockReader(page: Page, admin = false) {
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
     if (path === '/api/v1/admin/session') return json({ data: { enabled: true, configured: true, authenticated: admin, ai_model: 'test' } })
     if (path === '/api/v1/sources') return json({ data: sources, meta: { count: sources.length } })
+    if (path === '/api/v1/admin/source-status') return json({ data: [], meta: { count: 0, window_hours: 24, generated_at: now } })
     if (path === '/api/v1/feed') {
       const selected = url.searchParams.get('source_ids')
       const data = selected && selected !== '1' ? [{ ...rows[0], id: 201, source_id: 2, source_name: 'HN 精选' }] : rows
@@ -29,6 +30,70 @@ async function mockReader(page: Page, admin = false) {
     return json({ error: 'not found' }, 404)
   })
 }
+
+test('three main tabs share stable chrome and toolbar controls at every width', async ({ page }, testInfo) => {
+  test.setTimeout(60000)
+  await mockReader(page, true)
+  const mobile = testInfo.project.name.startsWith('mobile-')
+  for (const width of mobile ? [320, 390, 768] : [1024, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/')
+    const topbar = page.locator('.topbar-unified')
+    const initial = await topbar.boundingBox()
+    const nav = await topbar.locator('.view-tabs').boundingBox()
+    const controlStyle = (el: Element) => {
+      const style = getComputedStyle(el)
+      return { height: style.height, radius: style.borderRadius, font: style.fontSize, weight: style.fontWeight }
+    }
+    const readerControl = await page.getByRole('button', { name: '打开搜索与筛选', exact: true }).evaluate(controlStyle)
+    for (const view of ['AI', '管理', '阅读流']) {
+      await topbar.getByRole('tab', { name: view === '管理' ? /^管理/ : view, exact: view !== '管理' }).click()
+      const toolbar = page.locator('.workspace-toolbar').first()
+      await expect(toolbar).toBeVisible()
+      const current = (await topbar.boundingBox())!
+      const currentNav = (await topbar.locator('.view-tabs').boundingBox())!
+      expect(Math.abs(current.y - initial!.y)).toBeLessThanOrEqual(1)
+      expect(Math.abs(current.height - initial!.height)).toBeLessThanOrEqual(1)
+      expect(Math.abs(currentNav.x - nav!.x)).toBeLessThanOrEqual(1)
+      expect(Math.abs(currentNav.y - nav!.y)).toBeLessThanOrEqual(1)
+      const control = view === 'AI' ? toolbar.getByRole('button', { name: /^搜索/ })
+        : view === '管理' ? toolbar.getByRole('button', { name: /刷新状态|更新中/ })
+        : toolbar.getByRole('button', { name: '打开搜索与筛选', exact: true })
+      await expect(control).toBeEnabled()
+      expect(await control.evaluate(controlStyle)).toEqual(readerControl)
+      await expect(toolbar.locator('.workspace-toolbar-actions')).toHaveCSS('flex-direction', 'row')
+      if (view === '管理') {
+        await expect(page.getByRole('tablist', { name: '管理页面视图' })).toHaveCSS('flex-direction', 'row')
+        await toolbar.getByRole('button', { name: '更多管理', exact: true }).click()
+        await expect(page.getByRole('menuitem', { name: '检查系统', exact: true })).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menu')).toHaveCount(0)
+      }
+      if (view === 'AI') {
+        const empty = (await page.locator('.ai-library-empty').boundingBox())!
+        expect(empty.width).toBeGreaterThan(Math.min(260, width * 0.6))
+      }
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+      if (mobile) {
+        await topbar.getByRole('button', { name: '页面选项', exact: true }).click()
+        await expect(page.getByRole('menuitem', { name: '刷新当前视图', exact: true })).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menu')).toHaveCount(0)
+      }
+      if (width === 1440 || width === 390) await page.screenshot({ path: `/tmp/quick-unified-${view}-${width}.png`, fullPage: true })
+    }
+    if (mobile) {
+      await topbar.getByRole('button', { name: '页面选项', exact: true }).click()
+      await expect(page.getByRole('menuitem', { name: '刷新当前视图', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+    }
+  }
+  await page.getByRole('tab', { name: /^管理/ }).click()
+  const sourceTabs = page.getByRole('tablist', { name: '管理页面视图' })
+  await sourceTabs.getByRole('tab', { name: '来源管理', exact: true }).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(sourceTabs.getByRole('tab', { name: '运行状态', exact: true })).toHaveAttribute('aria-selected', 'true')
+})
 
 test('split reading gives titles space and bounds desktop reading measure', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop split layout')
@@ -203,7 +268,7 @@ test('reader chrome maximizes list height without hiding navigation or refresh',
   await mockReader(page, true)
   await page.setViewportSize({ width: testInfo.project.name.startsWith('mobile-') ? 320 : 1440, height: 800 })
   await page.goto('/')
-  const topbar = page.locator('.topbar-reading')
+  const topbar = page.locator('.topbar-unified')
   await expect(topbar).toBeVisible()
   expect((await topbar.boundingBox())!.height).toBeLessThan(48)
   await expect(page.getByRole('tab', { name: '阅读流', exact: true })).toBeVisible()
@@ -214,7 +279,7 @@ test('reader chrome maximizes list height without hiding navigation or refresh',
   expect(list!.y).toBeLessThan(testInfo.project.name.startsWith('mobile-') ? 140 : 100)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
   if (testInfo.project.name.startsWith('mobile-')) {
-    const options = page.getByRole('button', { name: '阅读器选项', exact: true })
+    const options = page.getByRole('button', { name: '页面选项', exact: true })
     await options.focus()
     await page.keyboard.press('Enter')
     await expect(page.getByText('模型：test', { exact: true })).toBeVisible()
@@ -232,10 +297,10 @@ test('reader chrome maximizes list height without hiding navigation or refresh',
   expect((await page.locator('.feed-list').boundingBox())!.y).toBe(list!.y)
   await page.screenshot({ path: `/tmp/quick-reader-top-aligned-${testInfo.project.name}.png`, fullPage: true })
   await page.getByRole('tab', { name: 'AI', exact: true }).click()
-  await expect(page.locator('.topbar-reading')).toHaveCount(0)
+  await expect(page.locator('.topbar-unified')).toBeVisible()
   await expect(page.getByRole('heading', { name: '每日 AI 简报', exact: true })).toBeVisible()
   await page.getByRole('tab', { name: '阅读流', exact: true }).click()
-  await expect(page.locator('.topbar-reading')).toBeVisible()
+  await expect(page.locator('.topbar-unified')).toBeVisible()
 })
 
 test('split forum keeps one operation row and exposes reading states in its menu', async ({ page }, testInfo) => {

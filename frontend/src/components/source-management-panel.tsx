@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { WorkspaceToolbar } from '@/components/workspace-toolbar'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -228,26 +231,25 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
   return (
     <main className="source-management-page">
       <section className="panel sources source-manage-panel">
-        <div className="source-manage-head">
-          <div className="source-manage-title">
-            <p className="source-manage-eyebrow">SOURCE OPERATIONS</p>
+        <WorkspaceToolbar className="source-manage-head">
+          <div className="source-manage-title workspace-toolbar-heading">
             <h2>来源管理</h2>
-            <p className="hint">优先处理异常来源，其余来源保持轻量维护。</p>
+            <p className="hint workspace-toolbar-description">优先处理异常来源，其余来源保持轻量维护。</p>
           </div>
-          <div className="source-manage-head-actions">
-            <Button type="button" size="sm" onClick={() => setShowSourceTools((value) => !value)}>
+          <div className="source-manage-head-actions workspace-toolbar-actions">
+            <Button type="button" size="sm" aria-expanded={showSourceTools} onClick={() => setShowSourceTools((value) => !value)}>
               {showSourceTools ? '收起来源工具' : '添加来源'}
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => void onLoadStatus()} disabled={loadingStatus}>
               {loadingStatus ? '更新中...' : '刷新状态'}
             </Button>
-            <details className="source-manage-more-actions">
-              <summary className="button button-outline button-sm">更多管理</summary>
-              <div className="source-manage-more-menu">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="sm">更多管理</Button></DropdownMenuTrigger>
+              <DropdownMenuContent className="source-manage-menu" aria-label="更多管理">
                 <div className="manage-model-entry">
-                  <Button type="button" variant="ghost" size="sm" className="manage-model-button" onClick={onToggleManageModelPicker}>
+                  <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onToggleManageModelPicker() }}>
                     模型：{aiModel}
-                  </Button>
+                  </DropdownMenuItem>
                   {showManageModelPicker && (
                     <div className="manage-model-panel">
                       <Select value={aiModel} onChange={(event) => onChangeAIModel(event.target.value)}>
@@ -257,20 +259,20 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
                     </div>
                   )}
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => void loadSystemStatus()} disabled={loadingSystemStatus}>
+                <DropdownMenuItem onSelect={() => void loadSystemStatus()} disabled={loadingSystemStatus}>
                   {loadingSystemStatus ? '检查中...' : '检查系统'}
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onReclassifySources()} disabled={reclassifyingSources}>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void onReclassifySources()} disabled={reclassifyingSources}>
                   {reclassifyingSources ? '重分类中...' : '自动重分类'}
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onExportSources()} disabled={exportingSources || importingSources}>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void onExportSources()} disabled={exportingSources || importingSources}>
                   {exportingSources ? '导出中...' : '导出来源 JSON'}
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => importFileInputRef.current?.click()} disabled={importingSources || exportingSources}>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => importFileInputRef.current?.click()} disabled={importingSources || exportingSources}>
                   {importingSources ? '导入中...' : '导入来源 JSON'}
-                </Button>
-              </div>
-            </details>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <input
               ref={importFileInputRef}
               type="file"
@@ -279,7 +281,7 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
               onChange={handleImportFileChange}
             />
           </div>
-        </div>
+        </WorkspaceToolbar>
 
         <div className="source-management-summary" aria-label="来源概览">
           <button type="button" className="source-summary-stat" onClick={() => onSetSourceManageQuickView('all')}>
@@ -299,26 +301,12 @@ export function SourceManagementPanel({ controller }: SourceManagementPanelConta
           </button>
         </div>
 
-        <div className="source-manage-nav" role="tablist" aria-label="管理页面视图">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={manageTab === 'sources'}
-            className={cn('source-manage-nav-tab', manageTab === 'sources' && 'active')}
-            onClick={() => setManageTab('sources')}
-          >
-            来源管理
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={manageTab === 'status'}
-            className={cn('source-manage-nav-tab', manageTab === 'status' && 'active')}
-            onClick={() => setManageTab('status')}
-          >
-            运行状态
-          </button>
-        </div>
+        <Tabs value={manageTab} onValueChange={(value) => setManageTab(value as 'sources' | 'status')}>
+          <TabsList className="source-manage-nav workspace-tabs" aria-label="管理页面视图">
+            <TabsTrigger value="sources">来源管理</TabsTrigger>
+            <TabsTrigger value="status">运行状态</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {sourcesError && (
           <div className="inline-error">

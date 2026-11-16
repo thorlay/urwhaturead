@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, FileText, RefreshCw, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { WorkspaceToolbar } from '@/components/workspace-toolbar'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -330,28 +331,27 @@ export function AILibraryPanel(props: AILibraryPanelProps) {
   return (
     <main className="ai-library-page">
       <section className="ai-library-panel">
-        <header className="ai-library-masthead">
-          <div>
-            <p className="ai-library-eyebrow">个人简报</p>
+        <WorkspaceToolbar className="ai-library-masthead">
+          <div className="workspace-toolbar-heading">
             <h2>{activeView === 'briefings' ? '每日 AI 简报' : '文章摘要归档'}</h2>
-            <p>{activeView === 'briefings' ? '按日期回看 AI 对阅读流做出的判断。' : '查找曾经生成过摘要的文章。'}</p>
+            <p className="workspace-toolbar-description">{activeView === 'briefings' ? '按日期回看 AI 对阅读流做出的判断。' : '查找曾经生成过摘要的文章。'}</p>
           </div>
-          <div className="ai-library-masthead-actions">
+          <div className="ai-library-masthead-actions workspace-toolbar-actions">
             <Tabs value={activeView} onValueChange={(value) => switchView(value as AILibraryView)} className="ai-library-view-switch">
-              <TabsList>
+              <TabsList className="workspace-tabs" aria-label="AI 内容视图">
                 <TabsTrigger value="briefings"><BookOpen aria-hidden="true" />简报</TabsTrigger>
                 <TabsTrigger value="articles"><FileText aria-hidden="true" />摘要</TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button type="button" variant="outline" size="sm" className={`ai-toolbar-button ${showFilters || filterCount > 0 ? 'active' : ''}`} onClick={() => setShowFilters((current) => !current)}>
+            <Button type="button" variant="outline" size="sm" aria-expanded={showFilters} aria-controls="ai-library-filters" className={`ai-toolbar-button ${showFilters || filterCount > 0 ? 'active' : ''}`} onClick={() => setShowFilters((current) => !current)}>
               <Search aria-hidden="true" />搜索{filterCount > 0 && <span>{filterCount}</span>}
             </Button>
             <Button type="button" variant="outline" size="icon" className="ai-icon-button" onClick={onRefresh} disabled={loading} aria-label="刷新 AI 内容"><RefreshCw aria-hidden="true" className={loading ? 'is-spinning' : ''} /></Button>
           </div>
-        </header>
+        </WorkspaceToolbar>
 
         {showFilters && (
-          <form className="ai-library-filter-drawer" onSubmit={(event) => { event.preventDefault(); onApplySearch() }}>
+          <form id="ai-library-filters" className="ai-library-filter-drawer" onSubmit={(event) => { event.preventDefault(); onApplySearch() }}>
             <label className="ai-search-field">
               <Search aria-hidden="true" />
               <Input value={search} onChange={(event) => onChangeSearch(event.target.value)} placeholder="搜索主题、来源或摘要内容" autoFocus />
