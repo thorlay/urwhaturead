@@ -901,3 +901,66 @@ test('paper picks has its own channel and explains methods evidence limitations 
   await page.getByRole('button',{name:'资讯',exact:true}).click()
   await expect(page.locator('.feed-header-title h2')).toHaveText('聚合流')
 })
+
+test('discussion analysis explains disagreements with actual reply links and sample scope', async ({page}) => {
+  await mockAPI(page)
+  const article = {...feedItem,source_tag:'forum',link:'https://v2ex.com/t/101'}
+  await page.route('**/api/v1/articles/101',route=>json(route,article))
+  await page.route('**/api/v1/articles/101/enrichment',route=>json(route,article))
+  const data={article_id:101,summary:'## 争论焦点\n在争价格与效率 [回复 R01](https://v2ex.com/t/101#reply1)\n## 各方观点与理由\n有人重视效率，有人重视成本 [回复 R02](https://v2ex.com/t/101#reply2)\n## 冲突原因\n可能原因（推测）：使用频率不同。',model:'test',generated_at:generatedAt,cache_hit:false,
+    sample:{available_replies:20,analyzed_replies:2,reported_total_replies:100,method:'间隔楼层样本',read_at:generatedAt,dated_replies:0,partial:true},
+    references:[{id:'R01',author:'Alice',link:'https://v2ex.com/t/101#reply1',excerpt:'Saves time'},{id:'R02',author:'Bob',link:'https://v2ex.com/t/101#reply2',excerpt:'Costs too much'}]}
+  await page.route('**/api/v1/articles/101/discussion-analysis**',route=>json(route,{data:{status:'succeeded',analysis:data}}))
+  await page.goto('/')
+  await page.locator('.feed-item').filter({hasText:feedItem.title}).click()
+  await page.getByRole('button',{name:'为什么讨论激烈',exact:true}).click()
+  const panel=page.getByRole('region',{name:'讨论分析'})
+  await expect(panel.getByRole('heading',{name:'争论焦点',exact:true})).toBeVisible()
+  await expect(panel.getByText(/接口返回 20 条有效回复/)).toBeVisible()
+  await expect(panel.getByText(/本次分析 2 条/)).toBeVisible()
+  await expect(panel.getByRole('link',{name:'回复 R02',exact:true})).toHaveAttribute('href','https://v2ex.com/t/101#reply2')
+  await expect(panel.getByText(/不代表完整讨论或社区立场/)).toBeVisible()
+})
+
+test('discussion analysis reports insufficient replies without inventing an explanation', async ({page}) => {
+  await mockAPI(page)
+  const article={...feedItem,source_tag:'forum',link:'https://nga.178.com/read.php?tid=123'}
+  await page.route('**/api/v1/articles/101',route=>json(route,article))
+  await page.route('**/api/v1/articles/101/enrichment',route=>json(route,article))
+  await page.route('**/api/v1/articles/101/discussion-analysis**',route=>json(route,{error:'回复材料不足：目前只读到 1 条有效回复，暂时无法分析争论焦点'},422))
+  await page.goto('/')
+  await page.locator('.feed-item').filter({hasText:feedItem.title}).click()
+  await page.getByRole('button',{name:'为什么讨论激烈',exact:true}).click()
+  await expect(page.getByRole('alert')).toContainText('回复材料不足')
+  await expect(page.getByRole('heading',{name:'各方观点与理由',exact:true})).toHaveCount(0)
+})
+
+test('closing a pending discussion analysis cannot leak its result into another article', async ({page}) => {
+  await mockAPI(page)
+  const articles=[{...feedItem,source_tag:'forum',link:'https://v2ex.com/t/101'},{...feedItem,id:202,title:'Another forum thread',source_tag:'forum',link:'https://v2ex.com/t/202'}]
+  await page.route('**/api/v1/feed?**',route=>json(route,{data:articles,meta:{next_cursor:''}}))
+  for (const article of articles) {
+    await page.route(`**/api/v1/articles/${article.id}`,route=>json(route,article))
+    await page.route(`**/api/v1/articles/${article.id}/enrichment`,route=>json(route,article))
+  }
+  let release!:()=>void
+  const gate=new Promise<void>(resolve=>{release=resolve})
+  let finished!:()=>void
+  const delivered=new Promise<void>(resolve=>{finished=resolve})
+  await page.route('**/api/v1/articles/101/discussion-analysis**',async route=>{
+    await gate
+    await json(route,{data:{status:'succeeded',analysis:{article_id:101,summary:'## 旧帖的争论结果',model:'test',generated_at:generatedAt,cache_hit:false,sample:{available_replies:2,analyzed_replies:2,method:'test',read_at:generatedAt,dated_replies:0,partial:true},references:[]}}}).catch(()=>{})
+    finished()
+  })
+  await page.goto('/')
+  await page.locator('.feed-item').filter({hasText:feedItem.title}).click()
+  const started=page.waitForRequest(r=>r.url().includes('/101/discussion-analysis'))
+  await page.getByRole('button',{name:'为什么讨论激烈',exact:true}).click()
+  await started
+  await page.getByRole('button',{name:'关闭',exact:true}).click()
+  await page.locator('.feed-item').filter({hasText:'Another forum thread'}).click()
+  release();await delivered
+  await expect(page.locator('.detail-title')).toHaveText('Another forum thread')
+  await expect(page.getByRole('heading',{name:'旧帖的争论结果'})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'为什么讨论激烈',exact:true})).toBeEnabled()
+})

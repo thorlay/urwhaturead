@@ -398,3 +398,29 @@ export type AdminSessionResponse = {
     ai_model?: string
   }
 }
+
+export type DiscussionAnalysis = {
+  article_id: number
+  summary: string
+  model: string
+  generated_at: string
+  cache_hit: boolean
+  sample: {
+    available_replies: number
+    analyzed_replies: number
+    reported_total_replies?: number
+    method: string
+    read_at: string
+    first_reply_at?: string
+    last_reply_at?: string
+    dated_replies: number
+    partial: boolean
+  }
+  references: Array<{id: string; author: string; link: string; excerpt: string; published_at?: string; upvotes?: number}>
+}
+export type DiscussionAnalysisResponse = {data: {
+  status: 'idle' | 'queued' | 'running' | 'succeeded' | 'failed'
+  task_key?: string
+  error?: string
+  analysis?: DiscussionAnalysis
+}}
