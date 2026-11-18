@@ -446,7 +446,10 @@ test('catch-up briefing shows the selected batch and stays busy through backgrou
   try {
     expect((await request).postDataJSON().article_ids).toEqual(articles.map(({ id }) => id))
     await page.clock.fastForward(5 * 60 * 1000)
-    await expect(catchUp.getByRole('button', { name: '重新检查补课内容' })).toBeDisabled()
+    await page.locator('.feed-ai-more').getByRole('button').click()
+    await expect(page.getByRole('menuitem', { name: '重新检查新增内容', exact: true })).toBeDisabled()
+    await expect(page.getByRole('menuitem', { name: '标记新增为已处理', exact: true })).toBeDisabled()
+    await page.keyboard.press('Escape')
   } finally {
     briefingResponse.resolve()
   }
