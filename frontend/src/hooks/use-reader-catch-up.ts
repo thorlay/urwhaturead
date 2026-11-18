@@ -38,8 +38,11 @@ export function useReaderCatchUp({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestSequence = useRef(0)
+  const generating = useRef(false)
 
   const refresh = useCallback(async () => {
+    if (generating.current) return
+
     const requestID = ++requestSequence.current
     try {
       setLoading(true)
@@ -58,6 +61,10 @@ export function useReaderCatchUp({
   }, [checkpoint, toErrorMessage])
 
   const generateCatchUpBriefing = useCallback(async () => {
+    if (generating.current) return
+    generating.current = true
+    ++requestSequence.current
+
     try {
       setLoading(true)
       setError(null)
@@ -72,7 +79,9 @@ export function useReaderCatchUp({
 
       const succeeded = await generateFeedBriefing({
         articleIDs,
-        scopeLabel: `补课速览 · ${totalCount} 篇新增`,
+        scopeLabel: articleIDs.length < totalCount
+          ? `补课速览 · 选取最新 ${articleIDs.length} 篇（共 ${totalCount} 篇新增）`
+          : `补课速览 · ${totalCount} 篇新增`,
         taskKey: `catch-up|${aiModel.trim().toLowerCase()}|${checkpoint}|${articleIDs.join(',')}`,
         title: '补课速览',
       })
@@ -84,11 +93,14 @@ export function useReaderCatchUp({
       setError(message)
       setNotice({ kind: 'error', text: `生成补课速览失败: ${message}` })
     } finally {
+      generating.current = false
       setLoading(false)
     }
   }, [aiModel, checkpoint, generateFeedBriefing, openFeedBriefing, setNotice, toErrorMessage])
 
   const markCaughtUp = useCallback(() => {
+    if (generating.current) return
+
     const nextCheckpoint = new Date().toISOString()
     window.localStorage.setItem(catchUpCheckpointStorageKey, nextCheckpoint)
     ++requestSequence.current

@@ -418,6 +418,42 @@ test('split feed toolbar and catch-up text do not collide', async ({ page }) => 
   await expect(page.locator('.detail-floating')).toBeVisible()
 })
 
+test('catch-up briefing shows the selected batch and stays busy through background checks', async ({ page }) => {
+  await page.clock.install()
+  await mockAPI(page, { catchUpCount: 45 })
+  const articles = Array.from({ length: 30 }, (_, index) => ({ ...feedItem, id: 101 + index }))
+  await page.route('**/api/v1/feed?**', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since') && params.get('limit') === '30') {
+      return json(route, { data: articles, meta: { total_count: 45, next_cursor: 'older' } })
+    }
+    return route.fallback()
+  })
+  const briefingResponse = Promise.withResolvers<void>()
+  await page.route('**/api/v1/feed/briefing', async (route) => {
+    await briefingResponse.promise
+    return json(route, { data: {
+      digest_key: 'test-catch-up', summary: 'Catch-up briefing content', model: 'deepseek-v4-flash',
+      provider: 'test', generated_at: generatedAt, article_count: 30, input_items: [], cache_hit: false,
+    } })
+  })
+  await page.goto('/')
+  const catchUp = page.locator('.feed-catch-up')
+  await expect(catchUp).toContainText('上次处理后新增 45 篇')
+  await page.locator('.feed-ai-more').getByRole('button').click()
+  const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/v1/feed/briefing' && r.method() === 'POST')
+  await page.getByRole('menuitem', { name: '补课速览（45 篇新增）', exact: true }).click()
+  try {
+    expect((await request).postDataJSON().article_ids).toEqual(articles.map(({ id }) => id))
+    await page.clock.fastForward(5 * 60 * 1000)
+    await expect(catchUp.getByRole('button', { name: '重新检查补课内容' })).toBeDisabled()
+  } finally {
+    briefingResponse.resolve()
+  }
+  await expect(page.locator('.detail-floating')).toContainText('选取最新 30 篇（共 45 篇新增）')
+  await expect(page.locator('.detail-floating')).toContainText('Catch-up briefing content')
+})
+
 test('reading targets remain still on hover and sidebar collapse', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await mockAPI(page)
