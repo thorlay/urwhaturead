@@ -898,10 +898,10 @@ func mapFeedItemToArticle(sourceID uint64, item *gofeed.Item) (models.Article, b
 		title = link
 	}
 
-	summary := firstNonEmpty(
-		textclean.NormalizeFromHTML(item.Description),
-		textclean.NormalizeFromHTML(item.Content),
-	)
+	summary := textclean.NormalizeFromHTML(item.Description)
+	if summary == "" {
+		summary = textclean.NormalizeFromHTML(item.Content)
+	}
 	content := textclean.NormalizeFromHTMLBlock(item.Content)
 	if content == "" && (feedextract.IsForumThread(link) || isPaperLink(link)) {
 		// RSSHub often places the complete discussion in description instead of content:encoded.

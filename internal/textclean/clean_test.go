@@ -1,6 +1,11 @@
 package textclean
 
-import "testing"
+import (
+	"html"
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func TestNormalizeInline_RedditBoilerplate(t *testing.T) {
 	input := "&#32; submitted by &#32; /u/gdelacalle [link] [comments]"
@@ -34,4 +39,34 @@ func TestNormalizeFromHTMLBlock_PreservesBreaks(t *testing.T) {
 	if got != want {
 		t.Fatalf("NormalizeFromHTMLBlock(%q)=%q, want %q", input, got, want)
 	}
+}
+
+// Compare against the original regexp pipeline, including its ASCII whitespace
+// semantics and feed boilerplate rules.
+func FuzzNormalizeMatchesRegexp(f *testing.F) {
+	for _, value := range []string{
+		"", "普通标题 English 2026", "a  b\tc\nd\re\ff", "a\vb\u2003c\u00a0d",
+		"<p>Hello&nbsp;world</p><p>submitted by /u/tester [link]</p>",
+		"SUBMITTED BY /U/Test_User [ COMMENTS ]", "[link]\n\t[comments]",
+		"a\xff\xfe b", "submitted by /u/a submitted by /u/b", "a < b > c",
+	} {
+		f.Add(value)
+	}
+	spaces := regexp.MustCompile(`\s+`)
+	f.Fuzz(func(t *testing.T, raw string) {
+		for _, stripHTML := range []bool{false, true} {
+			want := strings.TrimSpace(raw)
+			want = html.UnescapeString(want)
+			want = strings.ReplaceAll(want, "\u00a0", " ")
+			if stripHTML {
+				want = htmlTagPattern.ReplaceAllString(want, " ")
+			}
+			want = redditSubmittedByExpr.ReplaceAllString(want, " ")
+			want = redditMetaTokenExpr.ReplaceAllString(want, " ")
+			want = strings.TrimSpace(spaces.ReplaceAllString(want, " "))
+			if got := normalize(raw, stripHTML); got != want {
+				t.Fatalf("normalize(%q, %t) = %q, want %q", raw, stripHTML, got, want)
+			}
+		}
+	})
 }

@@ -564,6 +564,30 @@ test('immersive reading returns to the same scrolled list', async ({ page }) => 
   expect(await list.evaluate((element) => element.scrollTop)).toBe(scrollBefore)
 })
 
+test('entering immersive reading from the article menu restores the saved article position', async ({ page }) => {
+  const savedTop = 640
+  await page.addInitScript(({ id, top }) => {
+    localStorage.setItem('quick.reader.detail_scroll_positions', JSON.stringify({ [id]: top }))
+  }, { id: feedItem.id, top: savedTop })
+  await mockAPI(page)
+  const articleHTML = Array.from({ length: 80 }, (_, index) => `<p>Reading paragraph ${index + 1}. ${feedItem.content}</p>`).join('')
+  await page.route(/\/api\/v1\/articles\/101(?:\/enrichment)?$/, (route) =>
+    json(route, { ...feedItem, content_html: articleHTML }),
+  )
+
+  await page.goto('/')
+  await page.locator('.feed-list .feed-item').filter({ hasText: feedItem.title }).click()
+  await expect(page.locator('.detail-reading-section')).toContainText('Reading paragraph 80.')
+  const more = page.locator('.detail-toolbar').getByRole('button', { name: '更多', exact: true })
+  await more.click()
+  await page.getByRole('menuitem', { name: '沉浸阅读', exact: true }).click()
+
+  const detail = page.locator('.detail-page')
+  await expect(detail).toBeVisible()
+  await expect(more).toBeFocused()
+  await expect.poll(() => detail.evaluate((element) => element.scrollTop)).toBe(savedTop)
+})
+
 test('mobile whole-page reading restores the list scroll position', async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith('mobile'), 'Mobile document scrolling')
   await mockAPI(page)
@@ -963,4 +987,34 @@ test('closing a pending discussion analysis cannot leak its result into another 
   await expect(page.locator('.detail-title')).toHaveText('Another forum thread')
   await expect(page.getByRole('heading',{name:'旧帖的争论结果'})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'为什么讨论激烈',exact:true})).toBeEnabled()
+})
+
+test('feed checks for updates on a timer without refetching the first page after pagination', async ({ page }) => {
+  await page.clock.install()
+  await disableFeedAutoLoad(page)
+  await mockAPI(page)
+  const nextItem = { ...feedItem, id: 401, title: 'Second page article' }
+  const newItem = { ...feedItem, id: 402, title: 'Newly available article' }
+  let firstPageCalls = 0
+  await page.route('**/api/v1/feed?**', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (params.has('cursor')) return json(route, { data: [nextItem], meta: { next_cursor: '' } })
+    firstPageCalls++
+    const data = firstPageCalls === 1 ? [feedItem] : [newItem, feedItem, nextItem]
+    return json(route, { data, meta: { next_cursor: firstPageCalls === 1 ? 'page-two' : '' } })
+  })
+
+  await page.goto('/')
+  const titles = page.locator('.feed-item-inline-title')
+  await expect(titles).toHaveText([feedItem.title])
+  await page.locator('.feed-load-more-button').click()
+  await expect(titles).toHaveText([feedItem.title, nextItem.title])
+  await page.clock.runFor(1000)
+  expect(firstPageCalls).toBe(1)
+
+  await page.clock.fastForward(60_000)
+  await expect(page.locator('.topbar-feed-update, .topbar button').filter({ hasText: /有 1 条更新|更新\(1\)/ }).first()).toBeAttached()
+  expect(firstPageCalls).toBe(2)
+  await expect(titles).toHaveText([feedItem.title, nextItem.title])
 })

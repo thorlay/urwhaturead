@@ -18,7 +18,7 @@ import { useAppBootstrap } from './hooks/use-app-bootstrap'
 import { useAppTabActions } from './hooks/use-app-tab-actions'
 import { useAILibrarySection } from './hooks/use-ai-library-section'
 import { useReaderFeatureSection } from './hooks/use-reader-feature-section'
-import { useReaderWorkspaceComposition } from './hooks/use-reader-workspace-composition'
+import { buildReaderWorkspaceProps } from './lib/reader-workspace-props'
 import { aiModelOptions, areAIModelsProviderCompatible } from './lib/app-domain'
 import {
   bulkActionLabel,
@@ -422,7 +422,7 @@ function App() {
     onOpenReaderTab()
   }
 
-  const { readerWorkspaceProps } = useReaderWorkspaceComposition({
+  const readerWorkspaceProps = buildReaderWorkspaceProps({
     sidebarState,
     readerSection,
     availableTags,

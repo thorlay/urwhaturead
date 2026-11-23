@@ -237,19 +237,21 @@ export async function listArticleSummaries(params?: {
   return request<ArticleSummaryLibraryResponse>(`/api/v1/articles/summaries?${query.toString()}`)
 }
 
-export async function getArticleSummaryStatus(articleID: number, model?: string): Promise<ArticleSummaryStatusResponse> {
+export async function getArticleSummaryStatus(articleID: number, model?: string, signal?: AbortSignal): Promise<ArticleSummaryStatusResponse> {
   const query = new URLSearchParams()
   if (model?.trim()) query.set('model', model.trim())
   return request<ArticleSummaryStatusResponse>(
     `/api/v1/articles/${articleID}/summary/status${query.toString() ? `?${query.toString()}` : ''}`,
+    { signal },
   )
 }
 
-export async function getArticleSummary(articleID: number, model?: string): Promise<ArticleSummaryResponse | null> {
+export async function getArticleSummary(articleID: number, model?: string, signal?: AbortSignal): Promise<ArticleSummaryResponse | null> {
   const query = new URLSearchParams()
   if (model?.trim()) query.set('model', model.trim())
   const response = await fetch(`/api/v1/articles/${articleID}/summary${query.toString() ? `?${query.toString()}` : ''}`, {
     headers: buildHeaders(),
+    signal,
   })
 
   if (response.status === 404) {

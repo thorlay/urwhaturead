@@ -46,8 +46,6 @@ export function useReaderDataController({
 }: UseReaderDataControllerParams) {
   const snapshot = feedQuery.getSnapshot()
   const feedMode = snapshot.scope?.mode ?? 'all'
-  const feed = snapshot.items
-  const loadingFeed = snapshot.loading
   const pendingFeedCount = snapshot.pendingCount
   const checkingFeedUpdates = snapshot.checkingUpdates
 
@@ -171,11 +169,13 @@ export function useReaderDataController({
 
   useEffect(() => {
     if (activeTab !== 'reader') return
-    const check = () => { if (!document.hidden) void feedQuery.checkUpdates() }
-    check()
-    const timer = window.setInterval(check, 60_000)
+    // Page loads already fetch current data. Keep the background cadence
+    // independent of foreground requests and their results.
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void feedQuery.checkUpdates()
+    }, 60_000)
     return () => window.clearInterval(timer)
-  }, [activeTab, feedQuery, feed, loadingFeed])
+  }, [activeTab, feedQuery])
 
   return {
     feedMode,

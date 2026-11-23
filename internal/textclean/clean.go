@@ -8,7 +8,6 @@ import (
 
 var (
 	htmlTagPattern        = regexp.MustCompile(`<[^>]*>`)
-	spacePattern          = regexp.MustCompile(`\s+`)
 	inlineSpacePattern    = regexp.MustCompile(`[ \t\f\v]+`)
 	lineBreakTagPattern   = regexp.MustCompile(`(?i)<br\s*/?>`)
 	blockCloseTagPattern  = regexp.MustCompile(`(?i)</(?:p|div|section|article|blockquote|h[1-6]|pre|ul|ol|table|tbody|thead|tfoot)>`)
@@ -74,13 +73,47 @@ func normalize(raw string, stripHTML bool) string {
 		value = htmlTagPattern.ReplaceAllString(value, " ")
 	}
 	value = stripFeedBoilerplate(value)
-	value = spacePattern.ReplaceAllString(value, " ")
+	value = collapseWhitespace(value)
 
 	return strings.TrimSpace(value)
 }
 
 func stripFeedBoilerplate(value string) string {
-	value = redditSubmittedByExpr.ReplaceAllString(value, " ")
-	value = redditMetaTokenExpr.ReplaceAllString(value, " ")
+	if strings.Contains(value, "/") {
+		value = redditSubmittedByExpr.ReplaceAllString(value, " ")
+	}
+	if strings.Contains(value, "[") {
+		value = redditMetaTokenExpr.ReplaceAllString(value, " ")
+	}
 	return value
+}
+
+// collapseWhitespace matches Go regexp's ASCII \s, preserving Unicode spaces
+// and vertical tabs. Already normalized text is returned without allocating.
+func collapseWhitespace(value string) string {
+	var result strings.Builder
+	start := 0
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case ' ', '\t', '\n', '\f', '\r':
+			end := i + 1
+			for end < len(value) && strings.ContainsRune(" \t\n\f\r", rune(value[end])) {
+				end++
+			}
+			if value[i] != ' ' || end > i+1 {
+				if result.Cap() == 0 {
+					result.Grow(len(value))
+				}
+				result.WriteString(value[start:i])
+				result.WriteByte(' ')
+				start = end
+			}
+			i = end - 1
+		}
+	}
+	if start == 0 {
+		return value
+	}
+	result.WriteString(value[start:])
+	return result.String()
 }

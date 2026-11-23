@@ -296,3 +296,34 @@ func TestFetchOnceAcceptsXMLBodyEvenWithPlainTextContentType(t *testing.T) {
 		t.Fatalf("expected feed body in result")
 	}
 }
+
+func TestMapFeedItemSummaryPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, description, content, want string
+	}{
+		{"prefer description", "<p>摘要&nbsp;内容</p>", "<p>完整正文</p>", "摘要 内容"},
+		{"empty description", " \t\n ", "<p>完整正文</p>", "完整正文"},
+		{"noise description", "submitted by /u/demo [link] [comments]", "<p>完整正文</p>", "完整正文"},
+		{"no summary", "<p> </p>", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			article, ok := mapFeedItemToArticle(1, &gofeed.Item{
+				Title: "标题", Link: "https://example.com/article",
+				Description: tc.description, Content: tc.content,
+			})
+			if !ok {
+				t.Fatal("valid feed item was rejected")
+			}
+			if tc.want == "" {
+				if article.Summary != nil {
+					t.Fatalf("empty summary = %q, want nil", *article.Summary)
+				}
+			} else if article.Summary == nil || *article.Summary != tc.want {
+				t.Fatalf("summary = %v, want %q", article.Summary, tc.want)
+			}
+			if tc.content != "" && (article.Content == nil || *article.Content != "完整正文") {
+				t.Fatal("full body must be retained regardless of summary choice")
+			}
+		})
+	}
+}

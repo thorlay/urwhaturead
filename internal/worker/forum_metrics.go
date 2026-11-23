@@ -19,10 +19,19 @@ import (
 func (w *RSSWorker) enrichPublicForumMetrics(ctx context.Context, feed *gofeed.Feed) {
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 4)
-	requests := 0
+	type lookup struct {
+		endpoint string
+		hn       bool
+		items    []*gofeed.Item
+	}
+	lookups := make([]*lookup, 0, 40)
+	byEndpoint := make(map[string]*lookup)
+	// Collect before starting requests so duplicate item pointers are never read
+	// while another goroutine writes their extensions.
 	for _, item := range feed.Items {
+		if item == nil {
+			continue
+		}
 		if feedextract.ForumReplyCount(item) != nil {
 			continue
 		}
@@ -46,12 +55,26 @@ func (w *RSSWorker) enrichPublicForumMetrics(ctx context.Context, feed *gofeed.F
 				hn = true
 			}
 		}
-		if endpoint == "" || requests >= 40 {
+		if endpoint == "" {
 			continue
 		}
-		requests++
+		if existing := byEndpoint[endpoint]; existing != nil {
+			existing.items = append(existing.items, item)
+			continue
+		}
+		if len(lookups) >= 40 {
+			continue
+		}
+		job := &lookup{endpoint: endpoint, hn: hn, items: []*gofeed.Item{item}}
+		byEndpoint[endpoint] = job
+		lookups = append(lookups, job)
+	}
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for _, job := range lookups {
 		wg.Add(1)
-		go func(item *gofeed.Item, endpoint string, hn bool) {
+		go func() {
 			defer wg.Done()
 			select {
 			case sem <- struct{}{}:
@@ -59,7 +82,10 @@ func (w *RSSWorker) enrichPublicForumMetrics(ctx context.Context, feed *gofeed.F
 			case <-ctx.Done():
 				return
 			}
-			req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+			if ctx.Err() != nil {
+				return
+			}
+			req, err := http.NewRequestWithContext(ctx, "GET", job.endpoint, nil)
 			if err != nil {
 				return
 			}
@@ -72,22 +98,28 @@ func (w *RSSWorker) enrichPublicForumMetrics(ctx context.Context, feed *gofeed.F
 				return
 			}
 			decoder := json.NewDecoder(io.LimitReader(resp.Body, 1024*1024))
-			if hn {
+			var count *int
+			if job.hn {
 				var data struct {
 					Descendants *int `json:"descendants"`
 				}
 				if decoder.Decode(&data) == nil && data.Descendants != nil && *data.Descendants >= 0 {
-					feedextract.SetForumReplyCount(item, *data.Descendants)
+					count = data.Descendants
 				}
 			} else {
 				var data []struct {
 					Replies *int `json:"replies"`
 				}
 				if decoder.Decode(&data) == nil && len(data) > 0 && data[0].Replies != nil && *data[0].Replies >= 0 {
-					feedextract.SetForumReplyCount(item, *data[0].Replies)
+					count = data[0].Replies
 				}
 			}
-		}(item, endpoint, hn)
+			if count != nil {
+				for _, item := range job.items {
+					feedextract.SetForumReplyCount(item, *count)
+				}
+			}
+		}()
 	}
 	wg.Wait()
 }

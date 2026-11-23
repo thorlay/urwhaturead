@@ -9,15 +9,8 @@ import { useReaderFeatureActions } from './use-reader-feature-actions'
 import { useReaderFeatureDerived } from './use-reader-feature-derived'
 import { useReaderFeatureEffects } from './use-reader-feature-effects'
 import {
-  buildCompactTitleParts,
-  formatReplyCount,
-  formatTimeAgo,
-  formatTimeAgoCompact,
   maxStoredFavoriteArticles,
   maxStoredReadArticles,
-  normalizeImageURL,
-  plainText,
-  truncate,
 } from '../lib/app-utils'
 
 type UseReaderFeatureSectionParams = {
@@ -442,13 +435,6 @@ export function useReaderFeatureSection({
     loadingArticleSummary,
     loadingArticle,
     articleError,
-    buildCompactTitleParts,
-    formatTimeAgo,
-    formatTimeAgoCompact,
-    formatReplyCount,
-    normalizeImageURL,
-    plainText,
-    truncate,
     feedBriefingMeta,
     feedBriefingError,
     feedBriefing,

@@ -19,7 +19,11 @@ export default defineConfig({
           if (id.includes('/react-markdown/') || id.includes('/remark-')) {
             return 'vendor-markdown'
           }
-          return 'vendor'
+          // Keep Markdown's transitive parsers in its lazy chunk; assigning all
+          // other dependencies to vendor would download them on the first page.
+          if (/\/(react|react-dom|scheduler)\//.test(id)) {
+            return 'vendor-react'
+          }
         },
       },
     },

@@ -144,6 +144,7 @@
   - 按 source 轮询周期抓取
   - 失败重试与指数退避
   - 条件请求（ETag/Last-Modified）
+  - 同一批 RSS 的论坛回复数按帖子合并补全，最多请求 40 个不同帖子、并发最多 4；重复条目共享结果
   - 写入文章并记录抓取日志
 
 ### 4.4 基础能力层
@@ -284,6 +285,7 @@
   - `reader`：阅读流 + 详情阅读
   - `ai`：历史聚合速览与文章摘要
   - `sources`：管理（来源列表、健康、批量操作、发现、重分类）
+- Vite 将 React 与 Markdown 分块；Markdown 及其解析依赖随文章详情或 AI 内容按需加载，避免进入首屏公共依赖包。
 
 ### 7.2 主要状态域
 
@@ -311,7 +313,8 @@
 - `use-reader-feature-section`：阅读区主组合层，串联 reader 相关 action/data/effects
 - `use-reader-feature-derived`：阅读流与详情的派生状态
 - `use-reader-feature-effects`：阅读流相关副作用与轮询
-- `use-reader-workspace-composition`：把 reader 状态装配成 `ReaderWorkspace` 所需 props
+- `lib/reader-workspace-props.ts`：集中组装阅读列表、详情和侧栏的参数
+- `use-summary-task-poller`：每轮完成后等待 2.5 秒再检查摘要任务，状态更新与切换文章不会重启轮询；最后一个任务移除或组件卸载时取消请求，晚到响应不能恢复已移除或已替换的任务。
 - `use-source-management-state`：来源管理页状态收敛
 - `use-source-management-actions`：来源管理操作集合（create/update/bulk/discover）
 
@@ -319,7 +322,7 @@
 
 目录：`frontend/src/components/`
 
-- `reader-feed-panel.tsx`：左侧阅读流
+- `reader-feed-panel.tsx`：组装左侧阅读流。`reader-feed-toolbar.tsx` 管理工具栏与筛选界面，`reader-feed-list.tsx` 渲染卡片、加载与空状态、分页按钮，`use-reader-feed-scroll.ts` 处理分屏选中项定位与虚拟列表滚动。
 - `reader-detail-panel.tsx`：右侧详情/沉浸阅读
 - `reader-subscription-sidebar.tsx`：订阅源与标签侧栏
 - `source-management-panel.tsx`：管理页装配层，负责概览、筛选、批量操作与来源工具区
