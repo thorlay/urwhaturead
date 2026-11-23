@@ -602,13 +602,11 @@
 .feed-footer {
   display: flex;
   justify-content: center;
+  padding-block: 0.25rem;
 }
 
 .feed-load-more-button {
-  min-height: 1.22rem;
-  padding: 0 0.42rem;
   color: var(--muted);
-  font-size: 0.7rem;
 }
 
 .feed-auto-load-sentinel {

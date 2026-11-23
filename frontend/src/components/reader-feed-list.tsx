@@ -137,104 +137,104 @@ export function ReaderFeedList(props: ReaderFeedListProps) {
         : '暂无文章'
 
   return (
-    <>
-      <ReaderFeedViewport
-        listRef={feedListRef}
-        className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}
-        split={showFloatingReader && readerView === 'stream'}
-        selection={selectedFeedBriefing ? 'briefing' : selectedArticleID?.toString() ?? null}
-      >
-        {isInitialFeedLoading && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
-          <>
-            <FeedSkeleton />
-            <FeedSkeleton />
-            <FeedSkeleton />
-          </>
-        )}
+    <ReaderFeedViewport
+      listRef={feedListRef}
+      className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}
+      split={showFloatingReader && readerView === 'stream'}
+      selection={selectedFeedBriefing ? 'briefing' : selectedArticleID?.toString() ?? null}
+    >
+      {isInitialFeedLoading && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
+        <>
+          <FeedSkeleton />
+          <FeedSkeleton />
+          <FeedSkeleton />
+        </>
+      )}
 
-        {feedError && feed.length === 0 && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
-          <div className="inline-error">
-            <span>聚合流加载失败: {feedError}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoadFeed()}>
-              <RotateCcw aria-hidden="true" />
-              重试
-            </Button>
-          </div>
-        )}
+      {feedError && feed.length === 0 && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
+        <div className="inline-error">
+          <span>聚合流加载失败: {feedError}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoadFeed()}>
+            <RotateCcw aria-hidden="true" />
+            重试
+          </Button>
+        </div>
+      )}
 
-        {!isInitialFeedLoading && !feedError && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
-          <p className="hint">{emptyFeedMessage}</p>
-        )}
+      {!isInitialFeedLoading && !feedError && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
+        <p className="hint">{emptyFeedMessage}</p>
+      )}
 
-        {virtualTopSpacer > 0 && <div className="feed-list-spacer" style={{ height: virtualTopSpacer }} aria-hidden="true" />}
+      {virtualTopSpacer > 0 && <div className="feed-list-spacer" style={{ height: virtualTopSpacer }} aria-hidden="true" />}
 
-        {renderedRows.map((row) => {
-          if (row.type === 'briefing') {
-            return (
-              <ReaderFeedBriefingCard
-                key={row.key}
-                itemKey={row.key}
-                selectedFeedBriefing={selectedFeedBriefing}
-                feedTitleOnlyMode={feedTitleOnlyMode}
-                feedBriefingPreviewText={feedBriefingPreviewText}
-                feedBriefingScopeLabel={feedBriefingScopeLabel}
-                feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
-                feedBriefingNewArticleCount={feedBriefingNewArticleCount}
-                feedBriefingArticleCount={feedBriefingArticleCount}
-                feedBriefingItemsCount={feedBriefingItems.length}
-                onOpenFeedBriefing={onOpenFeedBriefing}
-              />
-            )
-          }
-
-          const summaryTaskStatus = getSummaryTaskStatus(row.item.id)
+      {renderedRows.map((row) => {
+        if (row.type === 'briefing') {
           return (
-            <ReaderFeedArticleCard
+            <ReaderFeedBriefingCard
               key={row.key}
-              item={row.item}
-              hideSourceName={/^\d+$/.test(sourceFilter)}
-              isActive={selectedArticleID === row.item.id && !selectedFeedBriefing}
-              isRead={readArticleIDSet.has(row.item.id)}
-              isFavorite={favoriteArticleIDSet.has(row.item.id)}
+              itemKey={row.key}
+              selectedFeedBriefing={selectedFeedBriefing}
               feedTitleOnlyMode={feedTitleOnlyMode}
-              showFeedImages={showFeedImages}
-              summaryTaskStatus={summaryTaskStatus}
-              summaryTaskStatusLabel={summaryTaskStatusLabel}
-              onOpenArticle={onOpenArticle}
-              onToggleFavoriteArticle={onToggleFavoriteArticle}
-              normalizeImageURL={normalizeImageURL}
-              formatTimeAgo={formatTimeAgo}
-              formatTimeAgoCompact={formatTimeAgoCompact}
-              formatReplyCount={formatReplyCount}
-              buildCompactTitleParts={buildCompactTitleParts}
-              plainText={plainText}
-              truncate={truncate}
+              feedBriefingPreviewText={feedBriefingPreviewText}
+              feedBriefingScopeLabel={feedBriefingScopeLabel}
+              feedBriefingFreshnessLabel={feedBriefingFreshnessLabel}
+              feedBriefingNewArticleCount={feedBriefingNewArticleCount}
+              feedBriefingArticleCount={feedBriefingArticleCount}
+              feedBriefingItemsCount={feedBriefingItems.length}
+              onOpenFeedBriefing={onOpenFeedBriefing}
             />
           )
-        })}
+        }
 
-        {virtualBottomSpacer > 0 && (
-          <div className="feed-list-spacer" style={{ height: virtualBottomSpacer }} aria-hidden="true" />
-        )}
+        const summaryTaskStatus = getSummaryTaskStatus(row.item.id)
+        return (
+          <ReaderFeedArticleCard
+            key={row.key}
+            item={row.item}
+            hideSourceName={/^\d+$/.test(sourceFilter)}
+            isActive={selectedArticleID === row.item.id && !selectedFeedBriefing}
+            isRead={readArticleIDSet.has(row.item.id)}
+            isFavorite={favoriteArticleIDSet.has(row.item.id)}
+            feedTitleOnlyMode={feedTitleOnlyMode}
+            showFeedImages={showFeedImages}
+            summaryTaskStatus={summaryTaskStatus}
+            summaryTaskStatusLabel={summaryTaskStatusLabel}
+            onOpenArticle={onOpenArticle}
+            onToggleFavoriteArticle={onToggleFavoriteArticle}
+            normalizeImageURL={normalizeImageURL}
+            formatTimeAgo={formatTimeAgo}
+            formatTimeAgoCompact={formatTimeAgoCompact}
+            formatReplyCount={formatReplyCount}
+            buildCompactTitleParts={buildCompactTitleParts}
+            plainText={plainText}
+            truncate={truncate}
+          />
+        )
+      })}
 
-        <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
-      </ReaderFeedViewport>
+      {virtualBottomSpacer > 0 && (
+        <div className="feed-list-spacer" style={{ height: virtualBottomSpacer }} aria-hidden="true" />
+      )}
 
-      {(hasMoreFeed || loadingFeed) && (
+      <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
+      {hasMoreFeed && (
         <div className="feed-footer">
+          <span role="status" className="sr-only">
+            {loadingFeed ? '正在加载更多文章' : feedError ? '加载失败，可以重试' : ''}
+          </span>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="feed-load-more-button"
-            onClick={onLoadMore}
+            onClick={feedError ? () => void onRetryLoadFeed() : onLoadMore}
             disabled={loadingFeed}
           >
-            {loadingFeed ? '加载中...' : '更多'}
+            {loadingFeed ? '正在加载…' : feedError ? '重试' : '加载更多'}
           </Button>
         </div>
       )}
-    </>
+    </ReaderFeedViewport>
   )
 }
 

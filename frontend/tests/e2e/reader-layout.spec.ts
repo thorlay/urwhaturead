@@ -95,6 +95,49 @@ test('three main tabs share stable chrome and toolbar controls at every width', 
   await expect(sourceTabs.getByRole('tab', { name: '运行状态', exact: true })).toHaveAttribute('aria-selected', 'true')
 })
 
+test('pagination action scrolls with the feed and stays in place while loading or retrying', async ({ page }) => {
+  await page.addInitScript(() => {
+    const Observer = window.IntersectionObserver
+    window.IntersectionObserver = class extends Observer {
+      observe(target: Element) {
+        if (!target.classList.contains('feed-auto-load-sentinel')) super.observe(target)
+      }
+    }
+  })
+  await mockReader(page)
+  let releasePage!: () => void
+  const firstPageAttempt = new Promise<void>((resolve) => { releasePage = resolve })
+  let attempts = 0
+  await page.route('**/api/v1/feed?**', async (route) => {
+    const params = new URL(route.request().url()).searchParams
+    if (params.has('since')) return route.fallback()
+    if (!params.has('cursor')) {
+      return route.fulfill({ json: { data: rows.slice(0, 1), meta: { next_cursor: 'more-articles' } } })
+    }
+    expect(params.get('cursor')).toBe('more-articles')
+    if (++attempts === 1) {
+      await firstPageAttempt
+      return route.fulfill({ status: 500, json: { error: 'Page temporarily unavailable' } })
+    }
+    return route.fulfill({ json: { data: rows.slice(1), meta: { next_cursor: '' } } })
+  })
+  await page.goto('/')
+  const list = page.locator('.feed-list')
+  const action = list.locator('.feed-load-more-button')
+  await expect(action).toHaveText('加载更多')
+  const lastRow = (await list.locator('[data-feed-row]').last().boundingBox())!
+  expect((await action.boundingBox())!.y).toBeGreaterThanOrEqual(lastRow.y + lastRow.height)
+  await action.click()
+  await expect(action).toHaveText('正在加载…')
+  await expect(action).toBeDisabled()
+  releasePage()
+  await expect(action).toHaveText('重试')
+  await expect(list.locator('[data-feed-row]')).toHaveCount(1)
+  await action.click()
+  await expect(list.locator('[data-feed-row]')).toHaveCount(2)
+  await expect(action).toHaveCount(0)
+})
+
 test('split reading gives titles space and bounds desktop reading measure', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop split layout')
   await page.setViewportSize({ width: 1920, height: 1080 })
