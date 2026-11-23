@@ -1,4 +1,4 @@
-import { Suspense, lazy, type RefObject } from 'react'
+import { Suspense, lazy, type ReactNode, type RefObject } from 'react'
 import { Check, Clock3, MoreHorizontal, RefreshCw, RotateCcw, Search, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -13,6 +13,7 @@ const ReaderFeedFilters = lazy(async () => {
 })
 
 export type ReaderFeedToolbarProps = {
+  sourceControl?: ReactNode
   feedMode: 'all' | 'important'
   onChangeFeedMode: (mode: 'all' | 'important') => void
   showFloatingReader: boolean
@@ -63,6 +64,7 @@ export type ReaderFeedToolbarProps = {
 }
 
 export function ReaderFeedToolbar({
+  sourceControl,
   feedMode,
   onChangeFeedMode,
   showFloatingReader,
@@ -125,6 +127,7 @@ export function ReaderFeedToolbar({
         </div>
         <div className="feed-header-tools workspace-toolbar-actions">
           <div className="feed-ai-actions">
+            {sourceControl}
             <Button
               type="button"
               variant="outline"

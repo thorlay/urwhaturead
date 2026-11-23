@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ReaderFeedPanel, type ReaderFeedPanelProps } from '@/components/reader-feed-panel'
 import { ReaderSubscriptionSidebar, type ReaderSubscriptionSidebarProps } from '@/components/reader-subscription-sidebar'
 import type { ReaderDetailPanelProps } from '@/components/reader-detail-panel'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 const ReaderDetailPanel = lazy(async () => {
   const module = await import('@/components/reader-detail-panel')
@@ -32,6 +33,7 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
     readerView,
     detailProps,
   } = props
+  const split = showFloatingReader && readerView === 'stream'
 
   return (
     <>
@@ -57,10 +59,10 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
         />
       )}
 
-      <main className={`reader-layout ${showFloatingReader && readerView === 'stream' ? 'reader-layout-split' : ''}`}>
+      <main className={`reader-layout ${split ? 'reader-layout-split' : ''}`}>
         <div className={`reader-stack ${showSubscriptionSidebar ? 'sidebar-open' : 'sidebar-closed'}`}>
           <ReaderSubscriptionSidebar {...sidebarProps} />
-          <ReaderFeedPanel {...feedProps} />
+          <ReaderFeedPanel {...feedProps} sourceControl={split && <SplitReaderSources sidebarProps={sidebarProps} />} />
         </div>
 
       {(showFloatingReader || readerView === 'detail') && (
@@ -80,5 +82,35 @@ export function ReaderWorkspace(props: ReaderWorkspaceProps) {
       )}
       </main>
     </>
+  )
+}
+
+function SplitReaderSources({ sidebarProps }: { sidebarProps: ReaderSubscriptionSidebarProps }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 981px)')
+    const closeOnMobile = () => { if (!desktop.matches) setOpen(false) }
+    desktop.addEventListener('change', closeOnMobile)
+    return () => desktop.removeEventListener('change', closeOnMobile)
+  }, [])
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      <SheetTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="split-source-trigger" aria-label="选择订阅源">
+          <PanelLeftOpen aria-hidden="true" />来源
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="reader-sources-sheet" aria-describedby={undefined} onEscapeKeyDown={(event) => event.stopPropagation()}>
+        <SheetTitle>订阅源</SheetTitle>
+        <ReaderSubscriptionSidebar
+          {...sidebarProps}
+          showSubscriptionSidebar
+          onRegisterSidebarSourceItemRef={() => {}}
+          onApplySourceFilterFromSidebar={(...args) => { sidebarProps.onApplySourceFilterFromSidebar(...args); setOpen(false) }}
+          onApplySourceGroupFilterFromSidebar={(group) => { sidebarProps.onApplySourceGroupFilterFromSidebar(group); setOpen(false) }}
+        />
+      </SheetContent>
+    </Sheet>
   )
 }

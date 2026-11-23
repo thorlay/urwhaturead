@@ -305,9 +305,44 @@
 }
 
 /* A split feed is a reading queue: titles take precedence over preview badges. */
+.split-source-trigger {
+  display: none;
+}
+
+.reader-sources-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.reader-sources-sheet > .subscription-sidebar {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  height: auto;
+  padding: 0;
+}
+
+.reader-sources-sheet .subscription-sidebar-header {
+  display: none;
+}
+
 @media (min-width: 981px) {
-  .reader-layout-split {
+  .reader-layout-split,
+  .reader-layout-split:has(.sidebar-open) {
     grid-template-columns: minmax(420px, 500px) minmax(0, 1fr);
+  }
+
+  .reader-layout-split .reader-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reader-layout-split .reader-stack > .subscription-sidebar {
+    display: none;
+  }
+
+  .reader-layout-split .split-source-trigger {
+    display: inline-flex;
   }
 
   .reader-layout-split .feed-view-controls,
