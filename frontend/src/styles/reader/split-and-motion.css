@@ -302,6 +302,12 @@
     overflow: hidden;
     overscroll-behavior-y: none;
   }
+
+  .app-shell:has(.reader-layout) {
+    position: fixed;
+    inset: 0;
+    overflow: clip;
+  }
 }
 
 /* A split feed is a reading queue: titles take precedence over preview badges. */

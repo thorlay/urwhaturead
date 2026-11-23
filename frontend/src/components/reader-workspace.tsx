@@ -4,6 +4,7 @@ import { ReaderFeedPanel, type ReaderFeedPanelProps } from '@/components/reader-
 import { ReaderSubscriptionSidebar, type ReaderSubscriptionSidebarProps } from '@/components/reader-subscription-sidebar'
 import type { ReaderDetailPanelProps } from '@/components/reader-detail-panel'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useReaderEdgeScroll } from '../hooks/use-reader-edge-scroll'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 const ReaderDetailPanel = lazy(async () => {
@@ -23,6 +24,7 @@ export type ReaderWorkspaceProps = {
 }
 
 export function ReaderWorkspace(props: ReaderWorkspaceProps) {
+  useReaderEdgeScroll()
   const {
     showSubscriptionSidebar,
     onToggleSubscriptionSidebar,

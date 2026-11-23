@@ -95,9 +95,9 @@ test('three main tabs share stable chrome and toolbar controls at every width', 
   await expect(sourceTabs.getByRole('tab', { name: '运行状态', exact: true })).toHaveAttribute('aria-selected', 'true')
 })
 
-test('desktop reader keeps scrolling inside the feed at the bottom of the list', async ({ page }, testInfo) => {
+test('desktop reader keeps scrolling inside the feed, including at the page edges', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop reader scroll containment')
-  await page.setViewportSize({ width: 1440, height: 740 })
+  await page.setViewportSize({ width: 1680, height: 740 })
   await mockReader(page)
   await page.route('**/api/v1/feed?**', (route) => route.fulfill({ json: {
     data: Array.from({ length: 40 }, (_, i) => ({ ...rows[0], id: 200 + i, title: `${title} ${i}` })),
@@ -108,6 +108,7 @@ test('desktop reader keeps scrolling inside the feed at the bottom of the list',
   await expect(list.locator('[data-feed-row]')).toHaveCount(40)
   await expect(page.locator('html')).toHaveCSS('overscroll-behavior-y', 'none')
   await expect(page.locator('body')).toHaveCSS('overflow-y', 'hidden')
+  await expect(page.locator('.app-shell')).toHaveCSS('position', 'fixed')
   await list.evaluate((el) => { el.scrollTop = el.scrollHeight })
   expect(await list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await list.hover()
@@ -116,9 +117,27 @@ test('desktop reader keeps scrolling inside the feed at the bottom of the list',
     const root = document.scrollingElement!
     return { scrollTop: root.scrollTop, overflow: root.scrollHeight - root.clientHeight }
   })).toEqual({ scrollTop: 0, overflow: 0 })
+  await page.evaluate(() => {
+    window.addEventListener('wheel', (event) => {
+      document.documentElement.dataset.lastWheel = `${event.clientX}:${event.defaultPrevented}`
+    })
+  })
+  const topbar = page.locator('.topbar')
+  const initialTop = (await topbar.boundingBox())!.y
+  for (const x of [10, 1640]) {
+    await page.mouse.move(x, 500)
+    await page.mouse.wheel(0, 1200)
+    await expect(page.locator('html')).toHaveAttribute('data-last-wheel', `${x}:true`)
+    expect((await topbar.boundingBox())!.y).toBe(initialTop)
+  }
+  await list.hover()
+  const before = await list.evaluate((el) => el.scrollTop)
+  await page.mouse.wheel(0, -160)
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeLessThan(before)
   await page.getByRole('tab', { name: 'AI', exact: true }).click()
   await expect(page.locator('.ai-library-page')).toBeVisible()
   await expect(page.locator('html')).toHaveCSS('overscroll-behavior-y', 'auto')
+  await expect(page.locator('.app-shell')).not.toHaveCSS('position', 'fixed')
 })
 
 test('pagination action scrolls with the feed and stays in place while loading or retrying', async ({ page }) => {
