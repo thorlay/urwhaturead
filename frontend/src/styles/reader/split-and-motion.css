@@ -296,6 +296,14 @@
   padding: 0;
 }
 
+@media (min-width: 981px) {
+  html:has(.reader-layout),
+  body:has(.reader-layout) {
+    overflow: hidden;
+    overscroll-behavior-y: none;
+  }
+}
+
 /* A split feed is a reading queue: titles take precedence over preview badges. */
 @media (min-width: 981px) {
   .reader-layout-split {
