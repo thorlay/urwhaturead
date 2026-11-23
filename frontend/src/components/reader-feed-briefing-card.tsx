@@ -30,6 +30,7 @@ export const ReaderFeedBriefingCard = memo(function ReaderFeedBriefingCard(props
 
   return (
     <article
+      data-feed-row="briefing"
       key={itemKey}
       className={cn('feed-item', 'feed-item-briefing', selectedFeedBriefing && 'active')}
       onClick={onOpenFeedBriefing}

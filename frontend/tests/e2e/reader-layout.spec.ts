@@ -129,6 +129,43 @@ test('split reading gives titles space and bounds desktop reading measure', asyn
   await page.screenshot({ path: '/tmp/quick-reader-layout-desktop.png', fullPage: true })
 })
 
+test('split transitions anchor the selected article and switching visible rows keeps the queue still', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.startsWith('mobile-'), 'desktop split layout')
+  await page.setViewportSize({ width: 1440, height: 740 })
+  await mockReader(page)
+  await page.route('**/api/v1/feed?**', (route) => route.fulfill({ json: {
+    data: Array.from({ length: 40 }, (_, i) => i === 18 ? rows[0] : i === 19 ? rows[1] : {
+      ...rows[0], id: 200 + i, title: `${i} ${title}`,
+    }),
+    meta: { next_cursor: '' },
+  } }))
+  await page.goto('/')
+  const row = page.locator('[data-feed-row="101"]')
+  const next = page.locator('[data-feed-row="102"]')
+  const list = page.locator('.feed-list')
+  await expect(row).toBeVisible()
+  await row.evaluate((element) => {
+    const list = element.closest('.feed-list')!
+    list.scrollTop += element.getBoundingClientRect().top - list.getBoundingClientRect().top - 220
+  })
+  const top = async (item: typeof row) => (await item.boundingBox())!.y
+  const beforeOpen = await top(row)
+  await row.click()
+  await expect(page.locator('.detail-title')).toHaveText(title)
+  await expect.poll(async () => Math.abs(await top(row) - beforeOpen)).toBeLessThanOrEqual(2)
+
+  const readScroll = () => list.evaluate((element) => element.scrollTop)
+  const beforeSwitch = await readScroll()
+  await next.click()
+  await expect(page.locator('.detail-title')).toHaveText(rows[1].title)
+  expect(await readScroll()).toBe(beforeSwitch)
+
+  const beforeClose = await top(next)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.detail-floating')).toHaveCount(0)
+  await expect.poll(async () => Math.abs(await top(next) - beforeClose)).toBeLessThanOrEqual(2)
+})
+
 test('task queue stays in the topbar and opens without moving the feed', async ({ page }) => {
   await mockReader(page, true)
   await page.goto('/')

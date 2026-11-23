@@ -104,6 +104,7 @@ export const ReaderFeedArticleCard = memo(
 
     return (
       <article
+        data-feed-row={item.id}
         className={cn('feed-item', isActive && 'active', isRead && 'read', isFavorite && 'favorited')}
         onClick={handleOpen}
         onPointerEnter={() => preloadArticleImage(previewImageURL)}

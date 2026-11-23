@@ -7,6 +7,7 @@ import type { SummaryTaskStatus } from '../lib/app-domain'
 import { useReaderFeedScroll } from '../hooks/use-reader-feed-scroll'
 import { ReaderFeedArticleCard } from './reader-feed-article-card'
 import { ReaderFeedBriefingCard } from './reader-feed-briefing-card'
+import { ReaderFeedViewport } from './reader-feed-viewport'
 
 type FeedListRow = { key: string; type: 'briefing' } | { key: string; type: 'article'; item: FeedItem }
 
@@ -122,10 +123,6 @@ export function ReaderFeedList(props: ReaderFeedListProps) {
     rowCount: listRows.length,
     feedTitleOnlyMode,
     showFeedImages,
-    selectedArticleID,
-    selectedFeedBriefing,
-    showFloatingReader,
-    readerView,
   })
   const renderedRows = shouldVirtualizeFeed ? listRows.slice(virtualStart, virtualEnd) : listRows
   const isInitialFeedLoading = loadingFeed && feed.length === 0
@@ -141,7 +138,12 @@ export function ReaderFeedList(props: ReaderFeedListProps) {
 
   return (
     <>
-      <div ref={feedListRef} className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}>
+      <ReaderFeedViewport
+        listRef={feedListRef}
+        className={cn('feed-list', isInitialFeedLoading && 'is-loading', shouldVirtualizeFeed && 'is-virtualized')}
+        split={showFloatingReader && readerView === 'stream'}
+        selection={selectedFeedBriefing ? 'briefing' : selectedArticleID?.toString() ?? null}
+      >
         {isInitialFeedLoading && visibleFeed.length === 0 && (feedMode === 'important' || !hasFeedBriefingEntry) && (
           <>
             <FeedSkeleton />
@@ -216,7 +218,7 @@ export function ReaderFeedList(props: ReaderFeedListProps) {
         )}
 
         <div ref={feedAutoLoadRef} className="feed-auto-load-sentinel" aria-hidden="true" />
-      </div>
+      </ReaderFeedViewport>
 
       {(hasMoreFeed || loadingFeed) && (
         <div className="feed-footer">
