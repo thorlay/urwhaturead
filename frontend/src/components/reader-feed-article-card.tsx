@@ -63,14 +63,18 @@ export const ReaderFeedArticleCard = memo(
 
     const previewImageURL = useMemo(() => normalizeImageURL(item.image_url), [item.image_url, normalizeImageURL])
     const publishedLabel = useMemo(
-      () => formatTimeAgo(item.published_at ?? item.created_at),
-      [formatTimeAgo, item.created_at, item.published_at],
+      () => formatTimeAgo(item.forum_activity_at ?? item.published_at ?? item.created_at),
+      [formatTimeAgo, item.created_at, item.forum_activity_at, item.published_at],
     )
     const compactPublishedLabel = useMemo(
-      () => formatTimeAgoCompact(item.published_at ?? item.created_at),
-      [formatTimeAgoCompact, item.created_at, item.published_at],
+      () => formatTimeAgoCompact(item.forum_activity_at ?? item.published_at ?? item.created_at),
+      [formatTimeAgoCompact, item.created_at, item.forum_activity_at, item.published_at],
     )
-    const replyCountText = useMemo(() => item.paper_votes != null ? `社区赞 ${item.paper_votes}` : formatReplyCount(item.reply_count), [formatReplyCount, item.paper_votes, item.reply_count])
+    const replyCountText = useMemo(() => {
+      if (item.paper_votes != null) return `社区赞 ${item.paper_votes}`
+      if (item.recent_reply_count != null) return `近 24h 回复 ${item.recent_reply_count}`
+      return formatReplyCount(item.reply_count)
+    }, [formatReplyCount, item.paper_votes, item.recent_reply_count, item.reply_count])
     const plainSummaryText = useMemo(() => plainText(item.summary), [item.summary, plainText])
     const compactPreviewText = useMemo(() => {
       if (item.highlight_reason) return `入选理由：${item.highlight_reason}`

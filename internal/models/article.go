@@ -20,6 +20,7 @@ type Article struct {
 	Author          *string        `json:"author,omitempty" gorm:"column:author"`
 	PublishedAt     *time.Time     `json:"published_at,omitempty" gorm:"column:published_at"`
 	ImageURL        *string        `json:"image_url,omitempty" gorm:"column:image_url"`
+	ForumActivityAt *time.Time     `json:"forum_activity_at,omitempty" gorm:"column:forum_activity_at"`
 	ReplyCount      *int           `json:"reply_count,omitempty" gorm:"column:reply_count"`
 	Tags            StringArray    `json:"tags,omitempty" gorm:"column:tags;type:text[]"`
 	ContentHash     string         `json:"content_hash" gorm:"column:content_hash;not null;uniqueIndex:ux_articles_source_content_hash"`

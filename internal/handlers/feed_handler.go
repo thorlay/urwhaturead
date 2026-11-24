@@ -811,7 +811,8 @@ func (h *FeedHandler) queryBriefingFeedRows(
 		}
 	}
 	if tag == "forum" {
-		query = filterFeedChannel(query, "forum").Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), 20).Order("a.reply_count DESC")
+		query = filterFeedChannel(query, "forum")
+		columns += ", a.raw"
 	} else if tag != "papers" && len(sourceIDs) == 0 && len(articleIDs) == 0 {
 		query = filterFeedChannel(query, "news")
 	}
@@ -827,9 +828,13 @@ func (h *FeedHandler) queryBriefingFeedRows(
 	}
 
 	var rows []feedItem
+	if tag == "forum" {
+		query = forumCandidates(h.db.WithContext(ctx), query, columns, 20, false).
+			Order("COALESCE(recent_reply_count,reply_count) DESC").Order("sort_time DESC").Order("id DESC")
+	} else {
+		query = query.Order("COALESCE(a.published_at, a.created_at) DESC").Order("a.id DESC")
+	}
 	if err := query.
-		Order("COALESCE(a.published_at, a.created_at) DESC").
-		Order("a.id DESC").
 		Limit(limit).
 		Scan(&rows).Error; err != nil {
 		return nil, err
@@ -866,7 +871,9 @@ func buildFeedBriefingDigest(
 	if isForumBriefing(rows) {
 		for _, row := range rows {
 			forumRevision += fmt.Sprintf("%d:%s:%s|", row.ID, row.ContentHash, forumDiscussionContext(row))
-			if row.ReplyCount != nil {
+			if row.RecentReplyCount != nil {
+				forumRevision += fmt.Sprintf("recent_replies=%d|", *row.RecentReplyCount)
+			} else if row.ReplyCount != nil {
 				forumRevision += fmt.Sprintf("replies=%d|", *row.ReplyCount)
 			}
 		}

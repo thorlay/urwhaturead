@@ -100,6 +100,7 @@ type articleThreadComment struct {
 }
 
 type articleThread struct {
+	SampleScope         string                 `json:"sample_scope,omitempty"`
 	VoteMetadataVersion int                    `json:"vote_metadata_version,omitempty"`
 	TopicURL            string                 `json:"topic_url"`
 	FeedURL             string                 `json:"feed_url"`
@@ -593,6 +594,11 @@ func (h *ArticleHandler) loadArticleDetailMode(ctx context.Context, id uint64, e
 
 	if contentHTML := feedextract.ContentHTMLFromRaw(article.Raw); contentHTML != "" {
 		article.ContentHTML = &contentHTML
+	}
+	if thread, _ := savedPublicDiscussion(article.Raw, article.Link, article.Title, stringValue(article.Content), time.Now()); thread != nil {
+		article.Thread = thread
+		sanitizeArticleForOutput(&article)
+		return article, nil
 	}
 	article.Thread = ngaSavedDiscussion(article)
 	if article.ImageURL == nil {

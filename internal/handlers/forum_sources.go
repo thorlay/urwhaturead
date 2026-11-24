@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"quick/internal/forumpublic"
 	"quick/internal/models"
 
 	"gorm.io/gorm"
@@ -14,19 +15,30 @@ import (
 // It is explicit and repeatable; normal server startup never restores deleted subscriptions.
 func (h *SourceHandler) EnsureForumSources(ctx context.Context) ([]models.Source, error) {
 	return h.ensureForumPresets(ctx, []forumSourcePreset{
-		{"V2EX 热门讨论（含回复）", "rsshub://v2ex/tab/hot"},
-		{"Hacker News 高分讨论（100 分 / 30 评论）", "rsshub://hackernews/over/comments/100/30"},
+		{name: "V2EX 热门讨论（含回复）", route: "rsshub://v2ex/tab/hot"},
+		{name: "Hacker News 高分讨论（100 分 / 30 评论）", route: "rsshub://hackernews/over/comments/100/30"},
 	})
 }
 
 func (h *SourceHandler) EnsureNGAForumSources(ctx context.Context) ([]models.Source, error) {
 	return h.ensureForumPresets(ctx, []forumSourcePreset{
-		{"NGA 网事杂谈", "rsshub://nga/forum/-7"},
-		{"NGA 游戏综合讨论", "rsshub://nga/forum/414"},
+		{name: "NGA 网事杂谈", route: "rsshub://nga/forum/-7"},
+		{name: "NGA 游戏综合讨论", route: "rsshub://nga/forum/414"},
 	})
 }
 
-type forumSourcePreset struct{ name, route string }
+func (h *SourceHandler) EnsurePublicForumSources(ctx context.Context) ([]models.Source, error) {
+	return h.ensureForumPresets(ctx, []forumSourcePreset{
+		{name: "Lobsters 热门", route: forumpublic.LobstersFeed, tag: "tech", intervalSec: 1800},
+		{name: "Bogleheads 投资版", route: forumpublic.BogleheadsFeed, tag: "finance", intervalSec: 300},
+	})
+}
+
+type forumSourcePreset struct {
+	name, route string
+	tag         string
+	intervalSec int
+}
 
 func (h *SourceHandler) ensureForumPresets(ctx context.Context, presets []forumSourcePreset) ([]models.Source, error) {
 	sources := make([]models.Source, 0, len(presets))
@@ -42,7 +54,15 @@ func (h *SourceHandler) ensureForumPresets(ctx context.Context, presets []forumS
 			var source models.Source
 			err = tx.Where("owner_user_id IS NULL AND rss_url IN ?", []string{rssURL, preset.route}).First(&source).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				source = models.Source{Name: preset.name, RSSURL: rssURL, Kind: "feed", SiteKey: normalizeSiteKey(rssURL), Tags: models.StringArray{"forum", "tech"}, Enabled: true, PollIntervalSec: 900, AIBriefingIntervalMin: 360}
+				tag := preset.tag
+				if tag == "" {
+					tag = "tech"
+				}
+				interval := preset.intervalSec
+				if interval <= 0 {
+					interval = 900
+				}
+				source = models.Source{Name: preset.name, RSSURL: rssURL, Kind: "feed", SiteKey: normalizeSiteKey(rssURL), Tags: models.StringArray{"forum", tag}, Enabled: true, PollIntervalSec: interval, AIBriefingIntervalMin: 360}
 				if err := tx.Create(&source).Error; err != nil {
 					return err
 				}

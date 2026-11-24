@@ -73,6 +73,8 @@ export type FeedItem = {
   published_at?: string
   image_url?: string
   paper_votes?: number
+  recent_reply_count?: number
+  forum_activity_at?: string
   reply_count?: number
   duplicate_count?: number
   created_at: string
@@ -125,6 +127,7 @@ export type ArticleDetail = {
     truncated: boolean
   }
   thread?: {
+    sample_scope?: string
     topic_url: string
     feed_url: string
     topic_title: string

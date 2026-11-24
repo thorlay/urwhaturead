@@ -20,6 +20,7 @@ import (
 
 	"quick/internal/clustering"
 	"quick/internal/feedextract"
+	"quick/internal/forumpublic"
 	"quick/internal/models"
 	"quick/internal/textclean"
 
@@ -393,6 +394,31 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 	}
 
 	inserted := 0
+	if source.RSSURL == forumpublic.LobstersFeed || source.RSSURL == forumpublic.BogleheadsFeed {
+		inserted, err = w.savePublicDiscussions(ctx, source, feed, time.Now().UTC())
+	} else {
+		inserted, err = w.saveFeedItems(ctx, source, feed)
+	}
+	if err != nil {
+		message := fmt.Sprintf("save feed failed: %v", err)
+		fetchLog.ErrorMessage = &message
+		_ = w.markSourceFailure(ctx, source.ID, time.Now(), result.ETag, result.LastModified, message)
+		return err
+	}
+
+	fetchLog.Status = "success"
+	fetchLog.ItemCount = inserted
+	if err := w.markSourceSuccess(ctx, source.ID, time.Now(), result.ETag, result.LastModified); err != nil {
+		message := fmt.Sprintf("update source state failed: %v", err)
+		fetchLog.ErrorMessage = &message
+		return err
+	}
+
+	return nil
+}
+
+func (w *RSSWorker) saveFeedItems(ctx context.Context, source models.Source, feed *gofeed.Feed) (int, error) {
+	inserted := 0
 	w.enrichPaperFeed(ctx, source, feed)
 	w.enrichPublicForumMetrics(ctx, feed)
 	w.enrichNGAFeedDiscussions(ctx, source, feed)
@@ -409,25 +435,14 @@ func (w *RSSWorker) fetchSource(ctx context.Context, source models.Source) error
 		}
 		saved, saveErr := w.saveArticleIfNew(ctx, article)
 		if saveErr != nil {
-			message := fmt.Sprintf("save article failed: %v", saveErr)
-			fetchLog.ErrorMessage = &message
-			_ = w.markSourceFailure(ctx, source.ID, time.Now(), result.ETag, result.LastModified, message)
-			return saveErr
+			return inserted, saveErr
 		}
 		if saved {
 			inserted++
 		}
 	}
 
-	fetchLog.Status = "success"
-	fetchLog.ItemCount = inserted
-	if err := w.markSourceSuccess(ctx, source.ID, time.Now(), result.ETag, result.LastModified); err != nil {
-		message := fmt.Sprintf("update source state failed: %v", err)
-		fetchLog.ErrorMessage = &message
-		return err
-	}
-
-	return nil
+	return inserted, nil
 }
 
 func (w *RSSWorker) isDue(source models.Source, now time.Time) bool {
@@ -494,11 +509,13 @@ func (w *RSSWorker) fetchOnce(ctx context.Context, source models.Source) (*fetch
 		req.Header.Set("Accept", "application/atom+xml,application/rss+xml,text/xml;q=0.9,*/*;q=0.8")
 	}
 
-	// Reply totals and paper upvotes can change even when the serialized RSS is unchanged.
-	if !isNGABoardFeed(source.RSSURL) && !strings.Contains(source.RSSURL, "/huggingface/daily-papers") && source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
+	// Discussion activity and paper upvotes can change while the feed XML stays unchanged.
+	useConditionalFeedRequest := source.RSSURL != forumpublic.LobstersFeed &&
+		!isNGABoardFeed(source.RSSURL) && !strings.Contains(source.RSSURL, "/huggingface/daily-papers")
+	if useConditionalFeedRequest && source.ETag != nil && strings.TrimSpace(*source.ETag) != "" {
 		req.Header.Set("If-None-Match", *source.ETag)
 	}
-	if !isNGABoardFeed(source.RSSURL) && !strings.Contains(source.RSSURL, "/huggingface/daily-papers") && source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
+	if useConditionalFeedRequest && source.LastModified != nil && strings.TrimSpace(*source.LastModified) != "" {
 		req.Header.Set("If-Modified-Since", *source.LastModified)
 	}
 	if w.shouldDebugURL(source.RSSURL) {

@@ -14,7 +14,11 @@ import (
 
 func main() {
 	nga := flag.Bool("nga", false, "Install NGA 网事杂谈 and 游戏综合讨论 instead of V2EX/HN")
+	public := flag.Bool("public", false, "Install Lobsters and the Bogleheads investing board")
 	flag.Parse()
+	if *nga && *public {
+		log.Fatal("choose either -nga or -public")
+	}
 	cfg := config.Load()
 	db, err := database.New(cfg)
 	if err != nil {
@@ -30,6 +34,9 @@ func main() {
 	if *nga {
 		install = h.EnsureNGAForumSources
 	}
+	if *public {
+		install = h.EnsurePublicForumSources
+	}
 	sources, err := install(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -44,6 +51,6 @@ func main() {
 		}
 	}
 	if failed {
-		log.Fatal("Subscriptions saved, but initial fetch failed; check RSSHub version and source status before generating a briefing")
+		log.Fatal("Subscriptions saved, but initial fetch failed; check the source status before generating a briefing")
 	}
 }

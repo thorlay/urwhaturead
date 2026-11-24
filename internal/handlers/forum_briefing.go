@@ -68,7 +68,9 @@ func buildForumBriefingPromptWithBudget(items []feedItem, budget int) string {
 	remaining := budget - b.Len()
 	for i, item := range items {
 		headers[i] = fmt.Sprintf("\n[A%02d] [%s] %s\n原帖链接: %s\n", i+1, textclean.NormalizeInline(item.SourceName), textclean.NormalizeInline(item.Title), item.Link)
-		if item.ReplyCount != nil {
+		if item.RecentReplyCount != nil {
+			headers[i] += fmt.Sprintf("近 24 小时已采到的回复数: %d（可能漏采）\n", *item.RecentReplyCount)
+		} else if item.ReplyCount != nil {
 			headers[i] += fmt.Sprintf("抓取时回复数: %d\n", *item.ReplyCount)
 		}
 		headers[i] += "主帖与回复材料（可能节选）:\n"

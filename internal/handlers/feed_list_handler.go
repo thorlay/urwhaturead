@@ -21,26 +21,28 @@ const (
 )
 
 type feedItem struct {
-	HighlightReason string         `json:"highlight_reason,omitempty"`
-	ID              uint64         `json:"id"`
-	SourceID        uint64         `json:"source_id"`
-	ClusterID       *uint64        `json:"cluster_id,omitempty"`
-	SourceName      string         `json:"source_name"`
-	SourceTag       string         `json:"source_tag"`
-	Title           string         `json:"title"`
-	Link            string         `json:"link"`
-	Summary         *string        `json:"summary,omitempty"`
-	Content         *string        `json:"content,omitempty"`
-	Author          *string        `json:"author,omitempty"`
-	PublishedAt     *time.Time     `json:"published_at,omitempty"`
-	ImageURL        *string        `json:"image_url,omitempty"`
-	PaperVotes      *int           `json:"paper_votes,omitempty"`
-	ReplyCount      *int           `json:"reply_count,omitempty"`
-	ContentHash     string         `json:"-" gorm:"column:content_hash"`
-	DuplicateCount  int            `json:"duplicate_count"`
-	CreatedAt       time.Time      `json:"created_at"`
-	SortTime        time.Time      `json:"-"`
-	Raw             datatypes.JSON `json:"-" gorm:"column:raw"`
+	HighlightReason  string         `json:"highlight_reason,omitempty"`
+	ID               uint64         `json:"id"`
+	SourceID         uint64         `json:"source_id"`
+	ClusterID        *uint64        `json:"cluster_id,omitempty"`
+	SourceName       string         `json:"source_name"`
+	SourceTag        string         `json:"source_tag"`
+	Title            string         `json:"title"`
+	Link             string         `json:"link"`
+	Summary          *string        `json:"summary,omitempty"`
+	Content          *string        `json:"content,omitempty"`
+	Author           *string        `json:"author,omitempty"`
+	PublishedAt      *time.Time     `json:"published_at,omitempty"`
+	ImageURL         *string        `json:"image_url,omitempty"`
+	PaperVotes       *int           `json:"paper_votes,omitempty"`
+	RecentReplyCount *int           `json:"recent_reply_count,omitempty"`
+	ForumActivityAt  *time.Time     `json:"forum_activity_at,omitempty"`
+	ReplyCount       *int           `json:"reply_count,omitempty"`
+	ContentHash      string         `json:"-" gorm:"column:content_hash"`
+	DuplicateCount   int            `json:"duplicate_count"`
+	CreatedAt        time.Time      `json:"created_at"`
+	SortTime         time.Time      `json:"-"`
+	Raw              datatypes.JSON `json:"-" gorm:"column:raw"`
 }
 
 type feedCursor struct {
@@ -68,7 +70,10 @@ func (h *FeedHandler) List(c *gin.Context) {
 		last := result.rows[params.limit-1]
 		cursor := feedCursor{SortTime: last.SortTime, ID: last.ID}
 		if params.channel == "forum" {
-			cursor.Replies = last.ReplyCount
+			cursor.Replies = last.RecentReplyCount
+			if cursor.Replies == nil {
+				cursor.Replies = last.ReplyCount
+			}
 		}
 		if params.channel == "papers" {
 			cursor.Replies = last.PaperVotes
@@ -169,6 +174,7 @@ func parseFeedListParams(c *gin.Context) (feedListParams, error) {
 			return params, fmt.Errorf("min_replies must be between 0 and 1000000")
 		}
 		params.minReplies = value
+		params.minRepliesSet = true
 	}
 	if cursorRaw := strings.TrimSpace(c.Query("cursor")); cursorRaw != "" {
 		cursor, err := decodeFeedCursor(cursorRaw)

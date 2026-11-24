@@ -59,7 +59,7 @@ func TestForumRankingAndNewsIsolation(t *testing.T) {
 	defer sql2.Close()
 	for _, q := range []string{
 		`CREATE TABLE sources(id bigint, name text, tags text[], site_key text,rss_url text,hidden_in_sidebar boolean default false,kind text default 'feed')`,
-		`CREATE TABLE articles(id bigint,source_id bigint,cluster_id bigint,title text,link text,raw jsonb,summary text,author text,published_at timestamptz,image_url text,reply_count int,created_at timestamptz default now())`,
+		`CREATE TABLE articles(id bigint,source_id bigint,cluster_id bigint,title text,link text,raw jsonb,summary text,author text,published_at timestamptz,image_url text,reply_count int,forum_activity_at timestamptz,created_at timestamptz default now())`,
 		`CREATE TABLE event_clusters(id bigint,article_count int)`,
 		`INSERT INTO sources(id,name,tags,site_key,rss_url) VALUES(1,'news',ARRAY['tech'],'news','https://example.com/feed'),(2,'old forum',ARRAY['tech'],'v2ex','rsshub://v2ex/tab/hot')`,
 		`INSERT INTO articles(id,source_id,title,link,published_at,reply_count) VALUES(1,1,'news','https://example.com',now(),100),(2,2,'popular','https://v2ex.com/t/2',now()-interval '1 hour',100),(3,2,'second','https://v2ex.com/t/3',now(),50),(4,2,'quiet','https://v2ex.com/t/4',now(),19),(5,2,'old','https://v2ex.com/t/5',now()-interval '25 hours',900),(6,2,'unknown','https://v2ex.com/t/6',now(),NULL),(7,2,'duplicate','https://www.v2ex.com/t/2',now(),99),(9,2,'future','https://v2ex.com/t/9',now()+interval '1 hour',9999)`,
@@ -91,4 +91,29 @@ func TestForumRankingAndNewsIsolation(t *testing.T) {
 	if e != nil || len(next.rows) != 1 || next.rows[0].ID != 3 {
 		t.Fatalf("page: %+v %v", next, e)
 	}
+	for _, q := range []string{
+		`INSERT INTO sources(id,name,tags,site_key,rss_url) VALUES(3,'Bogleheads',ARRAY['forum'],'bogleheads.org','https://www.bogleheads.org/forum/feed/forum/10'),(4,'Lobsters',ARRAY['forum'],'lobste.rs','https://lobste.rs/rss')`,
+		`INSERT INTO articles(id,source_id,title,link,published_at,forum_activity_at,raw)
+		SELECT id, source, 'ongoing', 'https://example.com/topic/' || id,
+			now()-interval '10 days', now()-interval '1 hour',
+			jsonb_build_object('public_discussion', jsonb_build_object('replies', (
+				SELECT jsonb_agg(jsonb_build_object('at', now() - hours * interval '1 hour')) FROM unnest(sample) AS hours
+			)))
+		FROM (VALUES (10,3,ARRAY[1,2,3,25,-1]), (11,3,ARRAY[1,2,26]), (12,4,ARRAY[1,2,3,4,5]), (13,4,ARRAY[1,2,3,4,28])) AS rows(id,source,sample)`,
+	} {
+		if err := db.Exec(q).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	recent, e := repo.list(context.Background(), feedListParams{channel: "forum", minReplies: 20, sourceIDs: []uint64{3, 4}, limit: 5})
+	if e != nil || len(recent.rows) != 2 || recent.rows[0].ID != 12 || recent.rows[1].ID != 10 ||
+		recent.rows[0].RecentReplyCount == nil || *recent.rows[0].RecentReplyCount != 5 ||
+		recent.rows[1].RecentReplyCount == nil || *recent.rows[1].RecentReplyCount != 3 {
+		t.Fatalf("recent activity: %+v %v", recent, e)
+	}
+	strict, e := repo.list(context.Background(), feedListParams{channel: "forum", minReplies: 6, minRepliesSet: true, sourceIDs: []uint64{3, 4}, limit: 5})
+	if e != nil || len(strict.rows) != 0 {
+		t.Fatalf("explicit reply threshold: %+v %v", strict, e)
+	}
+
 }

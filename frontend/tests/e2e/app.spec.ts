@@ -491,7 +491,7 @@ test('forum briefing explains empty evidence without generating a report', async
   await page.goto('/')
   await page.getByRole('group', { name: '阅读频道', exact: true }).getByRole('button', { name: '论坛观察', exact: true }).click()
   await page.getByRole('button', { name: '论坛讨论简报', exact: true }).click()
-  await expect(page.getByText('过去24小时暂无至少 20 条回复的新论坛帖子。')).toBeVisible()
+  await expect(page.getByText('过去 24 小时暂无达到讨论门槛的帖子。')).toBeVisible()
   expect(generations).toBe(0)
 })
 

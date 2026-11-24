@@ -108,6 +108,9 @@ func registeredSchemaMigrations() []schemaMigration {
 			return db.AutoMigrate(&models.ArticleHighlight{})
 		}},
 		{Version: 3, Name: "discussion_analyses", Up: func(db *gorm.DB) error { return db.AutoMigrate(&models.DiscussionAnalysis{}) }},
+		{Version: 4, Name: "forum_activity_at", Up: func(db *gorm.DB) error {
+			return db.Exec("ALTER TABLE articles ADD COLUMN IF NOT EXISTS forum_activity_at timestamptz").Error
+		}},
 	}
 }
 

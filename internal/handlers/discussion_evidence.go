@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"quick/internal/feedextract"
+	"quick/internal/forumpublic"
 	"quick/internal/textclean"
 )
 
@@ -56,7 +57,13 @@ func discussionRevision(article articleDetail, model string) string {
 	if article.Summary != nil {
 		summary = *article.Summary
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s|%d|%s|%s|%s|%s|%v", discussionVersion, article.ID, model, article.Link, content, summary, article.ReplyCountValue()))))
+	revision := fmt.Sprintf("%s|%d|%s|%s|%s|%s|%v", discussionVersion, article.ID, model, article.Link, content, summary, article.ReplyCountValue())
+	if sample := forumpublic.FromRaw(article.Raw); sample != nil {
+		for _, reply := range forumpublic.RecentReplies(sample.Replies, time.Now()) {
+			revision += "\n" + reply.Link + "|" + reply.Content
+		}
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(revision)))
 }
 func (a articleDetail) ReplyCountValue() string {
 	if a.ReplyCount == nil {
@@ -113,6 +120,11 @@ func sameDiscussion(topic, reply string) bool {
 		return false
 	}
 	switch host(t.Hostname()) {
+	case "lobste.rs":
+		topic, topicOK := forumpublic.LobstersTopic(topic)
+		replyTopic, replyOK := forumpublic.LobstersTopic(reply)
+		_, commentOK := forumpublic.LobstersReplyLink(topic, r.Fragment)
+		return topicOK && replyOK && commentOK && topic == replyTopic
 	case "v2ex.com":
 		return strings.TrimRight(t.Path, "/") == strings.TrimRight(r.Path, "/") && strings.HasPrefix(r.Fragment, "reply")
 	case "news.ycombinator.com":
@@ -129,10 +141,14 @@ func sameDiscussion(topic, reply string) bool {
 }
 
 func selectDiscussionReplies(topic string, comments []articleThreadComment, total *int, method string) ([]discussionReference, discussionSample) {
+	return selectDiscussionRepliesMatching(comments, total, method, func(link string) bool { return sameDiscussion(topic, link) })
+}
+
+func selectDiscussionRepliesMatching(comments []articleThreadComment, total *int, method string, matches func(string) bool) ([]discussionReference, discussionSample) {
 	valid := []articleThreadComment{}
 	seen := map[string]bool{}
 	for _, c := range comments {
-		if !sameDiscussion(topic, c.Link) || seen[c.Link] {
+		if !matches(c.Link) || seen[c.Link] {
 			continue
 		}
 		c.Content = textclean.NormalizeFromHTMLBlock(c.Content)
@@ -212,7 +228,18 @@ func (h *ArticleHandler) loadDiscussionInput(ctx context.Context, article articl
 	var comments []articleThreadComment
 	total := article.ReplyCount
 	method := "接口返回的回复快照，可能使用5分钟缓存。"
-	if tid := hnTopicID(article); tid != "" {
+	var matches = func(link string) bool { return sameDiscussion(input.TopicURL, link) }
+	if thread, sample := savedPublicDiscussion(article.Raw, article.Link, article.Title, input.MainPost, time.Now()); thread != nil {
+		comments = thread.Comments
+		method = "从 Lobsters 热帖讨论页读取过去 24 小时内可见的回复。"
+		if sample.Kind == forumpublic.Bogleheads {
+			method = "从 Bogleheads 投资版 Atom 累积过去 24 小时可见的回复，按原帖标题归组。每次订阅只返回最新一批帖子，可能漏采。"
+			matches = func(link string) bool {
+				_, ok := forumpublic.BogleheadsPost(link)
+				return ok
+			}
+		}
+	} else if tid := hnTopicID(article); tid != "" {
 		input.TopicURL = "https://news.ycombinator.com/item?id=" + tid
 		var err error
 		comments, total, input.MainPost, err = fetchHNDiscussion(ctx, tid)
@@ -229,7 +256,7 @@ func (h *ArticleHandler) loadDiscussionInput(ctx context.Context, article articl
 		}
 	}
 	input.MainPost = truncateFeedText(textclean.NormalizeFromHTMLBlock(input.MainPost), 900)
-	input.References, input.Sample = selectDiscussionReplies(input.TopicURL, comments, total, method)
+	input.References, input.Sample = selectDiscussionRepliesMatching(comments, total, method, matches)
 	if len(input.References) < 2 {
 		return input, fmt.Errorf("回复材料不足：目前只读到 %d 条有效回复，暂时无法分析争论焦点", len(input.References))
 	}

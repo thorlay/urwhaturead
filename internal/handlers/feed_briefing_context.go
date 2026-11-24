@@ -69,7 +69,9 @@ func buildBriefingSelectionPrompt(rows []feedItem) string {
 			textclean.NormalizeInline(row.Title),
 			briefingSnippet(row),
 		))
-		if row.ReplyCount != nil {
+		if row.RecentReplyCount != nil {
+			fmt.Fprintf(&builder, "近 24 小时已采到的回复数: %d（可能漏采）\n", *row.RecentReplyCount)
+		} else if row.ReplyCount != nil {
 			fmt.Fprintf(&builder, "抓取时回复数: %d（讨论量不等于质量）\n", *row.ReplyCount)
 		}
 		if _, nga := feedextract.NGAThreadID(row.Link); nga {
@@ -224,8 +226,8 @@ func feedItemIDs(rows []feedItem) []uint64 {
 
 // Include popular replies alongside evenly spaced replies so low-vote dissent is retained.
 func (h *FeedHandler) enrichForumBriefingEvidence(ctx context.Context, row *feedItem, cached models.ArticleEnrichment) {
-	var thread *articleThread
-	if len(cached.Thread) > 0 {
+	thread, _ := savedPublicDiscussion(row.Raw, row.Link, row.Title, stringValue(row.Content), time.Now())
+	if thread == nil && len(cached.Thread) > 0 {
 		var value articleThread
 		if json.Unmarshal(cached.Thread, &value) == nil && len(value.Comments) > 0 {
 			thread = &value

@@ -17,6 +17,7 @@ type feedRepository struct {
 type feedListParams struct {
 	channel       string
 	minReplies    int
+	minRepliesSet bool
 	important     bool
 	limit         int
 	dedupe        bool
@@ -97,7 +98,7 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 		return r.listPapers(ctx, query, params)
 	}
 	if params.channel == "forum" && !params.important {
-		return r.listForumDiscussions(ctx, query, params)
+		return r.listForumDiscussions(ctx, query, columns, params)
 	}
 	if params.important {
 		return r.listImportant(ctx, query, params)
@@ -192,11 +193,13 @@ func (r *feedRepository) list(ctx context.Context, params feedListParams) (feedL
 	return result, nil
 }
 
-func (r *feedRepository) listForumDiscussions(ctx context.Context, query *gorm.DB, params feedListParams) (feedListResult, *feedRepositoryError) {
+func (r *feedRepository) listForumDiscussions(ctx context.Context, query *gorm.DB, columns string, params feedListParams) (feedListResult, *feedRepositoryError) {
 	started := time.Now()
-	query = query.Where("COALESCE(a.published_at,a.created_at) BETWEEN ? AND ? AND a.reply_count >= ?", forumRankingWindow(), time.Now().UTC(), params.minReplies)
+	candidates := forumCandidates(r.db.WithContext(ctx), query, columns, params.minReplies, params.minRepliesSet)
 	// Collapse the same topic subscribed through multiple feeds before pagination.
-	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", query).Select(`candidates.*, ROW_NUMBER() OVER (PARTITION BY regexp_replace(candidates.link, '^https?://(www\.)?', '') ORDER BY candidates.reply_count DESC,candidates.sort_time DESC,candidates.id DESC) AS forum_rank`)
+	ranked := candidates.Select(`candidates.*,
+		COALESCE(recent_reply_count,reply_count) AS forum_reply_rank,
+		ROW_NUMBER() OVER (PARTITION BY regexp_replace(candidates.link, '^https?://(www\.)?', '') ORDER BY COALESCE(recent_reply_count,reply_count) DESC,sort_time DESC,id DESC) AS forum_rank`)
 	query = r.db.WithContext(ctx).Table("(?) AS ranked", ranked).Where("forum_rank=1")
 	result := feedListResult{}
 	if params.since != nil {
@@ -208,9 +211,9 @@ func (r *feedRepository) listForumDiscussions(ctx context.Context, query *gorm.D
 		if params.cursor.Replies == nil {
 			return result, &feedRepositoryError{"invalid forum discussion cursor", nil}
 		}
-		query = query.Where("(reply_count,sort_time,id) < (?,?,?)", *params.cursor.Replies, params.cursor.SortTime, params.cursor.ID)
+		query = query.Where("(forum_reply_rank,sort_time,id) < (?,?,?)", *params.cursor.Replies, params.cursor.SortTime, params.cursor.ID)
 	}
-	err := query.Order("reply_count DESC").Order("sort_time DESC").Order("id DESC").Limit(params.limit + 1).Scan(&result.rows).Error
+	err := query.Order("forum_reply_rank DESC").Order("sort_time DESC").Order("id DESC").Limit(params.limit + 1).Scan(&result.rows).Error
 	result.queryElapsed = time.Since(started)
 	if err != nil {
 		return result, &feedRepositoryError{"query forum discussions failed", err}

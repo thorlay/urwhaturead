@@ -47,7 +47,7 @@ export function ReaderArticleComments({
   return (
     <section className="thread-section detail-section">
       <div className="thread-header">
-        <h4>讨论 · {threadComments.length} 条回复</h4>
+        <h4>{thread.sample_scope ? '回复样本' : '讨论'} · {threadComments.length} 条回复</h4>
         <div className="thread-header-tools">
           {threadComments.length > 1 && (
             <Button
@@ -71,6 +71,7 @@ export function ReaderArticleComments({
           )}
         </div>
       </div>
+      {thread.sample_scope && <p className="hint">{thread.sample_scope}</p>}
       {thread.feed_url?.includes('/nga/post/') && <p className="hint">这里展示已获取的部分回复，完整讨论可打开原帖查看。</p>}
 
       {threadComments.length > 0 && (
@@ -79,7 +80,10 @@ export function ReaderArticleComments({
             {displayedThreadComments.map((comment) => (
               <article key={`${comment.link}-${threadComments.indexOf(comment)}`} className="thread-comment">
                 <p className="thread-comment-meta">
-                  #{comment.post_number || threadComments.indexOf(comment) + 2} · {comment.author || 'unknown'} ·{' '}
+                  {thread.sample_scope ? (
+                    <><a href={comment.link} target="_blank" rel="noreferrer">原回复</a> · </>
+                  ) : `#${comment.post_number || threadComments.indexOf(comment) + 2} · `}
+                  {comment.author || 'unknown'} ·{' '}
                   {comment.published_at ? formatTimeAgo(comment.published_at) : '-'}
                   {typeof comment.upvotes === 'number' && <span aria-label={`赞数 ${comment.upvotes}`}> · 赞 {comment.upvotes}</span>}
                 </p>

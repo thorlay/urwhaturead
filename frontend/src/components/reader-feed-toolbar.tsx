@@ -118,7 +118,7 @@ export function ReaderFeedToolbar({
       <WorkspaceToolbar className="feed-header">
         <div className="feed-header-title">
           <h2 className="sr-only">{tagFilter === 'papers' ? '论文精选' : tagFilter === 'forum' ? '论坛观察' : '聚合流'}</h2>
-          <p className="hint">{tagFilter === 'papers' ? 'Hugging Face 日榜与周榜去重 · 每日约 4 篇 · 方法、证据与局限 · 洛杉矶时间每天 08:00 生成' : tagFilter === 'forum' ? '过去 24 小时发布 · 至少 20 条回复 · 按回复量排序；热度不代表信息质量' : '资讯与论坛分开阅读'}</p>
+          <p className="hint">{tagFilter === 'papers' ? 'Hugging Face 日榜与周榜去重 · 每日约 4 篇 · 方法、证据与局限 · 洛杉矶时间每天 08:00 生成' : tagFilter === 'forum' ? '过去 24 小时 · Lobsters 和 Bogleheads 按已采到的新增回复排序，其他论坛按新帖总回复量排序' : '资讯与论坛分开阅读'}</p>
           <div className="feed-channel-tabs workspace-tabs" role="group" aria-label="阅读频道">
             <Button size="sm" variant={!['forum','papers'].includes(tagFilter) ? 'default' : 'ghost'} aria-pressed={!['forum','papers'].includes(tagFilter)} onClick={() => onApplyFilters('news')}>资讯</Button>
             <Button size="sm" variant={tagFilter === 'forum' ? 'default' : 'ghost'} aria-pressed={tagFilter === 'forum'} onClick={() => onApplyFilters('forum')}>论坛观察</Button>
